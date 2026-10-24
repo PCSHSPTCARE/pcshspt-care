@@ -51,8 +51,8 @@
 
 <main>
   <section class="card" id="c1">
-    <h2><span class="num">1</span>วางค่า Firebase Config</h2>
-    <p class="hint">คัดลอกจาก Firebase → ⚙️ Project settings → Your apps → ส่วน <code>const firebaseConfig = { ... }</code> มาวางทั้งก้อน (วางครั้งเดียว เครื่องนี้จะจำไว้)</p>
+    <h2><span class="num">1</span>เชื่อมต่อ Firebase</h2>
+    <p class="hint">ใส่ค่าของโปรเจกต์ไว้ให้แล้ว ไม่ต้องวางเอง · ทุกเครื่องเปิดลิงก์แล้วไปขั้นที่ 2 ได้เลย</p>
     <textarea id="cfg" placeholder="const firebaseConfig = {&#10;  apiKey: &quot;...&quot;,&#10;  authDomain: &quot;...&quot;,&#10;  projectId: &quot;...&quot;,&#10;  ...&#10;};"></textarea>
     <div class="row"><button id="saveCfg">บันทึกและเชื่อมต่อ</button><button class="ghost" id="clearCfg">ล้างค่า</button></div>
     <div class="result" id="r1"></div>
@@ -87,6 +87,15 @@
 
   const DOMAIN = 'pcshspt.ac.th';
   const CFG_KEY = 'pcshs-firebase-config';
+  // ค่าเชื่อมต่อของโปรเจกต์จริง (เปิดเผยได้ ความปลอดภัยอยู่ที่ Firestore Rules)
+  const BUILTIN = {
+    apiKey: 'AIzaSyCtpXj7Rnjzv7I6yNXLgwOQ28zA6vmXs0E',
+    authDomain: 'pcshs-repair-da0cc.firebaseapp.com',
+    projectId: 'pcshs-repair-da0cc',
+    storageBucket: 'pcshs-repair-da0cc.firebasestorage.app',
+    messagingSenderId: '2077283806',
+    appId: '1:2077283806:web:dc894edb04382be475b94f'
+  };
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const show = (id, kind, html) => { const el = $(id); el.className = `result show ${kind}`; el.innerHTML = html; };
@@ -110,6 +119,8 @@
     const json = m[1].replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"').replace(/,\s*}/g, '}');
     const cfg = JSON.parse(json);
     if (!cfg.apiKey || !cfg.projectId || !cfg.authDomain) throw new Error('ค่าไม่ครบ ต้องมี apiKey, authDomain และ projectId');
+    // apiKey ของจริงขึ้นต้นด้วย AIza และยาว 39 ตัว (กันการวางค่าตัวอย่างที่มีจุดไข่ปลา)
+    if (!/^AIza[0-9A-Za-z_-]{35}$/.test(cfg.apiKey)) throw new Error(`apiKey ไม่ถูกต้อง (ได้ ${cfg.apiKey.length} ตัวอักษร ควรเป็น 39 และขึ้นต้นด้วย AIza) · อาจคัดลอกค่าตัวอย่างมา หรือคัดลอกไม่ครบ`);
     return cfg;
   };
 
@@ -236,10 +247,12 @@
   $('send').addEventListener('click', send);
   $('msg').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
 
-  // เปิดหน้าครั้งถัดไป ใช้ค่าที่บันทึกไว้
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch (e) { /* ignore */ }
-  if (saved) { $('cfg').value = JSON.stringify(saved, null, 2); connect(saved); }
+  // ใช้ค่าของโปรเจกต์จริงที่ใส่ไว้ให้เสมอ และล้างค่าที่เคยวางผิดไว้ในเครื่อง
+  try { localStorage.removeItem(CFG_KEY); } catch (e) { /* ignore */ }
+  $('cfg').value = JSON.stringify(BUILTIN, null, 2);
+  $('cfg').readOnly = true;
+  $('saveCfg').hidden = $('clearCfg').hidden = true;
+  connect(BUILTIN);
   renderSum();
 </script>
 </body>
