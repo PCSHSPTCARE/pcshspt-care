@@ -768,8 +768,30 @@ const Store = (() => {
       return settle(res, 300);
     },
 
+    // ล้างข้อมูล (แอดมิน): ดูใบที่วันที่แจ้งอยู่ในช่วง [from, to) แล้วลบทั้งข้อมูลและรูปใน Drive (ย้ายไปถังขยะ)
+    async purgePreview(from, to) {
+      if (!hasRole(currentUser(), 'admin')) throw new Error('เฉพาะแอดมินเท่านั้น');
+      const f = new Date(from).toISOString(), t = new Date(to).toISOString();
+      if (CLOUD) return Cloud.fetchRange(f, t);
+      return db.tickets.filter(x => x.createdAt >= f && x.createdAt < t);
+    },
+    async purge(list, onProgress) {
+      if (!hasRole(currentUser(), 'admin')) throw new Error('เฉพาะแอดมินเท่านั้น');
+      if (CLOUD) return Cloud.purge(list, onProgress);
+      const ids = new Set(list.map(t => t.id));
+      commit(d => { d.tickets = d.tickets.filter(t => !ids.has(t.id)); });
+      return { tickets: ids.size, photos: 0, photoTotal: 0 };
+    },
+    photoRefs: t => photoRefsOf(t),
+
     reset() { if (CLOUD) return; localStorage.removeItem(DB_KEY); db = load(); emit(); }
   };
+
+  // รูปทั้งหมดของใบแจ้งซ่อม (รายการ / รูปเพิ่มเติม / หลังซ่อม / ซ่อมไม่ได้)
+  function photoRefsOf(t) {
+    return [t.photos, t.completion?.photos, t.cannot?.photos, ...(t.items || []).map(i => i.photos)]
+      .flat().filter(p => typeof p === 'string' && p);
+  }
 
   // ═════════ ระบบจริง: Firebase (Firestore + Google Login) และ Apps Script (รูป / LINE) ═════════
   function makeCloud() {
@@ -976,8 +998,9 @@ const Store = (() => {
       const ref = fs.collection('counters').doc(String(y));
       const start = await fs.runTransaction(async tx => {
         const s = await tx.get(ref);
-        const n = s.exists ? (s.data().n || 0) : 0;
-        tx.set(ref, { n: n + k });
+        const cur = s.exists ? s.data() : {};
+        const n = cur.n || 0;
+        tx.set(ref, { ...cur, n: n + k });
         return n + 1;
       });
       db.settings.running = { ...(db.settings.running || {}), [y]: start - 1 };
@@ -1018,7 +1041,8 @@ const Store = (() => {
       real.forEach(d => { const [, y, n] = d.id.split('-'); max[y] = Math.max(max[y] || 0, +n || 0); });
       const counters = await fs.collection('counters').get();
       const b = fs.batch();
-      counters.forEach(c => b.set(c.ref, { n: max[c.id] || 0 }));
+      // floor = เลขสูงสุดของใบจริงที่เคยถูกล้างไปแล้ว (ห้ามนับซ้ำกับเอกสารที่เคยพิมพ์)
+      counters.forEach(c => { const floor = c.data().floor || 0; b.set(c.ref, { n: Math.max(max[c.id] || 0, floor), floor }); });
       const { running, ...settings } = db.settings;
       b.set(cfgDoc('settings'), strip({ ...settings, hasSamples: false }));
       await b.commit();
@@ -1026,6 +1050,39 @@ const Store = (() => {
       rebuild();
       return ids.length;
     }
+    // ── ล้างข้อมูลตามช่วงวันที่แจ้ง (แอดมิน) ──
+    async function fetchRange(from, to) {
+      const snap = await fs.collection('tickets').where('createdAt', '>=', from).where('createdAt', '<', to).get();
+      return snap.docs.map(d => d.data()).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+    // ย้ายรูปไปถังขยะก่อน (ถ้าไม่สำเร็จ จะไม่ลบข้อมูล) แล้วจึงลบใบแจ้งซ่อมและข้อมูลกระดาน
+    async function purge(list, onProgress = () => {}) {
+      const driveIds = [...new Set(list.flatMap(photoRefsOf).filter(p => p.startsWith('drive:')).map(p => p.slice(6)))];
+      let trashed = 0;
+      for (let i = 0; i < driveIds.length; i += 50) {
+        onProgress(`กำลังย้ายรูปไปถังขยะ ${Math.min(i + 50, driveIds.length)}/${driveIds.length} รูป`);
+        const r = await callScript('trash', { ids: driveIds.slice(i, i + 50) });
+        trashed += r.trashed || 0;
+      }
+      const ids = list.map(t => t.id);
+      // จำเลขที่สูงสุดของใบจริงที่ถูกลบไว้ในตัวนับ เลขที่ใบจะไม่ย้อนกลับมาซ้ำ
+      const top = {};
+      list.filter(t => !t.sample).forEach(t => { const [, y, n] = t.id.split('-'); top[y] = Math.max(top[y] || 0, +n || 0); });
+      for (const [y, n] of Object.entries(top)) {
+        const ref = fs.collection('counters').doc(y), s = await ref.get(), cur = s.exists ? s.data() : {};
+        await ref.set({ ...cur, n: Math.max(cur.n || 0, n), floor: Math.max(cur.floor || 0, n) });
+      }
+      for (let i = 0; i < ids.length; i += 200) {
+        onProgress(`กำลังลบข้อมูล ${Math.min(i + 200, ids.length)}/${ids.length} ใบ`);
+        const b = fs.batch();
+        ids.slice(i, i + 200).forEach(id => { b.delete(fs.collection('tickets').doc(id)); b.delete(fs.collection('board').doc(id)); });
+        await b.commit();
+      }
+      ids.forEach(id => { extra.delete(id); sets.forEach(s => s.m.delete(id)); });
+      rebuild();
+      return { tickets: ids.length, photos: trashed, photoTotal: driveIds.length };
+    }
+
     async function ensureRange(from) {
       if (!me || !(hasRole(me, 'admin') || hasRole(me, 'executive'))) return false;
       const iso = from ? new Date(from).toISOString() : '0000';
@@ -1153,7 +1210,7 @@ const Store = (() => {
     }
 
     return {
-      ready, rebuild, persist, reserve, friendly, ensureRange, deleteSamples, upload, notifyNew, imgAttr,
+      ready, rebuild, persist, reserve, friendly, ensureRange, deleteSamples, upload, notifyNew, imgAttr, fetchRange, purge,
       notifications, markRead, login,
       logout: () => auth.signOut(),
       me: () => me

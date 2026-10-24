@@ -579,6 +579,16 @@ p { margin: 0; }
 .notice { display: flex; gap: 12px; padding: 14px 16px; border-radius: 14px; background: var(--navy-50); color: var(--navy-800); font-size: .88rem; }
 .notice .icon { font-size: 20px; flex: none; margin-top: 2px; }
 .notice.orange { background: var(--orange-50); color: var(--orange-800); }
+.notice.red { background: #FEF2F2; color: #991B1B; }
+/* ล้างข้อมูล (หลังบ้าน) */
+.purge-card { border-color: #FECACA; }
+.purge-range { gap: 10px; flex-wrap: wrap; }
+.purge-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.purge-sum > div { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line-2); }
+.purge-sum small { font-size: .76rem; color: var(--muted); }
+.purge-sum strong { font: 600 1.05rem var(--font-display); color: var(--navy-800); }
+.purge-sum span { font-size: .84rem; }
+.purge-confirm { gap: 12px; align-items: flex-end; flex-wrap: wrap; }
 
 /* ═══════════ หน้าสำเร็จ ═══════════ */
 .success-card { max-width: 720px; margin-inline: auto; text-align: center; padding: 48px clamp(20px, 5vw, 56px); }

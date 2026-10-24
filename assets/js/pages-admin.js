@@ -1044,6 +1044,18 @@ const Admin = (() => {
             <div class="field"><label for="lRev">เหตุผล "รอพิจารณา"</label><textarea class="textarea" id="lRev" style="min-height:110px">${esc(s.reviewReasons.join('\n'))}</textarea></div>
             <div class="field" style="grid-column:1/-1"><label for="lCan">เหตุผล "ไม่สามารถซ่อมได้"</label><textarea class="textarea" id="lCan" style="min-height:110px">${esc(s.cannotReasons.join('\n'))}</textarea></div>
           </div></section>
+          <section class="card span-12 purge-card"><div class="card-head"><h3>${icon('trash')}ล้างข้อมูลใบแจ้งซ่อม</h3><span class="badge tone-red">เฉพาะแอดมิน · กู้คืนไม่ได้</span></div>
+            <div class="card-body stack" style="gap:14px">
+              <p class="muted small" style="margin:0">ลบใบแจ้งซ่อม<b>ทุกสถานะ</b>ที่<b>วันที่แจ้ง</b>อยู่ในช่วงที่เลือก ทั้งข้อมูลในระบบและรูปใน Google Drive (รูปย้ายไปถังขยะ กู้คืนได้ภายใน 30 วัน) · ระบบดาวน์โหลดไฟล์สำรอง (CSV เปิดด้วย Excel ได้) ให้อัตโนมัติก่อนลบทุกครั้ง · เลขที่ใบไม่ถูกรีเซ็ต</p>
+              <div class="row purge-range">
+                <select class="select sm" id="pgPreset" aria-label="ช่วงเวลา">
+                  ${[['month', 'เดือนนี้'], ['lastMonth', 'เดือนที่แล้ว'], ['year', 'ปีนี้ (ม.ค.–ธ.ค.)'], ['lastYear', 'ปีที่แล้ว'], ['older1', 'เก่ากว่า 1 ปี'], ['older2', 'เก่ากว่า 2 ปี'], ['custom', 'กำหนดวันที่เอง']].map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}
+                </select>
+                <span class="row" id="pgCustom" hidden><input type="date" class="input sm" id="pgFrom" aria-label="ตั้งแต่วันที่"><span class="faint">ถึง</span><input type="date" class="input sm" id="pgTo" aria-label="ถึงวันที่"></span>
+                <button type="button" class="btn btn-outline btn-sm" id="pgCheck">${icon('search')} ตรวจสอบรายการที่จะลบ</button>
+              </div>
+              <div id="pgResult"></div>
+            </div></section>
           ${Store.cloud ? `<section class="card span-12"><div class="card-head"><h3>${icon('trash')}ใบแจ้งซ่อมตัวอย่าง</h3></div><div class="card-body row">
             <p class="muted small" style="flex:1">ตอนเริ่มระบบ ใส่ใบแจ้งซ่อมตัวอย่างไว้ให้ทดลองใช้ ${Store.hasSamples() ? '<b>(ตอนนี้ยังมีใบตัวอย่างอยู่)</b>' : '(ลบไปแล้ว)'} · เมื่อพร้อมใช้งานจริง กดลบได้ เลขที่ใบจะเริ่มนับต่อจากใบจริงล่าสุด (ถ้ายังไม่มีใบจริง เริ่ม 0001)</p>
             <button type="button" class="btn btn-outline btn-sm" id="delSamples" ${Store.hasSamples() ? '' : 'disabled'}>${icon('trash')} ลบใบตัวอย่างทั้งหมด</button></div></section>`
@@ -1065,6 +1077,76 @@ const Admin = (() => {
           });
           UI.toast('บันทึกการตั้งค่าแล้ว');
         });
+        // ───── ล้างข้อมูลตามช่วงวันที่แจ้ง ─────
+        const pg = { list: null, from: null, to: null };
+        const pgRange = () => {
+          const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+          const DAYMS = 864e5, start = new Date(2000, 0, 1);
+          switch ($('#pgPreset', root).value) {
+            case 'month': return [new Date(y, m, 1), new Date(y, m + 1, 1)];
+            case 'lastMonth': return [new Date(y, m - 1, 1), new Date(y, m, 1)];
+            case 'year': return [new Date(y, 0, 1), new Date(y + 1, 0, 1)];
+            case 'lastYear': return [new Date(y - 1, 0, 1), new Date(y, 0, 1)];
+            case 'older1': return [start, new Date(now.getTime() - 365 * DAYMS)];
+            case 'older2': return [start, new Date(now.getTime() - 730 * DAYMS)];
+            default: {
+              const f = $('#pgFrom', root).value, t = $('#pgTo', root).value;
+              if (!f || !t) return null;
+              return [new Date(f + 'T00:00:00'), new Date(new Date(t + 'T00:00:00').getTime() + DAYMS)];
+            }
+          }
+        };
+        const pgReset = () => { pg.list = null; $('#pgResult', root).innerHTML = ''; };
+        $('#pgPreset', root).addEventListener('change', e => { $('#pgCustom', root).hidden = e.target.value !== 'custom'; pgReset(); });
+        ['pgFrom', 'pgTo'].forEach(id => $('#' + id, root).addEventListener('change', pgReset));
+        $('#pgCheck', root).addEventListener('click', async e => {
+          const range = pgRange();
+          if (!range) return UI.toast('กรุณาเลือกวันที่เริ่มต้นและสิ้นสุด', 'error');
+          if (range[1] <= range[0]) return UI.toast('วันที่สิ้นสุดต้องอยู่หลังวันที่เริ่มต้น', 'error');
+          const btn = e.currentTarget; btn.disabled = true;
+          try {
+            const list = await Store.purgePreview(range[0], range[1]);
+            Object.assign(pg, { list, from: range[0], to: range[1] });
+            const photos = new Set(list.flatMap(Store.photoRefs)).size;
+            const open = list.filter(t => ['pending', 'in_progress', 'review'].includes(t.status)).length;
+            const label = `${UI.date(range[0].toISOString())} – ${UI.date(new Date(range[1] - 1).toISOString())}`;
+            $('#pgResult', root).innerHTML = !list.length ? `<div class="notice">${icon('checkCircle')}<div>ไม่มีใบแจ้งซ่อมที่แจ้งในช่วง ${label}</div></div>` : `
+              <div class="purge-sum">
+                <div><small>ช่วงวันที่แจ้ง</small><strong>${label}</strong></div>
+                <div><small>ใบแจ้งซ่อม</small><strong>${UI.num(list.length)} ใบ</strong></div>
+                <div><small>รูปภาพ</small><strong>${UI.num(photos)} รูป</strong></div>
+                <div><small>แยกตามสถานะ</small><span>${UI.STATUS_KEYS.map(k => [k, list.filter(t => t.status === k).length]).filter(x => x[1]).map(([k, n]) => `${UI.STATUS[k].label} ${n}`).join(' · ')}</span></div>
+              </div>
+              ${open ? `<div class="notice red">${icon('alert')}<div><b>มีงานที่ยังไม่ปิด ${open} ใบ</b> (รออนุมัติ / กำลังซ่อม / รอพิจารณา) จะถูกลบไปด้วย ครูผู้แจ้งจะไม่เห็นงานนี้อีก</div></div>` : ''}
+              <div class="row purge-confirm">
+                <label class="field" style="flex:1;min-width:220px;margin:0"><span class="label">พิมพ์คำว่า <b>ลบข้อมูล</b> เพื่อยืนยัน</span><input class="input" id="pgWord" autocomplete="off" placeholder="ลบข้อมูล"></label>
+                <button type="button" class="btn btn-danger" id="pgDo" disabled>${icon('trash')} ดาวน์โหลดไฟล์สำรอง แล้วลบ ${UI.num(list.length)} ใบ</button>
+              </div>
+              <p class="small faint" id="pgProg" style="margin:0"></p>`;
+          } catch (err) { UI.toast(err.message, 'error'); }
+          finally { btn.disabled = false; }
+        });
+        root.addEventListener('input', e => { if (e.target.id === 'pgWord') $('#pgDo', root).disabled = e.target.value.trim() !== 'ลบข้อมูล'; });
+        root.addEventListener('click', async e => {
+          const btn = e.target.closest('#pgDo');
+          if (!btn || !pg.list?.length) return;
+          btn.disabled = true; $('#pgWord', root).disabled = true;
+          const prog = msg => { $('#pgProg', root).textContent = msg; };
+          try {
+            // สำรองก่อนลบเสมอ: ไฟล์ CSV ชื่อบอกช่วงวันที่
+            const stamp = d => d.toISOString().slice(0, 10);
+            exportCsv(pg.list, `สำรองก่อนล้างข้อมูล ${stamp(pg.from)} ถึง ${stamp(new Date(pg.to - 1))}`);
+            prog('ดาวน์โหลดไฟล์สำรองแล้ว · กำลังเริ่มลบ...');
+            const r = await Store.purge(pg.list, prog);
+            UI.toast(`ล้างข้อมูลแล้ว: ลบ ${UI.num(r.tickets)} ใบ${r.photoTotal ? ` · ย้ายรูปไปถังขยะ ${UI.num(r.photos)} รูป` : ''}`);
+            pgReset();
+          } catch (err) {
+            prog('');
+            UI.toast(err.message, 'error');
+            btn.disabled = false; $('#pgWord', root).disabled = false;
+          }
+        });
+
         $('#delSamples', root)?.addEventListener('click', async e => {
           if (!await UI.confirm('ลบใบแจ้งซ่อมตัวอย่างทั้งหมดออกจากระบบถาวร? (ใบจริงไม่ได้รับผลกระทบ)', { title: 'ลบใบตัวอย่าง', danger: true, okLabel: 'ลบทั้งหมด' })) return;
           const btn = e.target.closest('button'); btn.disabled = true; btn.innerHTML = `${icon('refresh')} กำลังลบ...`;
