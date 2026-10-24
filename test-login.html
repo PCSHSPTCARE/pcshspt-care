@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ทดสอบระบบ Firebase | งานอาคารและสถานที่</title>
+<link rel="icon" href="images/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --orange: #EE6A1F; --orange-50: #FFF6EF; --navy: #1A1F57; --navy-900: #10133A; --line: #ECE7E1; --muted: #5E6275; --bg: #FBF9F6; --ok: #15803D; --bad: #B91C1C; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: #1B1D2E; font: 16px/1.6 "IBM Plex Sans Thai", "Prompt", system-ui, sans-serif; }
+  header { background: linear-gradient(135deg, var(--navy-900), var(--navy)); color: #fff; padding: 28px 16px 64px; }
+  header .in, main { max-width: 760px; margin: 0 auto; }
+  header img { height: 48px; vertical-align: middle; margin-right: 10px; }
+  h1 { font: 600 1.5rem "Prompt", sans-serif; margin: 12px 0 4px; }
+  header p { margin: 0; color: rgba(255,255,255,.75); }
+  main { padding: 0 16px 48px; margin-top: -40px; display: grid; gap: 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 22px; box-shadow: 0 12px 32px -18px rgba(16,19,58,.25); }
+  .card h2 { font: 600 1.1rem "Prompt", sans-serif; color: var(--navy); margin: 0 0 6px; display: flex; gap: 10px; align-items: center; }
+  .num { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: var(--navy); color: #fff; font-size: .9rem; flex: none; }
+  .card.done .num { background: var(--ok); }
+  .hint { color: var(--muted); font-size: .9rem; margin: 0 0 12px; }
+  textarea, input { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; font: inherit; font-size: .9rem; background: #fff; }
+  textarea { min-height: 150px; font-family: ui-monospace, Consolas, monospace; }
+  button { font: 500 1rem "Prompt", sans-serif; border: 0; border-radius: 999px; padding: 11px 20px; cursor: pointer; background: var(--orange); color: #fff; }
+  button.ghost { background: transparent; color: var(--navy); border: 1px solid var(--line); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  .result { margin-top: 14px; padding: 12px 14px; border-radius: 12px; font-size: .92rem; display: none; }
+  .result.show { display: block; }
+  .result.ok { background: #F0FDF4; color: var(--ok); }
+  .result.bad { background: #FEF2F2; color: var(--bad); }
+  .result.info { background: var(--orange-50); color: #8F340D; }
+  .feed { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+  .feed li { padding: 10px 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); font-size: .9rem; animation: pop .6s ease-out; }
+  .feed small { color: var(--muted); }
+  @keyframes pop { from { background: #FFE8D6; transform: translateY(-6px); } }
+  code { background: #F3EFEA; padding: 1px 6px; border-radius: 6px; font-size: .88em; }
+  .summary li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<header><div class="in">
+  <img src="images/logo.png" alt=""><strong>งานอาคารและสถานที่</strong>
+  <h1>หน้าทดสอบระบบก่อนเชื่อมของจริง</h1>
+  <p>ทดสอบ 3 อย่าง: ล็อกอินด้วยบัญชีโรงเรียน · บันทึกข้อมูล · เรียลไทม์ข้ามเครื่อง</p>
+</div></header>
+
+<main>
+  <section class="card" id="c1">
+    <h2><span class="num">1</span>วางค่า Firebase Config</h2>
+    <p class="hint">คัดลอกจาก Firebase → ⚙️ Project settings → Your apps → ส่วน <code>const firebaseConfig = { ... }</code> มาวางทั้งก้อน (วางครั้งเดียว เครื่องนี้จะจำไว้)</p>
+    <textarea id="cfg" placeholder="const firebaseConfig = {&#10;  apiKey: &quot;...&quot;,&#10;  authDomain: &quot;...&quot;,&#10;  projectId: &quot;...&quot;,&#10;  ...&#10;};"></textarea>
+    <div class="row"><button id="saveCfg">บันทึกและเชื่อมต่อ</button><button class="ghost" id="clearCfg">ล้างค่า</button></div>
+    <div class="result" id="r1"></div>
+  </section>
+
+  <section class="card" id="c2">
+    <h2><span class="num">2</span>ล็อกอินด้วยบัญชีโรงเรียน</h2>
+    <p class="hint">กดแล้วเลือกบัญชี <b>@pcshspt.ac.th</b> · ลองล็อกอินด้วย Gmail ส่วนตัวด้วยก็ได้ ระบบต้อง<b>ปฏิเสธ</b></p>
+    <div class="row"><button id="login" disabled>เข้าสู่ระบบด้วย Google</button><button class="ghost" id="logout" disabled>ออกจากระบบ</button></div>
+    <div class="result" id="r2"></div>
+  </section>
+
+  <section class="card" id="c3">
+    <h2><span class="num">3</span>ทดสอบบันทึกข้อมูลและเรียลไทม์</h2>
+    <p class="hint">เปิดหน้านี้บน <b>2 เครื่อง</b> (เช่น คอมกับมือถือ) ล็อกอินทั้งคู่ แล้วกดส่งจากเครื่องหนึ่ง อีกเครื่องควรเห็นข้อความเด้งขึ้นภายใน 1 วินาที</p>
+    <div class="row"><input id="msg" placeholder="พิมพ์ข้อความทดสอบ เช่น ทดสอบจากมือถือ" disabled style="flex:1;min-width:200px"><button id="send" disabled>ส่ง</button></div>
+    <div class="result" id="r3"></div>
+    <ul class="feed" id="feed"></ul>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">✓</span>สรุปผลทดสอบ</h2>
+    <ul class="summary" id="sum"><li>⏳ ยังไม่ได้ทดสอบ</li></ul>
+    <p class="hint" style="margin-top:10px">ทดสอบเสร็จแล้ว แคปหน้าจอส่วนนี้ส่งกลับมาได้เลยครับ</p>
+  </section>
+</main>
+
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+  import { getFirestore, collection, addDoc, serverTimestamp, query, orderBy, limit, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  const DOMAIN = 'pcshspt.ac.th';
+  const CFG_KEY = 'pcshs-firebase-config';
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const show = (id, kind, html) => { const el = $(id); el.className = `result show ${kind}`; el.innerHTML = html; };
+  const status = { config: null, login: null, domain: null, write: null, realtime: null };
+  const renderSum = () => {
+    const mark = v => v === true ? '✅' : v === false ? '❌' : '⏳';
+    $('sum').innerHTML = `
+      <li>${mark(status.config)} เชื่อมต่อ Firebase</li>
+      <li>${mark(status.login)} ล็อกอินด้วย Google</li>
+      <li>${mark(status.domain)} จำกัดเฉพาะ @${DOMAIN}</li>
+      <li>${mark(status.write)} บันทึกข้อมูลลงฐานข้อมูล</li>
+      <li>${mark(status.realtime)} รับข้อมูลแบบเรียลไทม์</li>`;
+    ['c1', 'c2', 'c3'].forEach((c, i) => $(c).classList.toggle('done', [status.config, status.domain, status.realtime][i] === true));
+  };
+
+  // อ่านค่าที่วางมา: รับได้ทั้งแบบ JavaScript (const firebaseConfig = {...}) และ JSON
+  const parseConfig = text => {
+    // วางมาทั้งโค้ดแบบ npm ก็ได้ (มีบรรทัด import { ... } อยู่ด้านบน) จะหาเฉพาะก้อน firebaseConfig
+    const m = text.match(/firebaseConfig\s*=\s*(\{[\s\S]*?\})/) || text.match(/(\{[\s\S]*?apiKey[\s\S]*?\})/);
+    if (!m) throw new Error('ไม่พบ { ... } ในข้อความที่วาง');
+    const json = m[1].replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"').replace(/,\s*}/g, '}');
+    const cfg = JSON.parse(json);
+    if (!cfg.apiKey || !cfg.projectId || !cfg.authDomain) throw new Error('ค่าไม่ครบ ต้องมี apiKey, authDomain และ projectId');
+    return cfg;
+  };
+
+  const AUTH_ERR = {
+    'auth/unauthorized-domain': `เว็บนี้ยังไม่ได้รับอนุญาต → ไปที่ Firebase → Authentication → Settings → Authorized domains แล้วเพิ่ม <code>${esc(location.hostname)}</code>`,
+    'auth/operation-not-allowed': 'ยังไม่ได้เปิดการล็อกอินด้วย Google → Firebase → Authentication → Sign-in method → Google → Enable',
+    'auth/popup-blocked': 'เบราว์เซอร์บล็อกหน้าต่างล็อกอิน กรุณาอนุญาตป๊อปอัปแล้วลองใหม่',
+    'auth/popup-closed-by-user': 'ปิดหน้าต่างล็อกอินก่อนเสร็จ ลองกดใหม่อีกครั้ง',
+    'auth/admin-restricted-operation': 'ระบบไม่อนุญาตการดำเนินการนี้ ตรวจการตั้งค่า Authentication',
+    'auth/internal-error': 'เกิดข้อผิดพลาดภายใน ลองใหม่ หรือลองเบราว์เซอร์อื่น'
+  };
+
+  let app, auth, db, unsub = null, sentAt = new Map();
+
+  function connect(cfg) {
+    try {
+      app = initializeApp(cfg);
+      auth = getAuth(app);
+      db = getFirestore(app);
+      status.config = true;
+      show('r1', 'ok', `✅ เชื่อมต่อโปรเจกต์ <b>${esc(cfg.projectId)}</b> แล้ว · ไปขั้นที่ 2 ได้เลย`);
+      $('login').disabled = false;
+      onAuthStateChanged(auth, onUser);
+    } catch (e) {
+      status.config = false;
+      show('r1', 'bad', `❌ เชื่อมต่อไม่ได้: ${esc(e.message)}`);
+    }
+    renderSum();
+  }
+
+  async function onUser(user) {
+    if (unsub) { unsub(); unsub = null; }
+    $('logout').disabled = !user;
+    $('msg').disabled = $('send').disabled = true;
+    if (!user) { if (status.login === null) return; show('r2', 'info', 'ออกจากระบบแล้ว'); return; }
+    status.login = true;
+    const email = (user.email || '').toLowerCase();
+    const okDomain = email.endsWith('@' + DOMAIN) && user.emailVerified;
+    if (!okDomain) {
+      // ทดสอบว่าระบบปฏิเสธบัญชีนอกโรงเรียน
+      show('r2', 'bad', `🚫 <b>${esc(email)}</b> ไม่ใช่บัญชีโรงเรียน ระบบปฏิเสธและออกจากระบบให้แล้ว (ถูกต้องตามที่ตั้งใจ) · ลองใหม่ด้วยบัญชี @${DOMAIN}`);
+      await signOut(auth);
+      renderSum();
+      return;
+    }
+    status.domain = true;
+    show('r2', 'ok', `✅ ล็อกอินสำเร็จ: <b>${esc(user.displayName || '')}</b> (${esc(email)}) · ไปขั้นที่ 3 ได้เลย`);
+    $('msg').disabled = $('send').disabled = false;
+    listen();
+    renderSum();
+  }
+
+  function listen() {
+    const q = query(collection(db, 'tests'), orderBy('at', 'desc'), limit(10));
+    unsub = onSnapshot(q, snap => {
+      const now = Date.now();
+      snap.docChanges().forEach(ch => {
+        if (ch.type === 'added' && sentAt.has(ch.doc.id) && !ch.doc.metadata.hasPendingWrites) {
+          show('r3', 'ok', `✅ บันทึกลงเซิร์ฟเวอร์และได้รับกลับมาใน <b>${((now - sentAt.get(ch.doc.id)) / 1000).toFixed(2)} วินาที</b>`);
+          sentAt.delete(ch.doc.id);
+        }
+      });
+      $('feed').innerHTML = snap.docs.map(d => {
+        const v = d.data();
+        const t = v.at?.toDate ? v.at.toDate().toLocaleTimeString('th-TH') : 'กำลังส่ง...';
+        return `<li><b>${esc(v.text)}</b><br><small>${esc(v.email)} · ${t}</small></li>`;
+      }).join('') || '<li><small>ยังไม่มีข้อความ ลองส่งข้อความแรก</small></li>';
+      status.realtime = true;
+      renderSum();
+    }, err => {
+      status.realtime = false;
+      const hint = err.code === 'permission-denied'
+        ? 'ฐานข้อมูลไม่อนุญาต → ตรวจว่าได้วาง Rules ตามคู่มือและกด Publish แล้ว'
+        : 'ตรวจว่าสร้าง Firestore Database แล้ว (Firebase → Firestore Database → Create database)';
+      show('r3', 'bad', `❌ อ่านข้อมูลไม่ได้ (${esc(err.code)}) · ${hint}`);
+      renderSum();
+    });
+  }
+
+  $('saveCfg').addEventListener('click', () => {
+    try {
+      const cfg = parseConfig($('cfg').value);
+      try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (e) { /* ไม่เป็นไร ใช้ครั้งนี้ได้ */ }
+      if (app) return location.reload();
+      connect(cfg);
+    } catch (e) {
+      status.config = false; renderSum();
+      show('r1', 'bad', `❌ อ่านค่าไม่ได้: ${esc(e.message)} · ตรวจว่าวางมาครบตั้งแต่ { ถึง }`);
+    }
+  });
+  $('clearCfg').addEventListener('click', () => { try { localStorage.removeItem(CFG_KEY); } catch (e) { /* ignore */ } location.reload(); });
+
+  $('login').addEventListener('click', async () => {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ hd: DOMAIN, prompt: 'select_account' });
+    try { await signInWithPopup(auth, provider); }
+    catch (e) {
+      status.login = false; renderSum();
+      const blocked = /access_denied|admin_policy|disallowed/i.test(e.message || '');
+      show('r2', 'bad', blocked
+        ? '❌ บัญชีโรงเรียนถูกบล็อกไม่ให้ล็อกอินแอปภายนอก → ต้องขอฝ่าย IT อนุญาต (แคปหน้าจอนี้ส่งกลับมา ผมจะร่างข้อความถึง IT ให้)'
+        : `❌ ${AUTH_ERR[e.code] || esc(e.message)} <br><small>${esc(e.code || '')}</small>`);
+    }
+  });
+  $('logout').addEventListener('click', () => signOut(auth));
+
+  const send = async () => {
+    const text = $('msg').value.trim();
+    if (!text) return $('msg').focus();
+    $('send').disabled = true;
+    const t0 = Date.now();
+    try {
+      const ref = await addDoc(collection(db, 'tests'), { text: text.slice(0, 120), email: auth.currentUser.email, at: serverTimestamp() });
+      sentAt.set(ref.id, t0);
+      status.write = true;
+      $('msg').value = '';
+    } catch (e) {
+      status.write = false;
+      show('r3', 'bad', `❌ บันทึกไม่ได้ (${esc(e.code)}) · ตรวจ Rules ของ Firestore ตามคู่มือ`);
+    }
+    $('send').disabled = false;
+    renderSum();
+  };
+  $('send').addEventListener('click', send);
+  $('msg').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+  // เปิดหน้าครั้งถัดไป ใช้ค่าที่บันทึกไว้
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch (e) { /* ignore */ }
+  if (saved) { $('cfg').value = JSON.stringify(saved, null, 2); connect(saved); }
+  renderSum();
+</script>
+</body>
+</html>
