@@ -225,7 +225,7 @@ const Doc = (() => {
       <div class="sheet photos">
         <h2>ภาพประกอบใบแจ้งซ่อม</h2>
         <div class="meta">เลขที่ ${esc(t.docNo)} · อ้างอิงระบบ ${esc(t.id)} · ${esc(UI.locationText(t))}</div>
-        ${groups.map(([h, list]) => `<h3>${esc(h)}</h3><div class="ph-grid">${list.map((p, i) => `<figure><img src="${p}" alt=""><figcaption>ภาพที่ ${i + 1}</figcaption></figure>`).join('')}</div>`).join('')}
+        ${groups.map(([h, list]) => `<h3>${esc(h)}</h3><div class="ph-grid">${list.map((p, i) => `<figure><img ${Store.img(p)} alt=""><figcaption>ภาพที่ ${i + 1}</figcaption></figure>`).join('')}</div>`).join('')}
       </div>`;
   }
 

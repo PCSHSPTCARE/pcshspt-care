@@ -334,6 +334,8 @@ const Admin = (() => {
         root.addEventListener('input', e => {
           if (e.target.id === 'stale') { state.stale = e.target.checked; state.page = 1; render(); return; }
           if (e.target.id in state) { state[e.target.id] = e.target.value; state.page = 1; render(); }
+          // ระบบจริง: ค้นวันที่เก่ากว่าข้อมูลที่โหลดไว้ → โหลดเพิ่ม
+          if (e.target.id === 'from' && state.from) Store.ensureRange(state.from).then(c => { if (c && root.isConnected) render(); }).catch(err => UI.toast(err.message, 'error'));
         });
         root.addEventListener('change', e => {
           if (e.target.dataset.sel) { e.target.checked ? selected.add(e.target.dataset.sel) : selected.delete(e.target.dataset.sel); e.target.closest('tr').classList.toggle('is-selected', e.target.checked); renderBulk(); }
@@ -530,6 +532,9 @@ const Admin = (() => {
         chartDefaults();
         const render = () => {
           destroyCharts();
+          // ระบบจริง: โหลดใบแจ้งซ่อมย้อนหลังตามช่วงที่เลือก (ถ้ายังไม่ได้โหลด) แล้ววาดใหม่
+          const want = state.range === 'custom' ? (state.from || '2000-01-01') : (Pages.rangeStart(state.range) || '2000-01-01');
+          Store.ensureRange(want).then(changed => { if (changed && root.isConnected) render(); }).catch(e => UI.toast(e.message, 'error'));
           const base = statsRange({ ...state, form: '' });
           const counts = { all: base.list.length, ...Object.fromEntries(Store.FORM_KEYS.map(k => [k, base.list.filter(t => t.formType === k).length])) };
           $('#ftabs', root).innerHTML = Pages.formTabs(state.form, counts);
@@ -1039,9 +1044,12 @@ const Admin = (() => {
             <div class="field"><label for="lRev">เหตุผล "รอพิจารณา"</label><textarea class="textarea" id="lRev" style="min-height:110px">${esc(s.reviewReasons.join('\n'))}</textarea></div>
             <div class="field" style="grid-column:1/-1"><label for="lCan">เหตุผล "ไม่สามารถซ่อมได้"</label><textarea class="textarea" id="lCan" style="min-height:110px">${esc(s.cannotReasons.join('\n'))}</textarea></div>
           </div></section>
-          <section class="card span-12"><div class="card-head"><h3>${icon('refresh')}ข้อมูลทดลอง</h3></div><div class="card-body row">
+          ${Store.cloud ? `<section class="card span-12"><div class="card-head"><h3>${icon('trash')}ใบแจ้งซ่อมตัวอย่าง</h3></div><div class="card-body row">
+            <p class="muted small" style="flex:1">ตอนเริ่มระบบ ใส่ใบแจ้งซ่อมตัวอย่างไว้ให้ทดลองใช้ ${Store.hasSamples() ? '<b>(ตอนนี้ยังมีใบตัวอย่างอยู่)</b>' : '(ลบไปแล้ว)'} · เมื่อพร้อมใช้งานจริง กดลบได้ เลขที่ใบจะเริ่มนับต่อจากใบจริงล่าสุด (ถ้ายังไม่มีใบจริง เริ่ม 0001)</p>
+            <button type="button" class="btn btn-outline btn-sm" id="delSamples" ${Store.hasSamples() ? '' : 'disabled'}>${icon('trash')} ลบใบตัวอย่างทั้งหมด</button></div></section>`
+          : `<section class="card span-12"><div class="card-head"><h3>${icon('refresh')}ข้อมูลทดลอง</h3></div><div class="card-body row">
             <p class="muted small" style="flex:1">ต้นแบบนี้เก็บข้อมูลไว้ในเบราว์เซอร์ กดปุ่มเพื่อล้างและสร้างข้อมูลตัวอย่างใหม่</p>
-            <button type="button" class="btn btn-outline btn-sm" id="resetDemo">${icon('refresh')} รีเซ็ตข้อมูลทดลอง</button></div></section>`;
+            <button type="button" class="btn btn-outline btn-sm" id="resetDemo">${icon('refresh')} รีเซ็ตข้อมูลทดลอง</button></div></section>`}`;
         const lines = id => $('#' + id, root).value.split('\n').map(x => x.trim()).filter(Boolean);
         const val = id => $('#' + id, root).value.trim();
         $('#saveAll').addEventListener('click', () => {
@@ -1057,7 +1065,13 @@ const Admin = (() => {
           });
           UI.toast('บันทึกการตั้งค่าแล้ว');
         });
-        $('#resetDemo', root).addEventListener('click', async () => {
+        $('#delSamples', root)?.addEventListener('click', async e => {
+          if (!await UI.confirm('ลบใบแจ้งซ่อมตัวอย่างทั้งหมดออกจากระบบถาวร? (ใบจริงไม่ได้รับผลกระทบ)', { title: 'ลบใบตัวอย่าง', danger: true, okLabel: 'ลบทั้งหมด' })) return;
+          const btn = e.target.closest('button'); btn.disabled = true; btn.innerHTML = `${icon('refresh')} กำลังลบ...`;
+          try { const n = await Store.deleteSamples(); UI.toast(`ลบใบตัวอย่าง ${n} ใบแล้ว`); App.render(); }
+          catch (err) { UI.toast(err.message, 'error'); btn.disabled = false; }
+        });
+        $('#resetDemo', root)?.addEventListener('click', async () => {
           if (!await UI.confirm('ล้างข้อมูลทั้งหมดในเบราว์เซอร์และสร้างข้อมูลตัวอย่างใหม่?', { danger: true, okLabel: 'รีเซ็ต' })) return;
           const me = Store.me()?.email;
           Store.reset();

@@ -1,11 +1,14 @@
-/* ชั้นข้อมูลของระบบ (ต้นแบบ)
-   ตอนนี้เก็บข้อมูลจำลองไว้ใน localStorage ของเบราว์เซอร์
-   ตอนต่อระบบจริง จะเปลี่ยนเฉพาะไฟล์นี้ให้เรียก Google Apps Script (google.script.run) แทน
-   หน้าจออื่นทั้งหมดเรียกผ่าน Store.* เท่านั้น */
+/* ชั้นข้อมูลของระบบ
+   - ระบบจริง (เปิดผ่านเว็บ): Firebase Firestore + ล็อกอิน Google · รูปเก็บใน Google Drive ผ่าน Apps Script
+   - ทดลองในเครื่อง (file:// หรือ ?local): เก็บข้อมูลจำลองไว้ใน localStorage
+   หน้าจออื่นทั้งหมดเรียกผ่าน Store.* เท่านั้น ข้อมูลในหน่วยความจำ (db) มีรูปแบบเดียวกันทั้งสองโหมด */
 const Store = (() => {
   const DB_KEY = 'pcshs-repair-db-v5';
   const SESSION_KEY = 'pcshs-repair-session-v1';
   const listeners = new Set();
+  const CFG = (typeof window !== 'undefined' && window.APP_CONFIG) || {};
+  const CLOUD = !!(CFG.firebase && typeof firebase !== 'undefined' && typeof location !== 'undefined'
+    && /^https?:$/.test(location.protocol) && !/[?&]local\b/.test(location.search));
 
   // ───────── ค่าคงที่ ─────────
   const FORM_KEYS = ['general', 'dorm'];
@@ -370,10 +373,29 @@ const Store = (() => {
     try { localStorage.setItem(DB_KEY, JSON.stringify(d)); } catch (e) { /* โหมดส่วนตัว */ }
     return d;
   }
-  let db = load();
+  // ระบบจริง: เริ่มจากค่าตั้งต้นในโค้ด แล้วแทนที่ด้วยข้อมูลจาก Firestore เมื่อโหลดเสร็จ
+  function cloudStartDb() {
+    const domain = CFG.domain || 'pcshspt.ac.th';
+    return { version: 7, settings: seedSettings(domain), categories: seedCategories(), locations: seedLocations(),
+      users: [], staff: seedStaff(), notifications: [], tickets: [] };
+  }
+  let db = CLOUD ? cloudStartDb() : load();
+  const Cloud = CLOUD ? makeCloud() : null;
+  // การบันทึก: แก้สำเนาของข้อมูลด้วย mutator แล้วบันทึกลงที่เก็บ (ระบบจริงส่งเฉพาะส่วนที่เปลี่ยนไป Firestore)
+  let lastWrite = Promise.resolve();
   function commit(mutator) {
     const draft = clone(db);
     const result = mutator(draft);
+    if (CLOUD) {
+      const prev = db;
+      db = draft;
+      emit();
+      const w = Cloud.persist(prev, draft).catch(e => { Cloud.rebuild(); throw Cloud.friendly(e); });
+      lastWrite = w;
+      // ถ้าหน้าที่เรียกไม่ได้รอผลเอง ให้แจ้งข้อผิดพลาดที่มุมจอ
+      w.catch(e => setTimeout(() => { if (!w.awaited && typeof UI !== 'undefined') UI.toast(e.message, 'error'); }, 0));
+      return result;
+    }
     try {
       localStorage.setItem(DB_KEY, JSON.stringify(draft));
     } catch (e) {
@@ -383,8 +405,14 @@ const Store = (() => {
     emit();
     return result;
   }
+  // รอให้การบันทึกล่าสุดเสร็จ (ระบบจริง) · โหมดทดลองหน่วงเวลาเล็กน้อยให้เหมือนเรียกเซิร์ฟเวอร์
+  const settle = (v, ms) => {
+    if (!CLOUD) return delay(v, ms);
+    lastWrite.awaited = true;
+    return lastWrite.then(() => v);
+  };
   function emit() { listeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } }); }
-  window.addEventListener('storage', e => {
+  if (!CLOUD && typeof window !== 'undefined') window.addEventListener('storage', e => {
     if (e.key === DB_KEY && e.newValue) { db = JSON.parse(e.newValue); emit(); }
     if (e.key === SESSION_KEY) emit();
   });
@@ -392,6 +420,7 @@ const Store = (() => {
 
   // ───────── สิทธิ์ ─────────
   function currentUser() {
+    if (CLOUD) return Cloud.me();
     let email = null;
     try { email = localStorage.getItem(SESSION_KEY); } catch (e) { /* ignore */ }
     if (!email) return null;
@@ -464,6 +493,16 @@ const Store = (() => {
   // ───────── API ─────────
   return {
     FORM_KEYS, STEP1_KEY, STEP2_KEY, ACTIONS,
+    cloud: CLOUD,
+    // รอให้โหลดข้อมูลชุดแรกเสร็จก่อนวาดหน้า
+    ready: () => CLOUD ? Cloud.ready : Promise.resolve(),
+    // ระบบจริง: โหลดใบแจ้งซ่อมย้อนหลังเพิ่ม (หน้าสถิติ) คืนค่า true ถ้ามีการโหลดใหม่
+    ensureRange: from => CLOUD ? Cloud.ensureRange(from) : Promise.resolve(false),
+    // ระบบจริงโหลดใบแจ้งซ่อมไม่ครบทุกปี จึงดูจากค่าตั้งระบบว่ายังมีใบตัวอย่างหรือไม่
+    hasSamples: () => CLOUD ? !!db.settings.hasSamples : db.tickets.some(t => t.sample),
+    deleteSamples: () => CLOUD ? Cloud.deleteSamples() : Promise.resolve(0),
+    // รูปที่เก็บใน Drive อ้างอิงเป็น "drive:<id>" · ใช้ <img ${Store.img(src)}> แล้วระบบโหลดรูปให้เอง
+    img: src => CLOUD ? Cloud.imgAttr(src) : `src="${src}"`,
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     fullName, hasRole, isStaff, isBackOffice, can, canSee, formsOf, actionsOf, reopenDeadline: deadline,
     duplicates: (input, exceptId) => duplicatesOf(input, exceptId),
@@ -473,6 +512,7 @@ const Store = (() => {
     // เซสชัน
     me: currentUser,
     async login(email) {
+      if (CLOUD) return Cloud.login();
       email = String(email || '').trim().toLowerCase();
       const domain = db.settings.domain.toLowerCase();
       if (!email.endsWith('@' + domain)) throw new Error(`ใช้ได้เฉพาะอีเมลของโรงเรียน (@${domain}) เท่านั้น`);
@@ -482,9 +522,10 @@ const Store = (() => {
       emit();
       return delay(u, 450);
     },
-    logout() { localStorage.removeItem(SESSION_KEY); emit(); },
-    // เฉพาะต้นแบบ: เปิด index.html?as=ชื่ออีเมล เพื่อเข้าในบทบาทนั้นทันที (ตัดออกในระบบจริง)
+    logout() { if (CLOUD) return Cloud.logout(); localStorage.removeItem(SESSION_KEY); emit(); },
+    // เฉพาะโหมดทดลอง: เปิด index.html?as=ชื่ออีเมล เพื่อเข้าในบทบาทนั้นทันที
     demoLogin(local) {
+      if (CLOUD) return;
       const u = db.users.find(x => x.email.split('@')[0] === local);
       try { if (u) localStorage.setItem(SESSION_KEY, u.email); else localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
     },
@@ -568,10 +609,12 @@ const Store = (() => {
     notifications() {
       const me = currentUser();
       if (!me) return [];
+      if (CLOUD) return Cloud.notifications(me);
       return db.notifications.filter(n => n.to === me.email).sort((a, b) => b.at.localeCompare(a.at));
     },
     markRead(id) {
       const me = currentUser();
+      if (CLOUD) return Cloud.markRead(me, id);
       return commit(d => { d.notifications.forEach(n => { if (n.to === me.email && (!id || n.id === id)) n.read = true; }); });
     },
 
@@ -593,6 +636,13 @@ const Store = (() => {
       const entries = input.entries || (input.locations || []).map(location => ({ location, items: input.items }));
       if (!entries.length) throw new Error('กรุณาเลือกสถานที่ซ่อมอย่างน้อย 1 แห่ง');
       if (entries.some(e => !e.items?.length || e.items.some(i => !String(i.detail || '').trim()))) throw new Error('กรุณาระบุรายละเอียดของทุกรายการที่แจ้งซ่อม');
+      if (CLOUD) {
+        if (entries.length > 8) throw new Error('แจ้งได้ครั้งละไม่เกิน 8 สถานที่ กรุณาแบ่งส่งเป็นหลายครั้ง');
+        // อัปโหลดรูปลง Drive ก่อน แล้วจองเลขที่ใบไม่ให้ซ้ำกับคนอื่น
+        for (const e of entries) for (const it of e.items) it.photos = await Cloud.upload(it.photos);
+        input.photos = await Cloud.upload(input.photos);
+        await Cloud.reserve(entries.length);
+      }
       const list = commit(d => {
         const user = d.users.find(u => u.email === me.email);
         if (input.phone && input.phone !== user.phone) user.phone = input.phone;
@@ -601,7 +651,9 @@ const Store = (() => {
         if (batch) made.forEach(t => { t.batchIds = made.map(x => x.id); });
         return made;
       });
-      return delay(list, 600);
+      await settle(list, 600);
+      if (CLOUD) Cloud.notifyNew(list.map(t => t.id));
+      return list;
     },
 
     // ผู้แจ้งแก้ไขคำขอที่ยังรออนุมัติ (เลขที่เดิม)
@@ -609,6 +661,10 @@ const Store = (() => {
       const me = currentUser();
       if (!can(me, 'edit', db.tickets.find(t => t.id === id))) throw new Error('แก้ไขได้เฉพาะคำขอของคุณที่ยังรออนุมัติ');
       if (!input.items?.length || input.items.some(i => !String(i.detail || '').trim())) throw new Error('กรุณาระบุรายละเอียดของทุกรายการที่แจ้งซ่อม');
+      if (CLOUD) {
+        for (const it of input.items) it.photos = await Cloud.upload(it.photos);
+        input.photos = await Cloud.upload(input.photos);
+      }
       const t = commit(d => {
         const t = d.tickets.find(x => x.id === id);
         const user = d.users.find(u => u.email === me.email);
@@ -617,7 +673,7 @@ const Store = (() => {
         t.history.push({ at: nowISO(), by: fullName(user), action: 'แก้ไขคำขอ', note: '' });
         return t;
       });
-      return delay(t, 400);
+      return settle(t, 400);
     },
 
     async cancelTicket(id, reason) {
@@ -632,7 +688,7 @@ const Store = (() => {
         notify(d, d.users.filter(u => u.active && isStaff(u) && formsOf(u).includes(t.formType)).map(u => u.email), 'ผู้แจ้งยกเลิกคำขอ', `${t.id} · ${t.location.locationName}`, t.id);
         return t;
       });
-      return delay(t, 300);
+      return settle(t, 300);
     },
 
     // "ยังไม่หาย / เสียอีก" หลังเสร็จสิ้น → สร้างใบใหม่ที่อ้างอิงใบเดิม
@@ -640,6 +696,7 @@ const Store = (() => {
       const me = currentUser();
       if (!can(me, 'reopen', db.tickets.find(t => t.id === id))) throw new Error(`แจ้ง "ยังไม่หาย" ได้ภายใน ${db.settings.reopenDays || 14} วันหลังซ่อมเสร็จ`);
       if (!String(detail || '').trim()) throw new Error('กรุณาระบุอาการที่ยังพบ');
+      if (CLOUD) await Cloud.reserve(1);
       const t = commit(d => {
         const old = d.tickets.find(x => x.id === id);
         const user = d.users.find(u => u.email === me.email);
@@ -649,7 +706,9 @@ const Store = (() => {
         old.history.push({ at: nowISO(), by: fullName(user), action: 'แจ้งว่ายังไม่หาย', note: `เปิดใบใหม่ ${t.id} · ${detail}` });
         return t;
       });
-      return delay(t, 500);
+      await settle(t, 500);
+      if (CLOUD) Cloud.notifyNew([t.id]);
+      return t;
     },
 
     // เปลี่ยนสถานะได้ทีละหลายรายการ คืนจำนวนที่สำเร็จและที่ข้าม
@@ -657,6 +716,7 @@ const Store = (() => {
       const me = currentUser();
       if (!ACTIONS.includes(status)) throw new Error('สถานะไม่ถูกต้อง');
       if (status === 'cannot_fix' && !payload.reason) throw new Error('กรุณาระบุเหตุผลที่ซ่อมไม่ได้');
+      if (CLOUD && payload.photos?.length) payload = { ...payload, photos: await Cloud.upload(payload.photos) };
       const res = commit(d => {
         const user = d.users.find(u => u.email === me.email);
         const at = nowISO();
@@ -671,9 +731,396 @@ const Store = (() => {
         return { ok, skipped };
       });
       if (!res.ok) throw new Error('ไม่มีรายการที่คุณมีสิทธิ์เปลี่ยนเป็นสถานะนี้');
-      return delay(res, 300);
+      return settle(res, 300);
     },
 
-    reset() { localStorage.removeItem(DB_KEY); db = load(); emit(); }
+    reset() { if (CLOUD) return; localStorage.removeItem(DB_KEY); db = load(); emit(); }
   };
+
+  // ═════════ ระบบจริง: Firebase (Firestore + Google Login) และ Apps Script (รูป / LINE) ═════════
+  function makeCloud() {
+    firebase.initializeApp(CFG.firebase);
+    const auth = firebase.auth();
+    const fs = firebase.firestore();
+    try { fs.settings({ ignoreUndefinedProperties: true }); } catch (e) { /* ตั้งไว้แล้ว */ }
+    fs.enablePersistence({ synchronizeTabs: true }).catch(() => { /* เบราว์เซอร์ไม่รองรับ ใช้แบบออนไลน์อย่างเดียว */ });
+
+    const DOMAIN = (CFG.domain || 'pcshspt.ac.th').toLowerCase();
+    const ADMINS = (CFG.bootstrapAdmins || []).map(s => s.toLowerCase());
+    const OPEN = ['pending', 'in_progress', 'review'];
+    const DAY = 864e5;
+    const since = days => new Date(Date.now() - days * DAY).toISOString();
+    const cfgDoc = name => fs.collection('config').doc(name);
+    const strip = o => JSON.parse(JSON.stringify(o));
+    const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+    let me = null, loginError = '', configMissing = false;
+    let ownUnsub = null, dataUnsubs = [], usersList = [];
+    let loadedFrom = null;           // ใบแจ้งซ่อมที่โหลดไว้ครบตั้งแต่วันที่นี้ (แอดมิน/ผู้บริหาร)
+    const sets = new Map();          // ชื่อ listener → { kind: 'full' | 'board', m: Map(id → ข้อมูล) }
+    const extra = new Map();         // ใบเก่าที่โหลดเพิ่มตามช่วงเวลา
+    let authWaiters = [];
+
+    // ── รวมข้อมูลจากทุก listener เป็น db.tickets (ใบเต็มทับข้อมูลกระดาน) ──
+    // ข้อมูลกระดาน (board) ไม่มีชื่อและเบอร์ผู้แจ้ง ใช้แสดงภาพรวมให้ทุกคนเห็น
+    const fromBoard = p => ({
+      note: '', photos: [], approvals: {}, review: null, inspection: null, ...p,
+      reporter: { email: '', name: '', dept: '', phone: '', position: '', signature: '' },
+      completion: p.completion || null, cannot: p.cannot || null,
+      history: (p.history || []).map(h => ({ by: '', note: '', ...h })), items: p.items || [], _board: true
+    });
+    const project = t => ({
+      id: t.id, formType: t.formType, status: t.status, createdAt: t.createdAt, updatedAt: t.updatedAt || t.createdAt,
+      location: t.location,
+      items: (t.items || []).map(i => ({ catId: i.catId, catName: i.catName, itemId: i.itemId || '', name: i.name, unit: i.unit || '', qty: i.qty || 0, detail: i.detail || '' })),
+      batchIds: t.batchIds || null,
+      completion: t.completion ? { at: t.completion.at } : null, cannot: t.cannot ? { at: t.cannot.at } : null,
+      history: (t.history || []).map(h => ({ at: h.at, action: h.action })), sample: !!t.sample
+    });
+    let queued = false;
+    function rebuild() {
+      if (queued) return;
+      queued = true;
+      Promise.resolve().then(() => {
+        queued = false;
+        const map = new Map();
+        sets.forEach(s => { if (s.kind === 'board') s.m.forEach((p, id) => map.set(id, fromBoard(p))); });
+        extra.forEach((t, id) => map.set(id, t));
+        sets.forEach(s => { if (s.kind === 'full') s.m.forEach((t, id) => map.set(id, t)); });
+        const users = usersList.slice();
+        if (me && !users.some(u => u.email === me.email)) users.push(me);
+        db = { ...db, users, tickets: [...map.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)) };
+        emit();
+      });
+    }
+    function listenQuery(name, query, kind) {
+      const m = new Map();
+      sets.set(name, { kind, m });
+      let firstDone;
+      const first = new Promise(res => { firstDone = res; });
+      const un = query.onSnapshot(snap => {
+        snap.docChanges().forEach(ch => { if (ch.type === 'removed') m.delete(ch.doc.id); else m.set(ch.doc.id, ch.doc.data()); });
+        firstDone(); rebuild();
+      }, err => { console.error(name, err); firstDone(); });
+      return { stop: () => { un(); sets.delete(name); }, first };
+    }
+
+    // ── ค่าตั้งระบบ (อ่านได้ทุกคน รวมถึงก่อนเข้าสู่ระบบ) ──
+    const configReady = Promise.all([
+      new Promise(res => cfgDoc('settings').onSnapshot(s => {
+        configMissing = !s.exists;
+        if (s.exists) db = { ...db, settings: { ...s.data(), running: db.settings.running || {} } };
+        res(); emit();
+      }, e => { console.error(e); res(); })),
+      ...['categories', 'locations'].map(k => new Promise(res => cfgDoc(k).onSnapshot(s => {
+        if (s.exists) db = { ...db, [k]: s.data().list || [] };
+        res(); emit();
+      }, e => { console.error(e); res(); }))),
+      new Promise(res => fs.collection('staff').onSnapshot(s => {
+        if (!s.empty) db = { ...db, staff: s.docs.map(x => x.data()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(({ order, ...m }) => m) };
+        res(); emit();
+      }, e => { console.error(e); res(); }))
+    ]);
+
+    // ── ผู้ใช้ที่เข้าสู่ระบบ ──
+    const rolesKey = u => JSON.stringify([u.roles, u.forms, u.actions, u.active]);
+    function stopUser() {
+      ownUnsub?.(); ownUnsub = null;
+      dataUnsubs.forEach(f => f()); dataUnsubs = [];
+      sets.clear(); extra.clear(); usersList = []; loadedFrom = null;
+    }
+    // เปิด listener ตามบทบาท: โหลดเฉพาะที่ต้องใช้เพื่อประหยัดโควตาการอ่านแบบฟรี
+    function startData() {
+      dataUnsubs.forEach(f => f()); dataUnsubs = [];
+      [...sets.keys()].forEach(k => sets.delete(k));
+      const T = fs.collection('tickets'), B = fs.collection('board');
+      const firsts = [];
+      const L = (name, q, kind) => { const h = listenQuery(name, q, kind); dataUnsubs.push(h.stop); firsts.push(h.first); };
+      L('mine', T.where('reporter.email', '==', me.email), 'full');
+      L('boardOpen', B.where('status', 'in', OPEN), 'board');
+      L('boardRecent', B.where('updatedAt', '>=', since(45)), 'board');
+      if (hasRole(me, 'admin')) {
+        L('open', T.where('status', 'in', OPEN), 'full');
+        L('recent', T.where('updatedAt', '>=', since(120)), 'full');
+        loadedFrom = since(120);
+      } else if (hasRole(me, 'approver')) {
+        (me.forms || []).forEach(f => L('form_' + f, T.where('formType', '==', f), 'full'));
+        loadedFrom = '0000';
+      } else loadedFrom = hasRole(me, 'executive') ? nowISO() : '0000';
+      if (isBackOffice(me)) {
+        dataUnsubs.push(fs.collection('users').onSnapshot(s => { usersList = s.docs.map(d => d.data()); rebuild(); }, e => console.error(e)));
+      }
+      return Promise.race([Promise.all(firsts), sleep(10000)]);
+    }
+    async function startUser(u, email) {
+      const ref = fs.collection('users').doc(email);
+      let snap = await ref.get();
+      if (!snap.exists) {
+        // ล็อกอินครั้งแรก: สร้างโปรไฟล์ครูให้อัตโนมัติ (แอดมินคนแรกได้สิทธิ์แอดมินด้วย)
+        const [first, ...rest] = String(u.displayName || email.split('@')[0]).trim().split(/\s+/);
+        await ref.set({
+          email, prefix: '', first: first || '', last: rest.join(' '), position: 'ครู', dept: '', phone: '',
+          roles: ADMINS.includes(email) ? ['teacher', 'admin'] : ['teacher'], forms: [...FORM_KEYS], actions: ['done', 'cannot_fix'],
+          active: true, signature: '', createdAt: nowISO()
+        });
+        snap = await ref.get();
+      }
+      me = snap.data();
+      if (me.active === false) {
+        loginError = 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อฝ่ายบริหารงานทั่วไป';
+        me = null;
+        await auth.signOut();
+        return;
+      }
+      await configReady;
+      if (configMissing && hasRole(me, 'admin')) await seedCloud();
+      let key = rolesKey(me);
+      ownUnsub = ref.onSnapshot(s => {
+        if (!s.exists) return;
+        me = s.data();
+        if (rolesKey(me) !== key) { key = rolesKey(me); startData(); }
+        rebuild();
+      }, e => console.error(e));
+      await startData();
+    }
+    let authFirst;
+    const authReady = new Promise(res => { authFirst = res; });
+    auth.onAuthStateChanged(async u => {
+      stopUser();
+      me = null;
+      if (u) {
+        const email = String(u.email || '').toLowerCase();
+        if (!email.endsWith('@' + DOMAIN) || !u.emailVerified) {
+          loginError = `ใช้ได้เฉพาะบัญชีของโรงเรียน (@${DOMAIN}) เท่านั้น · บัญชี ${email} ไม่มีสิทธิ์ใช้งาน`;
+          await auth.signOut();
+        } else {
+          try { await startUser(u, email); } catch (e) { console.error(e); loginError = friendly(e).message; me = null; }
+        }
+      }
+      rebuild();
+      authFirst();
+      authWaiters.splice(0).forEach(f => f());
+    });
+    const ready = Promise.all([configReady, authReady]).then(() => sleep(0));
+
+    // ── บันทึก: ส่งเฉพาะเอกสารที่เปลี่ยนไปในชุดเดียว (สำเร็จทั้งหมดหรือไม่บันทึกเลย) ──
+    function diffList(a, b, key, onPut, onDel, withOrder) {
+      const before = new Map((a || []).map((x, i) => [x[key], JSON.stringify(withOrder ? [x, i] : x)]));
+      (b || []).forEach((x, i) => { if (before.get(x[key]) !== JSON.stringify(withOrder ? [x, i] : x)) onPut(x, i); });
+      const keep = new Set((b || []).map(x => x[key]));
+      before.forEach((_, k) => { if (!keep.has(k)) onDel(k); });
+    }
+    // กฎความปลอดภัยตรวจเอกสารได้จำกัดต่อการบันทึกหนึ่งชุด จึงแบ่งใบแจ้งซ่อมเป็นชุดละไม่เกิน 8 ใบ
+    async function persist(prev, next) {
+      const batches = [fs.batch()];
+      let n = 0, tickets = 0;
+      const put = (ref, data) => { batches[batches.length - 1].set(ref, strip(data)); n++; };
+      const del = ref => { batches[batches.length - 1].delete(ref); n++; };
+      const nextTicket = () => { if (tickets && tickets % 8 === 0) batches.push(fs.batch()); tickets++; };
+      const { running: r0, ...s0 } = prev.settings, { running: r1, ...s1 } = next.settings;
+      if (JSON.stringify(s0) !== JSON.stringify(s1)) put(cfgDoc('settings'), s1);
+      ['categories', 'locations'].forEach(k => { if (JSON.stringify(prev[k]) !== JSON.stringify(next[k])) put(cfgDoc(k), { list: next[k] }); });
+      diffList(prev.staff, next.staff, 'id', (m, i) => put(fs.collection('staff').doc(m.id), { ...m, order: i }), id => del(fs.collection('staff').doc(id)), true);
+      diffList(prev.users, next.users, 'email', u => put(fs.collection('users').doc(u.email), u), id => del(fs.collection('users').doc(id)));
+      const at = nowISO();
+      diffList(prev.tickets, next.tickets, 'id', t => {
+        if (t._board) return;
+        nextTicket();
+        t.updatedAt = at;
+        put(fs.collection('tickets').doc(t.id), t);
+        put(fs.collection('board').doc(t.id), project(t));
+      }, id => { nextTicket(); del(fs.collection('tickets').doc(id)); del(fs.collection('board').doc(id)); });
+      if (!n) return;
+      // ชุดแรกมีใบใหม่/ใบเดิมที่อ้างอิงกัน (เช่น แจ้งยังไม่หาย) บันทึกพร้อมกัน ชุดถัดไปบันทึกต่อเนื่อง
+      for (const b of batches) await b.commit();
+    }
+    // จองเลขที่ใบแจ้งซ่อม (ไม่ซ้ำแม้หลายคนกดส่งพร้อมกัน) แล้วให้ newTicket ใช้เลขต่อจากนี้
+    async function reserve(k) {
+      const y = beYear(new Date());
+      const ref = fs.collection('counters').doc(String(y));
+      const start = await fs.runTransaction(async tx => {
+        const s = await tx.get(ref);
+        const n = s.exists ? (s.data().n || 0) : 0;
+        tx.set(ref, { n: n + k });
+        return n + 1;
+      });
+      db.settings.running = { ...(db.settings.running || {}), [y]: start - 1 };
+    }
+
+    // ── ข้อมูลเริ่มต้นครั้งแรก (แอดมินคนแรกเข้าสู่ระบบ): ค่าตั้งระบบ + ใบแจ้งซ่อมตัวอย่าง ──
+    async function seedCloud() {
+      const data = seed();
+      const { running, ...settings } = data.settings;
+      settings.hasSamples = true;
+      const writes = [[cfgDoc('settings'), settings], [cfgDoc('categories'), { list: data.categories }], [cfgDoc('locations'), { list: data.locations }]];
+      data.staff.forEach((m, i) => writes.push([fs.collection('staff').doc(m.id), { ...m, order: i }]));
+      data.tickets.forEach(t => {
+        t.sample = true;
+        t.updatedAt = t.history[t.history.length - 1].at;
+        writes.push([fs.collection('tickets').doc(t.id), t], [fs.collection('board').doc(t.id), project(t)]);
+      });
+      Object.entries(running).forEach(([y, n]) => writes.push([fs.collection('counters').doc(String(y)), { n }]));
+      for (let i = 0; i < writes.length; i += 400) {
+        const b = fs.batch();
+        writes.slice(i, i + 400).forEach(([ref, d]) => b.set(ref, strip(d)));
+        await b.commit();
+      }
+      configMissing = false;
+    }
+    async function deleteSamples() {
+      if (!hasRole(me, 'admin')) throw new Error('เฉพาะแอดมินเท่านั้น');
+      const snap = await fs.collection('tickets').where('sample', '==', true).get();
+      const ids = snap.docs.map(d => d.id);
+      for (let i = 0; i < ids.length; i += 200) {
+        const b = fs.batch();
+        ids.slice(i, i + 200).forEach(id => { b.delete(fs.collection('tickets').doc(id)); b.delete(fs.collection('board').doc(id)); });
+        await b.commit();
+      }
+      // ตั้งเลขที่ใบใหม่ให้ต่อจากใบจริงล่าสุดของแต่ละปี (ไม่มีใบจริง = เริ่ม 0001)
+      const real = await fs.collection('tickets').get();
+      const max = {};
+      real.forEach(d => { const [, y, n] = d.id.split('-'); max[y] = Math.max(max[y] || 0, +n || 0); });
+      const counters = await fs.collection('counters').get();
+      const b = fs.batch();
+      counters.forEach(c => b.set(c.ref, { n: max[c.id] || 0 }));
+      const { running, ...settings } = db.settings;
+      b.set(cfgDoc('settings'), strip({ ...settings, hasSamples: false }));
+      await b.commit();
+      ids.forEach(id => { extra.delete(id); sets.forEach(s => s.m.delete(id)); });
+      rebuild();
+      return ids.length;
+    }
+    async function ensureRange(from) {
+      if (!me || !(hasRole(me, 'admin') || hasRole(me, 'executive'))) return false;
+      const iso = from ? new Date(from).toISOString() : '0000';
+      if (loadedFrom && iso >= loadedFrom) return false;
+      let q = fs.collection('tickets').where('createdAt', '>=', iso);
+      if (loadedFrom && loadedFrom !== '0000') q = q.where('createdAt', '<', loadedFrom);
+      const snap = await q.get();
+      snap.forEach(d => extra.set(d.id, d.data()));
+      loadedFrom = iso;
+      rebuild();
+      return true;
+    }
+
+    // ── Apps Script: เก็บรูปลง Google Drive และแจ้งเตือน LINE ──
+    async function callScript(action, payload) {
+      if (!CFG.appsScriptUrl) throw new Error('ยังไม่ได้ตั้งค่าที่เก็บรูป (Apps Script) กรุณาติดต่อแอดมิน');
+      if (!auth.currentUser) throw new Error('กรุณาเข้าสู่ระบบใหม่');
+      const idToken = await auth.currentUser.getIdToken();
+      let res;
+      try {
+        res = await fetch(CFG.appsScriptUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, idToken, ...payload }) });
+      } catch (e) { throw new Error('เชื่อมต่อที่เก็บรูปไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่'); }
+      const data = await res.json().catch(() => ({ ok: false, error: 'ที่เก็บรูปตอบกลับผิดรูปแบบ' }));
+      if (!data.ok) throw new Error(data.error || 'ที่เก็บรูปตอบกลับผิดพลาด');
+      return data;
+    }
+    async function upload(list) {
+      return Promise.all((list || []).map(async p => {
+        const m = typeof p === 'string' && p.match(/^data:([^;]+);base64,(.+)$/);
+        if (!m) return p;
+        const r = await callScript('upload', { mime: m[1], data: m[2] });
+        return 'drive:' + r.id;
+      }));
+    }
+    function notifyNew(ids) {
+      if (!CFG.appsScriptUrl || !ids.length) return;
+      callScript('notify', { ids }).catch(e => console.warn('แจ้งเตือน LINE ไม่สำเร็จ', e));
+    }
+    // แสดงรูปจาก Drive: แทนที่ด้วยรูปรอโหลด แล้วดึงรูปจริงผ่าน Apps Script (ตรวจสิทธิ์ทุกครั้ง)
+    const PLACEHOLDER = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="#F3EFEA"/></svg>');
+    const photoCache = new Map();
+    function photo(id) {
+      if (!photoCache.has(id)) {
+        photoCache.set(id, callScript('image', { id }).then(r => {
+          const bin = atob(r.data), bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          return URL.createObjectURL(new Blob([bytes], { type: r.mime }));
+        }).catch(e => { photoCache.delete(id); throw e; }));
+      }
+      return photoCache.get(id);
+    }
+    function imgAttr(src) {
+      const s = String(src || '');
+      if (!s.startsWith('drive:')) return `src="${s}"`;
+      return `src="${PLACEHOLDER}" data-drive="${s.slice(6).replace(/[^\w-]/g, '')}"`;
+    }
+    const resolveImg = img => {
+      const id = img.dataset.drive;
+      if (!id || img.dataset.driveState) return;
+      img.dataset.driveState = 'loading';
+      photo(id).then(url => { img.src = url; img.dataset.driveState = 'ok'; })
+        .catch(() => { img.dataset.driveState = 'error'; img.alt = 'โหลดรูปไม่สำเร็จ'; });
+    };
+    new MutationObserver(muts => muts.forEach(m => m.addedNodes.forEach(n => {
+      if (n.nodeType !== 1) return;
+      if (n.matches?.('img[data-drive]')) resolveImg(n);
+      n.querySelectorAll?.('img[data-drive]').forEach(resolveImg);
+    }))).observe(document.documentElement, { childList: true, subtree: true });
+
+    // ── การแจ้งเตือนในเว็บ: สร้างจากประวัติของใบแจ้งซ่อม (ไม่ต้องเก็บแยก) ──
+    const READ_KEY = email => `pcshs-notif-read:${email}`;
+    const readState = email => { try { return JSON.parse(localStorage.getItem(READ_KEY(email)) || '{}'); } catch (e) { return {}; } };
+    const STAFF_EVENTS = { 'แจ้งซ่อม': 'มีการแจ้งซ่อมใหม่', 'ยกเลิกคำขอ': 'ผู้แจ้งยกเลิกคำขอ', 'แก้ไขคำขอ': 'ผู้แจ้งแก้ไขคำขอ' };
+    const STATUS_EVENTS = { 'กำลังดำเนินการซ่อม': 'in_progress', 'รอพิจารณา': 'review', 'เสร็จสิ้น': 'done', 'ไม่สามารถซ่อมได้': 'cannot_fix' };
+    function notifications(u) {
+      const st = readState(u.email), readAt = st.at || '', ids = new Set(st.ids || []);
+      const myName = fullName(u), forms = formsOf(u), from = since(60);
+      const out = [];
+      for (const t of db.tickets) {
+        if (t._board) continue;
+        const mine = t.reporter.email === u.email, staff = forms.includes(t.formType) && !mine;
+        t.history.forEach((h, i) => {
+          if (h.at < from || h.by === myName) return;
+          const title = staff ? (h.action.startsWith('แจ้งซ้ำ') ? 'แจ้งซ้ำ: ซ่อมแล้วยังไม่หาย' : STAFF_EVENTS[h.action])
+            : mine ? STATUS_TITLE[STATUS_EVENTS[h.action]] : null;
+          if (!title) return;
+          const id = `${t.id}#${i}`;
+          out.push({ id, to: u.email, at: h.at, title, body: `${t.id} · ${t.location.locationName}`, ticketId: t.id, read: h.at <= readAt || ids.has(id) });
+        });
+      }
+      return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 50);
+    }
+    function markRead(u, id) {
+      const st = readState(u.email);
+      if (id) st.ids = [...new Set([...(st.ids || []), id])].slice(-200);
+      else { st.at = nowISO(); st.ids = []; }
+      try { localStorage.setItem(READ_KEY(u.email), JSON.stringify(st)); } catch (e) { /* ignore */ }
+      emit();
+    }
+
+    // ── เข้าสู่ระบบ / ออกจากระบบ ──
+    const AUTH_MSG = {
+      'auth/popup-blocked': 'เบราว์เซอร์บล็อกหน้าต่างเข้าสู่ระบบ กรุณาอนุญาตป๊อปอัปแล้วลองใหม่',
+      'auth/popup-closed-by-user': 'ปิดหน้าต่างเข้าสู่ระบบก่อนเสร็จ กรุณาลองใหม่',
+      'auth/cancelled-popup-request': 'กรุณากดเข้าสู่ระบบอีกครั้ง',
+      'auth/unauthorized-domain': 'เว็บไซต์นี้ยังไม่ได้รับอนุญาตให้เข้าสู่ระบบ กรุณาติดต่อแอดมิน',
+      'auth/network-request-failed': 'เชื่อมต่ออินเทอร์เน็ตไม่ได้ ลองใหม่อีกครั้ง'
+    };
+    async function login() {
+      loginError = '';
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ hd: DOMAIN, prompt: 'select_account' });
+      const settled = new Promise(res => authWaiters.push(res));
+      try { await auth.signInWithPopup(provider); }
+      catch (e) { authWaiters = authWaiters.filter(f => f !== settled); throw new Error(AUTH_MSG[e.code] || e.message); }
+      await settled;
+      if (!me) throw new Error(loginError || 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่');
+      return me;
+    }
+    function friendly(e) {
+      const code = String(e?.code || '');
+      if (code.includes('permission-denied')) return new Error('ระบบความปลอดภัยไม่อนุญาตให้ทำรายการนี้ (ไม่มีสิทธิ์)');
+      if (code.includes('unavailable')) return new Error('เชื่อมต่อฐานข้อมูลไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่');
+      return e instanceof Error ? e : new Error(String(e));
+    }
+
+    return {
+      ready, rebuild, persist, reserve, friendly, ensureRange, deleteSamples, upload, notifyNew, imgAttr,
+      notifications, markRead, login,
+      logout: () => auth.signOut(),
+      me: () => me
+    };
+  }
 })();

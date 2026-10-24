@@ -41,6 +41,8 @@ const Pages = (() => {
     const forms = Store.FORM_KEYS.filter(k => s.forms[k].enabled);
     const cats = Store.categories();
     const pct = (a, b) => b ? Math.min(100, Math.round(a / b * 100)) : 0;
+    // ระบบจริง: ข้อมูลงานซ่อมเห็นได้เฉพาะผู้ที่เข้าสู่ระบบแล้ว
+    const live = !Store.cloud || !!Store.me();
     return {
       title: 'หน้าแรก', heroNav: true,
       html: `
@@ -57,12 +59,13 @@ const Pages = (() => {
               <a class="btn btn-ghost btn-lg" href="#/board">${icon('activity')} แดชบอร์ดเรียลไทม์</a>
               <a class="btn btn-ghost btn-lg" href="#/my">${icon('track')} งานที่ฉันแจ้ง</a>
             </div>
-            <div class="hero-live" aria-label="สถานะงานซ่อมขณะนี้">
+            ${live ? `<div class="hero-live" aria-label="สถานะงานซ่อมขณะนี้">
               <span class="hl-title"><span class="live-dot" aria-hidden="true"></span>สถานะงานซ่อมขณะนี้</span>
               <span class="hl-stat"><b>${sum.pending}</b>รออนุมัติ</span>
               <span class="hl-stat"><b>${sum.working}</b>กำลังดำเนินการ</span>
               <span class="hl-stat"><b>${sum.review}</b>รอพิจารณา</span>
-            </div>
+            </div>` : `<a class="hero-live" href="#/login" style="text-decoration:none">
+              <span class="hl-title"><span class="live-dot" aria-hidden="true"></span>เข้าสู่ระบบด้วยบัญชีโรงเรียน เพื่อดูสถานะงานซ่อมขณะนี้ ${icon('arrow')}</span></a>`}
           </div>
         </div>
       </section>
@@ -84,7 +87,7 @@ const Pages = (() => {
             <div class="svc-top"><span class="svc-icon">${icon('activity')}</span><span class="svc-no">0${forms.length + 1}</span></div>
             <h3>ติดตามสถานะงานซ่อม</h3>
             <p>ดูความคืบหน้าของงานที่แจ้งไว้ และภาพรวมงานซ่อมทั้งโรงเรียนแบบเรียลไทม์</p>
-            <div class="svc-chips"><span class="chip">${icon('clock')}รออนุมัติ ${sum.pending}</span><span class="chip">${icon('wrench')}กำลังซ่อม ${sum.working}</span><span class="chip">${icon('hourglass')}รอพิจารณา ${sum.review}</span></div>
+            ${live ? `<div class="svc-chips"><span class="chip">${icon('clock')}รออนุมัติ ${sum.pending}</span><span class="chip">${icon('wrench')}กำลังซ่อม ${sum.working}</span><span class="chip">${icon('hourglass')}รอพิจารณา ${sum.review}</span></div>` : ''}
             <span class="svc-more">งานที่ฉันแจ้ง ${icon('arrow')}</span>
           </a>
         </div>
@@ -106,7 +109,7 @@ const Pages = (() => {
         </div>
       </section>
 
-      <section class="section" aria-labelledby="stats-title">
+      ${live ? `<section class="section" aria-labelledby="stats-title">
         <div class="container">
           <div class="stats reveal">
             <div class="stats-head">
@@ -129,7 +132,7 @@ const Pages = (() => {
             </div>
           </div>
         </div>
-      </section>
+      </section>` : ''}
       `,
       mount(root) { UI.reveal(root); }
     };
@@ -160,6 +163,9 @@ const Pages = (() => {
             <h1>เข้าสู่ระบบ</h1>
             <p class="muted" style="margin:6px 0 24px">ใช้อีเมลโรงเรียน <strong>@${esc(s.domain)}</strong> เท่านั้น ระบบจะรู้ชื่อผู้แจ้งจากบัญชีโดยอัตโนมัติ</p>
             <div id="loginErr"></div>
+            ${Store.cloud ? `
+            <button class="g-btn" type="button" id="gLogin">${icon('google')} เข้าสู่ระบบด้วย Google</button>
+            <p class="small faint" style="margin-top:16px;text-align:center">กดแล้วเลือกบัญชี <b>@${esc(s.domain)}</b> · ครั้งแรกระบบจะสร้างบัญชีให้อัตโนมัติ</p>` : `
             <form id="loginForm" class="stack" novalidate>
               <div class="field">
                 <label for="email">อีเมลโรงเรียน</label>
@@ -173,7 +179,7 @@ const Pages = (() => {
                 <span><strong>${esc(Store.fullName(d.u))}</strong><small>${esc(d.u.position)}</small></span><span class="badge tone-${d.tone}">${esc(d.role)}</span></button>`).join('')}
               <button class="demo-acc" data-email="student.m6@${esc(s.domain)}">${UI.avatar('น')}
                 <span><strong>นักเรียน (ทดสอบการปฏิเสธ)</strong><small>student.m6@${esc(s.domain)}</small></span><span class="badge tone-slate">ไม่มีสิทธิ์</span></button>
-            </div>
+            </div>`}
           </div>
         </div>
       </div>`,
@@ -189,6 +195,7 @@ const Pages = (() => {
             $('#loginErr', root).innerHTML = `<div class="alert alert-error" style="margin-bottom:16px">${icon('alert')}<span>${esc(e.message)}</span></div>`;
           } finally { if (btn) btn.disabled = false; }
         };
+        if (Store.cloud) { $('#gLogin', root).addEventListener('click', e => doLogin('', e.currentTarget)); return; }
         $('#loginForm', root).addEventListener('submit', e => { e.preventDefault(); doLogin($('#email', root).value, e.submitter); });
         $$('.demo-acc', root).forEach(b => b.addEventListener('click', () => doLogin(b.dataset.email, b)));
       }
@@ -363,7 +370,7 @@ const Pages = (() => {
             <div class="field" style="margin-top:16px"><label>${c.freeOnly ? 'ระบุรายการที่ต้องการซ่อม' : 'อื่น ๆ (ระบุ)'}</label>
               <div class="row" style="flex-wrap:nowrap"><input class="input" data-other="${c.id}" aria-label="${c.freeOnly ? 'ระบุรายการที่ต้องการซ่อม' : 'รายการอื่น'}" placeholder="${c.freeOnly ? 'เช่น ราวบันได ฝ้าเพดาน' : 'รายการอื่นที่ไม่มีในตัวเลือก'}"><button type="button" class="btn btn-soft" data-addother="${c.id}">${icon('plus')} เพิ่ม</button></div></div>`;
         }
-        const thumbs = v => (v.photos || []).map((p, i) => `<figure class="thumb sm"><img src="${p}" alt="รูปที่ ${i + 1}" data-zoom><button type="button" class="thumb-x" data-rmphoto="${i}" aria-label="ลบรูปที่ ${i + 1}">${icon('close')}</button></figure>`).join('');
+        const thumbs = v => (v.photos || []).map((p, i) => `<figure class="thumb sm"><img ${Store.img(p)} alt="รูปที่ ${i + 1}" data-zoom><button type="button" class="thumb-x" data-rmphoto="${i}" aria-label="ลบรูปที่ ${i + 1}">${icon('close')}</button></figure>`).join('');
         function detailsHTML(b) {
           const list = [...b.items.entries()];
           if (!list.length) return '';
@@ -502,6 +509,7 @@ const Pages = (() => {
         };
         const addBlock = () => {
           if (dorm && !state.dorm) { UI.toast('กรุณาเลือกหอพักก่อน', 'error'); $('#dormSel', root).focus(); return; }
+          if (state.blocks.length >= 8) { UI.toast(`แจ้งได้ครั้งละไม่เกิน 8 ${UNIT} ส่งชุดนี้ก่อนแล้วแจ้งชุดถัดไปได้เลย`, 'error'); return; }
           state.blocks.forEach(x => { x.open = false; });
           const b = newBlock();
           if (!dorm) b.placeId = state.blocks.at(-1)?.placeId === '__other' ? '' : state.blocks.at(-1)?.placeId || ''; // เริ่มจากสถานที่เดิม เลือกห้องถัดไปได้ทันที
@@ -878,7 +886,8 @@ const Pages = (() => {
       </div></div>`,
       mount(root) {
         const me = Store.me();
-        const linkFor = t => Store.isStaff(me) && Store.canSee(me, t) ? `/admin/job/${t.id}` : `/ticket/${t.id}`;
+        // ใบของคนอื่นที่เห็นแค่ข้อมูลกระดาน (ไม่มีสิทธิ์เปิดรายละเอียด) ไม่ต้องลิงก์ไปไหน
+        const linkFor = t => t._board ? '/board' : Store.isStaff(me) && Store.canSee(me, t) ? `/admin/job/${t.id}` : `/ticket/${t.id}`;
         const lastAct = t => t.history.at(-1).at;
         const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
         const where = t => UI.locationText({ ...t.location, point: '' });

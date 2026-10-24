@@ -800,6 +800,14 @@ button.kpi.is-active { border-color: var(--orange-500); box-shadow: 0 0 0 3px rg
 
 /* ═══════════ ติดต่อเรา ═══════════ */
 .keep { white-space: nowrap; display: inline-block; }
+/* หน้ากำลังโหลดระบบ (ระหว่างเชื่อมต่อฐานข้อมูล) */
+.boot { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: linear-gradient(160deg, var(--navy-900), var(--navy-950)); color: rgba(255, 255, 255, .8); font-family: var(--font-display); }
+.boot img { height: 84px; filter: drop-shadow(0 8px 24px rgba(0, 0, 0, .4)); }
+.boot p { margin: 0; font-size: .95rem; }
+.boot-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .15); border-top-color: var(--orange-400); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+img[data-drive-state="loading"] { animation: pulseImg 1.2s ease-in-out infinite; }
+@keyframes pulseImg { 50% { opacity: .55; } }
 .lead-grid { display: grid; gap: 24px; }
 .lead-grid.is-multi { grid-template-columns: repeat(auto-fit, minmax(min(100%, 540px), 1fr)); }
 .lead-grid.is-multi .lead-card { grid-template-columns: 220px minmax(0, 1fr); }

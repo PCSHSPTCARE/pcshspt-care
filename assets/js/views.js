@@ -43,7 +43,7 @@ const Views = (() => {
 
   function photos(list, empty = '') {
     if (!list?.length) return empty;
-    return `<div class="thumbs">${list.map((p, i) => `<figure class="thumb"><img src="${p}" alt="รูปที่ ${i + 1}" data-zoom></figure>`).join('')}</div>`;
+    return `<div class="thumbs">${list.map((p, i) => `<figure class="thumb"><img ${Store.img(p)} alt="รูปที่ ${i + 1}" data-zoom></figure>`).join('')}</div>`;
   }
 
 

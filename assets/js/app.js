@@ -201,7 +201,14 @@ const App = (() => {
   }
 
   // อัปเดตกระดิ่งและตัวนับเมื่อข้อมูลเปลี่ยน (โดยไม่วาดหน้าใหม่ทั้งหมด)
+  // ถ้าสถานะการเข้าสู่ระบบหรือบทบาทเปลี่ยน (เช่น หมดอายุ หรือแอดมินเปลี่ยนสิทธิ์) วาดหน้าใหม่ทั้งหน้า
+  let lastWho = null;
   Store.subscribe(() => {
+    if (!$('#view')) return; // ยังอยู่หน้ากำลังโหลดระบบ
+    const u = Store.me();
+    const who = u ? `${u.email}|${(u.roles || []).join()}|${(u.forms || []).join()}` : '';
+    if (lastWho !== null && who !== lastWho) { lastWho = who; render(); return; }
+    lastWho = who;
     const path = (location.hash.slice(1) || '/').split('?')[0];
     if ($('#navActions') && !$('#navActions .dropdown[data-open="true"]')) $('#navActions').innerHTML = navActionsHTML();
     if ($('#admBell') && !$('#admBell .dropdown[data-open="true"]')) $('#admBell').innerHTML = bellHTML();
@@ -279,4 +286,5 @@ App.route('/admin/settings', Admin.settings, { roles: ['admin'], layout: 'admin'
 
 const demoAs = new URLSearchParams(location.search).get('as');
 if (demoAs !== null) Store.demoLogin(demoAs);
-App.render();
+// ระบบจริง: รอโหลดค่าตั้งระบบและสถานะการเข้าสู่ระบบก่อนวาดหน้าแรก
+Store.ready().then(App.render, e => { console.error(e); App.render(); });
