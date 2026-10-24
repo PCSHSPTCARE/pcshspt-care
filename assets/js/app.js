@@ -60,9 +60,11 @@ const App = (() => {
   function bellHTML(right = true) {
     const list = Store.notifications();
     const unread = list.filter(n => !n.read).length;
+    // ตัวเลขบนกระดิ่ง = แจ้งเตือนใหม่ตั้งแต่เปิดดูกระดิ่งครั้งล่าสุด (เปิดดูแล้วตัวเลขหาย รายการที่ยังไม่ได้กดยังเน้นสีไว้)
+    const fresh = Store.unseenCount();
     return `
-      <div class="dropdown" data-open="false" style="position:relative">
-        <button class="icon-btn" data-dd aria-label="การแจ้งเตือน ${unread} รายการใหม่" aria-expanded="false">${icon('bell')}${unread ? `<span class="bell-count">${unread > 9 ? '9+' : unread}</span>` : ''}</button>
+      <div class="dropdown" data-bell data-open="false" style="position:relative">
+        <button class="icon-btn" data-dd aria-label="การแจ้งเตือน ${fresh} รายการใหม่" aria-expanded="false">${icon('bell')}${fresh ? `<span class="bell-count">${fresh > 9 ? '9+' : fresh}</span>` : ''}</button>
         <div class="dropdown-panel notif-panel ${right ? 'right' : ''}">
           <div class="notif-head"><strong>การแจ้งเตือน</strong>${unread ? '<button class="link small" data-readall>อ่านทั้งหมด</button>' : ''}</div>
           ${list.slice(0, 15).map(n => `
@@ -71,6 +73,13 @@ const App = (() => {
             </div>`).join('') || '<div class="empty" style="padding:30px">ยังไม่มีการแจ้งเตือน</div>'}
         </div>
       </div>`;
+  }
+
+  // วาดกระดิ่งใหม่ทันที (ระหว่างกล่องเปิดอยู่ การอัปเดตอัตโนมัติจะข้ามไป) · keepOpen = เปิดกล่องค้างไว้เหมือนเดิม
+  function refreshBell(keepOpen) {
+    if ($('#navActions')) $('#navActions').innerHTML = navActionsHTML();
+    if ($('#admBell')) $('#admBell').innerHTML = bellHTML();
+    if (keepOpen) $$('[data-bell]').forEach(b => { if (b.offsetParent) { b.dataset.open = 'true'; b.querySelector('[data-dd]').setAttribute('aria-expanded', 'true'); } });
   }
 
   function navActionsHTML() {
@@ -229,6 +238,8 @@ const App = (() => {
       openOnes.forEach(d => { if (d !== box && !d.contains(box)) d.dataset.open = 'false'; });
       box.dataset.open = open;
       dd.setAttribute('aria-expanded', open);
+      // เปิดกระดิ่ง = ดูแล้ว → ตัวเลขหายทันที
+      if (open && box.matches('[data-bell]')) { Store.markSeen(); dd.querySelector('.bell-count')?.remove(); }
       return;
     }
     if (e.target.closest('[data-menu-toggle]')) {
@@ -239,11 +250,12 @@ const App = (() => {
     if (e.target.closest('[data-side-toggle]')) { const a = $('#adm'); a.dataset.sideOpen = a.dataset.sideOpen !== 'true'; return; }
     if ($('#adm')?.dataset.sideOpen === 'true' && !e.target.closest('.side')) $('#adm').dataset.sideOpen = 'false';
     if (e.target.closest('[data-logout]')) { Store.logout(); UI.toast('ออกจากระบบแล้ว', 'info'); go('/'); render(); return; }
-    if (e.target.closest('[data-readall]')) { Store.markRead(); return; }
+    if (e.target.closest('[data-readall]')) { Store.markRead(); refreshBell(true); return; }
     const n = e.target.closest('[data-notif]');
     if (n) {
       Store.markRead(n.dataset.notif);
       openOnes.forEach(d => { d.dataset.open = 'false'; });
+      refreshBell(false);
       const me = Store.me(), t = n.dataset.ticket && Store.ticket(n.dataset.ticket);
       if (t) go(Store.isStaff(me) && Store.canSee(me, t) && t.reporter.email !== me.email ? `/admin/job/${t.id}` : `/ticket/${t.id}`);
       return;

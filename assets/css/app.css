@@ -290,7 +290,7 @@ p { margin: 0; }
 .brand-title { font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; color: var(--navy-800); white-space: nowrap; }
 .brand-sub { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
 .brand-sub .bs-long { display: none; }
-@media (min-width: 1181px) {
+@media (min-width: 1360px) {
   .brand-sub .bs-long { display: inline; }
   .brand-sub .bs-short { display: none; }
   .nav .brand-title { font-size: 1.12rem; }

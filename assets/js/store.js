@@ -646,6 +646,20 @@ const Store = (() => {
       if (CLOUD) return Cloud.notifications(me);
       return db.notifications.filter(n => n.to === me.email).sort((a, b) => b.at.localeCompare(a.at));
     },
+    // ตัวเลขบนกระดิ่ง: ยังไม่อ่าน และเข้ามาหลังเปิดดูกระดิ่งครั้งล่าสุด (เก็บเวลาที่เปิดดูไว้ในเครื่อง)
+    unseenCount() {
+      const me = currentUser();
+      if (!me) return 0;
+      let seen = '';
+      try { seen = localStorage.getItem(`pcshs-notif-seen:${me.email}`) || ''; } catch (e) { /* ignore */ }
+      return this.notifications().filter(n => !n.read && n.at > seen).length;
+    },
+    markSeen() {
+      const me = currentUser();
+      if (!me) return;
+      try { localStorage.setItem(`pcshs-notif-seen:${me.email}`, nowISO()); } catch (e) { /* ignore */ }
+      emit();
+    },
     markRead(id) {
       const me = currentUser();
       if (CLOUD) return Cloud.markRead(me, id);
