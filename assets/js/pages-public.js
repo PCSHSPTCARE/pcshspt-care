@@ -595,7 +595,7 @@ const Pages = (() => {
           if (e.target.matches('[data-photo]')) {
             const v = b.items.get(e.target.closest('[data-key]').dataset.key);
             for (const f of [...e.target.files].slice(0, MAX_PHOTOS - v.photos.length)) {
-              try { v.photos.push(await UI.compressImage(f, 1100, .74)); } catch (err) { UI.toast(err.message, 'error'); }
+              try { v.photos.push(await UI.compressImage(f)); } catch (err) { UI.toast(err.message, 'error'); }
             }
             renderBlock(b);
           }

@@ -131,7 +131,8 @@ const UI = (() => {
   });
 
   // ───────── รูปภาพ ─────────
-  function compressImage(file, max = 1280, quality = 0.78) {
+  // ย่อรูปก่อนอัปโหลด: ด้านยาวสุด 1000px คุณภาพ JPEG 68% (ประมาณ 100–150 KB ต่อรูป ยังชัดพอสำหรับงานซ่อมและ PDF)
+  function compressImage(file, max = 1000, quality = 0.68) {
     return new Promise((resolve, reject) => {
       if (!file.type.startsWith('image/')) return reject(new Error('รองรับเฉพาะไฟล์รูปภาพ'));
       const img = new Image();
