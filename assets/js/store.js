@@ -722,7 +722,9 @@ const Store = (() => {
         notify(d, d.users.filter(u => u.active && isStaff(u) && formsOf(u).includes(t.formType)).map(u => u.email), 'ผู้แจ้งยกเลิกคำขอ', `${t.id} · ${t.location.locationName}`, t.id);
         return t;
       });
-      return settle(t, 300);
+      await settle(t, 300);
+      if (CLOUD) Cloud.unshare([id]);
+      return t;
     },
 
     // "ยังไม่หาย / เสียอีก" หลังเสร็จสิ้น → สร้างใบใหม่ที่อ้างอิงใบเดิม
@@ -765,7 +767,10 @@ const Store = (() => {
         return { ok, skipped };
       });
       if (!res.ok) throw new Error('ไม่มีรายการที่คุณมีสิทธิ์เปลี่ยนเป็นสถานะนี้');
-      return settle(res, 300);
+      await settle(res, 300);
+      // ปิดงานแล้ว → ปิดสิทธิ์ลิงก์รูปที่เคยเปิดไว้ให้ LINE ดึงไปแสดง
+      if (CLOUD && (status === 'done' || status === 'cannot_fix')) Cloud.unshare([].concat(ids));
+      return res;
     },
 
     // ล้างข้อมูล (แอดมิน): ดูใบที่วันที่แจ้งอยู่ในช่วง [from, to) แล้วลบทั้งข้อมูลและรูปใน Drive (ย้ายไปถังขยะ)
@@ -1121,6 +1126,11 @@ const Store = (() => {
       if (!CFG.appsScriptUrl || !ids.length) return;
       callScript('notify', { ids }).catch(e => console.warn('แจ้งเตือน LINE ไม่สำเร็จ', e));
     }
+    // ปิดสิทธิ์ลิงก์รูปของใบที่ปิดงานแล้ว (สคริปต์ตรวจสถานะจากฐานข้อมูลเองอีกครั้ง)
+    function unshare(ids) {
+      if (!CFG.appsScriptUrl) return;
+      for (let i = 0; i < ids.length; i += 20) callScript('unshare', { ids: ids.slice(i, i + 20) }).catch(e => console.warn('ปิดสิทธิ์รูปไม่สำเร็จ', e));
+    }
     // แสดงรูปจาก Drive: แทนที่ด้วยรูปรอโหลด แล้วดึงรูปจริงผ่าน Apps Script (ตรวจสิทธิ์ทุกครั้ง)
     const PLACEHOLDER = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="#F3EFEA"/></svg>');
     const photoCache = new Map();
@@ -1210,7 +1220,7 @@ const Store = (() => {
     }
 
     return {
-      ready, rebuild, persist, reserve, friendly, ensureRange, deleteSamples, upload, notifyNew, imgAttr, fetchRange, purge,
+      ready, rebuild, persist, reserve, friendly, ensureRange, deleteSamples, upload, notifyNew, unshare, imgAttr, fetchRange, purge,
       notifications, markRead, login,
       logout: () => auth.signOut(),
       me: () => me
