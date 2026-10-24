@@ -352,6 +352,50 @@ const Pages = (() => {
             ${z?.rooms.length ? `<div class="field"><label>ห้อง <span class="faint">(ไม่บังคับ)</span></label>
               <div class="pick-grid">${z.rooms.map(r => chip('data-room', r, r, b.room === r, usedBy(b, z.name, r) >= 0)).join('')}</div></div>` : ''}`;
         }
+        // ───── ค้นหาสถานที่ (แจ้งซ่อมทั่วไป): พิมพ์ชื่อหรือเลขห้อง · ว่าง = สถานที่ที่เคยแจ้งล่าสุด + รายการทั้งหมด ─────
+        const norm = s => String(s || '').toLowerCase().replace(/[\s.\-–()]/g, '');
+        const recent = (() => {
+          const seen = new Set(), out = [];
+          Store.tickets().filter(t => t.reporter.email === me.email && t.formType === type && placeById(t.location.locationId))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            .forEach(t => {
+              const k = locKey(t.location);
+              if (!seen.has(k) && out.length < 3) { seen.add(k); out.push({ p: placeById(t.location.locationId), zone: t.location.zone || '', room: t.location.room || '' }); }
+            });
+          return out;
+        })();
+        const ppOpt = ({ p, zone = '', room = '' }) => `
+          <button type="button" class="pp-opt" data-pick="${p.id}" data-pzone="${esc(zone)}" data-proom="${esc(room)}">
+            ${icon('pin')}<span><b>${esc(p.name)}${room ? ` · ${/^\d|\//.test(room) ? 'ห้อง ' : ''}${esc(room)}` : zone ? ` · ${esc(zone)}` : ''}</b><small>${esc(p.group || '')}</small></span></button>`;
+        const OTHER_OPT = `<button type="button" class="pp-opt other" data-pick="__other" data-pzone="" data-proom="">${icon('edit')}<span><b>อื่น ๆ (ระบุเอง)</b><small>ไม่มีในรายการ พิมพ์ชื่อสถานที่เอง</small></span></button>`;
+        function ppResults(q) {
+          const n = norm(q);
+          if (!n) {
+            const groups = [...new Set(places.map(p => p.group || 'อื่น ๆ'))];
+            return (recent.length ? `<div class="pp-group">${icon('clock')} ที่คุณแจ้งล่าสุด</div>${recent.map(ppOpt).join('')}` : '')
+              + groups.map(g => `<div class="pp-group">${esc(g)}</div>${places.filter(p => (p.group || 'อื่น ๆ') === g).map(p => ppOpt({ p })).join('')}`).join('')
+              + `<div class="pp-group">ไม่พบสถานที่</div>${OTHER_OPT}`;
+          }
+          const placeHits = places.filter(p => norm(p.name).includes(n) || norm(p.group).includes(n)).map(p => ({ p }));
+          // ค้นเลขห้อง/ชื่อห้องย่อย เช่น "402" → ห้องเรียน ม.4 · ห้อง 402 และ ห้องเรียน 401–407 (จ.ภ.) · ห้อง 402
+          const roomHits = [];
+          places.forEach(p => (p.zones || []).forEach(z => z.rooms.forEach(r => { if (norm(r).startsWith(n) || norm(`${z.name}${r}`).includes(n)) roomHits.push({ p, zone: z.name, room: r }); })));
+          const hits = (/^\d/.test(n) ? [...roomHits, ...placeHits] : [...placeHits, ...roomHits]).slice(0, 30);
+          return (hits.length ? hits.map(ppOpt).join('') : `<p class="pp-empty">ไม่พบ "${esc(q)}" ลองพิมพ์คำอื่น หรือเลือก "อื่น ๆ (ระบุเอง)"</p>`) + OTHER_OPT;
+        }
+        function placePicker(b) {
+          const p = placeById(b.placeId);
+          if (p || b.placeId === '__other') return `
+            <div class="field"><label>สถานที่ <span class="req">*</span></label>
+              <div class="pp-selected">${icon(p ? 'pin' : 'edit')}<strong>${p ? esc(p.name) : 'อื่น ๆ (ระบุเอง)'}</strong>${p?.group ? `<small>${esc(p.group)}</small>` : ''}
+                <button type="button" class="link small" data-ppchange>${icon('search')} เปลี่ยนสถานที่</button></div></div>
+            ${p ? '' : `<div class="field"><input class="input" data-otherplace value="${esc(b.other)}" aria-label="ชื่อสถานที่" placeholder="ชื่อสถานที่ เช่น อาคาร 2 ห้องน้ำชาย ชั้น 2"></div>`}`;
+          return `
+            <div class="field"><label>สถานที่ <span class="req">*</span></label>
+              <div class="input-icon">${icon('search')}<input class="input" data-ppq value="${esc(b.q || '')}" autocomplete="off" aria-label="ค้นหาสถานที่" placeholder="ค้นหา เช่น เคมี, หอสมุด, 402" style="padding-left:40px"></div>
+              <div class="pp-results" data-ppres role="listbox">${ppResults(b.q || '')}</div></div>`;
+        }
+
         const countIn = (b, catId) => [...b.items.values()].filter(v => v.catId === catId).length;
         const tabsHTML = b => cats.map(c => `
           <button type="button" class="cat-tab ${c.id === b.active ? 'is-active' : ''}" data-tab="${c.id}">${icon(c.icon)}${esc(c.name)}${countIn(b, c.id) ? `<span class="cnt">${countIn(b, c.id)}</span>` : ''}</button>`).join('');
@@ -407,8 +451,7 @@ const Pages = (() => {
             <div class="lb-head" data-toggle-block>${headHTML(b, i)}</div>
             ${b.open ? `<div class="lb-body">
               ${dorm ? (state.dorm ? '' : `<div class="detail-empty">${icon('bed')}<span>เลือกหอพักในข้อ 2 ก่อน</span></div>`) : `
-                <div class="field"><label>สถานที่ <span class="req">*</span></label><select class="select" data-place aria-label="สถานที่">${placeOptions(b.placeId)}</select></div>
-                ${b.placeId === '__other' ? `<div class="field"><input class="input" data-otherplace value="${esc(b.other)}" aria-label="ชื่อสถานที่" placeholder="ชื่อสถานที่ เช่น อาคาร 2 ห้องน้ำชาย ชั้น 2"></div>` : ''}`}
+                ${placePicker(b)}`}
               ${zonePicker(b, p)}
               ${locOf(b) ? `<div class="field"><label>ตำแหน่ง / จุดที่ชำรุดเพิ่มเติม <span class="faint">(ถ้ามี)</span></label><input class="input" data-point value="${esc(b.point)}" placeholder="เช่น หน้าห้อง ฝั่งหน้าต่าง ห้องน้ำชาย"></div>` : ''}
               <div class="lb-sec">${icon('list')} เลือกรายการที่ต้องซ่อม
@@ -532,6 +575,20 @@ const Pages = (() => {
             if (state.blocks.length < 2) return;
             b.open = !b.open; renderBlock(b); return;
           }
+          const pk = e.target.closest('[data-pick]');
+          if (pk) {
+            Object.assign(b, { placeId: pk.dataset.pick, zone: pk.dataset.pzone || '', room: pk.dataset.proom || '', q: '' });
+            renderBlock(b);
+            $(`[data-block="${b.key}"] ${b.placeId === '__other' ? '[data-otherplace]' : '.pp-selected'}`, root)?.scrollIntoView({ block: 'nearest' });
+            $(`[data-block="${b.key}"] [data-otherplace]`, root)?.focus();
+            return;
+          }
+          if (e.target.closest('[data-ppchange]')) {
+            Object.assign(b, { placeId: '', zone: '', room: '', q: '' });
+            renderBlock(b);
+            $(`[data-block="${b.key}"] [data-ppq]`, root)?.focus();
+            return;
+          }
           const zn = e.target.closest('[data-zone]');
           if (zn) { b.zone = b.zone === zn.dataset.zone ? '' : zn.dataset.zone; b.room = ''; renderBlock(b); return; }
           const rm0 = e.target.closest('[data-room]');
@@ -569,6 +626,8 @@ const Pages = (() => {
           }
         });
         root.addEventListener('keydown', e => {
+          // Enter ในช่องค้นหาสถานที่ = เลือกผลลัพธ์แรก
+          if (e.key === 'Enter' && e.target.matches('[data-ppq]')) { e.preventDefault(); e.target.closest('.field').querySelector('.pp-opt')?.click(); return; }
           if (e.key !== 'Enter' || !e.target.dataset.other) return;
           e.preventDefault(); addCustom(blockOf(e.target), e.target.dataset.other);
         });
@@ -579,6 +638,8 @@ const Pages = (() => {
           if (row && e.target.matches('[data-detail]')) { b.items.get(row.dataset.key).detail = e.target.value; e.target.closest('.field').classList.remove('invalid'); renderHead(b); }
           if (row && e.target.matches('[data-qin]')) { b.items.get(row.dataset.key).qty = Math.max(1, parseInt(e.target.value) || 1); renderSummary(); }
           if (e.target.matches('[data-point]')) b.point = e.target.value;
+          // พิมพ์ค้นหา: อัปเดตเฉพาะรายการผลลัพธ์ (ไม่วาดการ์ดใหม่ ช่องพิมพ์ไม่หลุดโฟกัส)
+          if (e.target.matches('[data-ppq]')) { b.q = e.target.value; const res = e.target.closest('.field').querySelector('[data-ppres]'); res.innerHTML = ppResults(b.q); res.scrollTop = 0; }
           if (e.target.matches('[data-otherplace]')) { b.other = e.target.value; renderHead(b); }
         });
         root.addEventListener('change', async e => {

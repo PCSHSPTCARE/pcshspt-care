@@ -1113,6 +1113,22 @@ img[data-drive-state="loading"] { animation: pulseImg 1.2s ease-in-out infinite;
 .lb-sec { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 4px; font: 600 .98rem var(--font-display); color: var(--navy-800); }
 .lb-sec > .icon { color: var(--orange-500); }
 .lb-sec .link { margin-left: auto; font-weight: 500; display: inline-flex; align-items: center; gap: 5px; }
+/* ค้นหาสถานที่ในฟอร์มแจ้งซ่อม */
+.pp-results { margin-top: 8px; max-height: 300px; overflow-y: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--card); padding: 4px; overscroll-behavior: contain; }
+.pp-group { position: sticky; top: -4px; z-index: 1; display: flex; align-items: center; gap: 6px; padding: 8px 10px 4px; background: var(--card); font: 600 .78rem var(--font-display); color: var(--orange-700); }
+.pp-opt { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 10px; background: transparent; text-align: left; cursor: pointer; color: inherit; font: inherit; }
+.pp-opt:hover, .pp-opt:focus-visible { background: var(--orange-50); outline: none; }
+.pp-opt > .icon { flex: none; color: var(--faint); }
+.pp-opt > span { display: flex; flex-direction: column; min-width: 0; }
+.pp-opt b { font-family: var(--font-display); font-weight: 500; color: var(--navy-800); }
+.pp-opt small { font-size: .76rem; color: var(--muted); }
+.pp-opt.other > .icon { color: var(--orange-600); }
+.pp-empty { margin: 0; padding: 12px; font-size: .88rem; color: var(--muted); }
+.pp-selected { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 12px 14px; border: 1.5px solid var(--orange-200); border-radius: 14px; background: var(--orange-50); }
+.pp-selected > .icon { color: var(--orange-600); }
+.pp-selected strong { font-family: var(--font-display); font-weight: 600; color: var(--navy-800); }
+.pp-selected small { color: var(--muted); font-size: .8rem; }
+.pp-selected .link { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
 .add-block { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 14px; padding: 15px; border: 1.5px dashed var(--orange-400); border-radius: 20px; background: transparent; color: var(--orange-700); font: 600 1rem var(--font-display); cursor: pointer; transition: background-color .15s, border-color .15s; }
 .add-block:hover { background: var(--orange-50); border-color: var(--orange-500); }
 .zone-preview { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

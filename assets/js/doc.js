@@ -1,11 +1,12 @@
-/* ใบขออนุญาตแจ้งซ่อม — จัดวางตามแบบฟอร์มกระดาษของโรงเรียน
-   แบบ A = แจ้งซ่อมทั่วไป / หอพัก (รูป 1, 3) · แบบ B = เครื่องปรับอากาศ (รูป 2)
-   style 'memo' = บันทึกข้อความมีตราครุฑ · 'plain' = ใบแจ้งซ่อมหัวกระดาษโรงเรียน (ไม่มีตราครุฑ)
-   ตัวเลขทั้งหมดเป็นมิลลิเมตร วัดจากต้นฉบับ */
+/* ใบขออนุญาตแจ้งซ่อมและบำรุงรักษา — จัดวางตามแบบฟอร์มของโรงเรียน (บท00 ขอแจ้งซ่อมทั่วไป / หอพัก)
+   ทั้งสองแบบใช้โครงเดียวกัน ต่างกันที่ "เรื่อง" และผู้พิจารณาช่องซ้าย (หัวหน้างานอาคารฯ / รอง ผอ.ฝ่ายกิจการนักเรียนและหอพัก)
+   style 'memo' = บันทึกข้อความมีตราครุฑ · 'plain' = หัวกระดาษตราโรงเรียน (ไม่มีตราครุฑ)
+   ตัวเลขทั้งหมดเป็นมิลลิเมตร วัดจากต้นฉบับ (ตำแหน่งบรรทัดหัวเอกสารเป็นจุดกึ่งกลางบรรทัด) */
 const Doc = (() => {
-  const LAYOUT = {
-    a: { garuda: [17.2, 7.6], title: 16.9, rows: [25.3, 33, 40, 49.5], left: 15, right: 16.2, rule: [43.6, 15, 21.5], date: 103.8, box: [54.8, 13.7, 16.2], notes: [279.4, 13.2, 25.8] },
-    b: { garuda: [22.7, 4.3], title: 12, rows: [20.3, 27.5, 35.2, 49.8], left: 22.7, right: 22.4, rule: [41.2, 23.9, 26.2], date: 98.6, box: [53.8, 22.7, 22.4], notes: [272.6, 25.3, 36.4] }
+  const L = {
+    garuda: [23.5, 2.6, 12.5], title: 13.6, rows: [23, 29.8, 36.4, 50.4], left: 23.5, right: 16.2,
+    rule: [42.5, 23.5, 20.4], date: 103.8, box: [54.4, 23.5, 16.2],
+    sec: { info: 85.2, approve: 50.7, inspect: 76.5 }
   };
 
   // ───────── ชิ้นส่วนเอกสาร ─────────
@@ -14,12 +15,16 @@ const Doc = (() => {
   const G = (v, weight = 1, cls = '') => `<span class="fill ${cls}" style="flex:${weight} 1 0">${val(v)}</span>`;
   const SIG = (img, w) => `<span class="fill sig" style="width:${w}mm"><span><i class="fe"></i></span>${img ? `<img src="${img}" alt="">` : ''}</span>`;
   const CB = on => `<span class="cb ${on ? 'on' : ''}"></span>`;
-  const RB = (on, lg = false) => `<span class="rb ${lg ? 'lg' : ''} ${on ? 'on' : ''}"></span>`;
-  const MF = (label, text, lines, lh) => `
+  // ข้อความหลายบรรทัดบนจุดไข่ปลา (ยาวเกินจำนวนบรรทัด → ย่อตัวอักษรลง ไม่ให้ล้นกรอบ)
+  const MF = (text, lines, lh, cpl = 92) => {
+    const len = String(text || '').length;
+    const scale = len > lines * cpl ? Math.max(.6, (lines * cpl) / len) : 1;
+    return `
     <div class="mfill" style="--l:${lh}mm;height:${lines * lh}mm">
       ${Array.from({ length: lines }, (_, i) => `<div class="dots" style="top:${i * lh}mm"></div>`).join('')}
-      <div class="txt">${label ? `<span class="lbl">${label}</span>` : ''}<span class="v">${esc(text || '')}</span></div>
+      <div class="txt" ${scale < 1 ? `style="font-size:${Math.round(scale * 100)}%;line-height:${(lh / scale).toFixed(2)}mm"` : ''}><span class="v">${esc(text || '')}</span></div>
     </div>`;
+  };
   const ln = (html, { l, pl, cls = '' } = {}) => `<div class="ln ${cls}" style="${l ? `--l:${l}mm;` : ''}${pl ? `padding-left:${pl}mm;` : ''}">${html}</div>`;
   const spacer = mm => `<div style="height:${mm}mm"></div>`;
   const GARUDA = () => typeof GARUDA_SRC !== 'undefined' ? GARUDA_SRC : 'images/garuda.png';
@@ -29,29 +34,28 @@ const Doc = (() => {
     const d = new Date(iso);
     return [d.getDate(), UI.TH_MONTHS[d.getMonth()], d.getFullYear() + 543];
   }
+  const subjectOf = t => Store.settings().forms[t.formType]?.subject || 'ขออนุญาตแจ้งซ่อมและบำรุงรักษา';
 
   // ส่วนหัว: บันทึกข้อความ (มีตราครุฑ)
-  function memoHeader(t, lay) {
+  function memoHeader(t) {
     const s = Store.settings();
     const [no, yr] = String(t.docNo || '').split('/');
     const [dd, mm, yy] = dateParts(t.createdAt);
-    const L = LAYOUT[lay];
     return `
-      <img class="garuda" src="${GARUDA()}" alt="" style="left:${L.garuda[0]}mm;top:${L.garuda[1]}mm">
+      <img class="garuda" src="${GARUDA()}" alt="" style="left:${L.garuda[0]}mm;top:${L.garuda[1]}mm;height:${L.garuda[2]}mm">
       ${s.showRefOnDoc ? `<div class="ref">อ้างอิงระบบ ${esc(t.id)}</div>` : ''}
       <div class="doc-title" style="top:${L.title}mm">บันทึกข้อความ</div>
       <div class="hl" style="top:${L.rows[0]}mm;left:${L.left}mm"><b>ส่วนราชการ</b>${esc(s.schoolName)}</div>
-      <div class="hl" style="top:${L.rows[1]}mm;left:${L.left}mm"><b style="margin-right:2mm">ที่</b>${F(no, 7.5)}/${F(yr, 16)}</div>
-      <div class="hl" style="top:${L.rows[1]}mm;left:${L.date}mm"><b style="margin-right:4.5mm">วันที่</b>${F(dd, 10)}/${F(mm, 23)}/${F(yy, 15)}</div>
-      <div class="hl" style="top:${L.rows[2]}mm;left:${L.left}mm"><b style="margin-right:2.5mm">เรื่อง</b>${esc(s.forms[t.formType].subject)}</div>
+      <div class="hl" style="top:${L.rows[1]}mm;left:${L.left}mm"><b style="margin-right:2mm">ที่</b>${F(no, 9)}/${F(yr, 17)}</div>
+      <div class="hl" style="top:${L.rows[1]}mm;left:${L.date}mm"><b style="margin-right:4.5mm">วันที่</b>${F(dd, 11)}/${F(mm, 25)}/${F(yy, 15)}</div>
+      <div class="hl" style="top:${L.rows[2]}mm;left:${L.left}mm"><b style="margin-right:2.5mm">เรื่อง</b>${esc(subjectOf(t))}</div>
       <div class="rule" style="top:${L.rule[0]}mm;left:${L.rule[1]}mm;right:${L.rule[2]}mm"></div>
       <div class="hl" style="top:${L.rows[3]}mm;left:${L.left}mm"><b style="margin-right:3.5mm">เรียน</b>${esc(s.addressee)}</div>`;
   }
 
   // ส่วนหัว: ใบแจ้งซ่อม (ไม่มีตราครุฑ) หัวกระดาษตราโรงเรียน
-  function plainHeader(t, lay) {
+  function plainHeader(t) {
     const s = Store.settings();
-    const L = LAYOUT[lay];
     return `
       <div class="ph-head" style="left:${L.left}mm;right:${L.right}mm">
         <img class="ph-logo" src="images/logo.png" alt="">
@@ -68,149 +72,101 @@ const Doc = (() => {
         </div>
       </div>
       <div class="ph-rule" style="left:${L.left}mm;right:${L.right}mm"></div>
-      <div class="hl" style="top:${L.rows[3] - 7}mm;left:${L.left}mm"><b style="margin-right:2.5mm">เรื่อง</b>${esc(s.forms[t.formType].subject)}</div>
+      <div class="hl" style="top:${L.rows[3] - 7}mm;left:${L.left}mm"><b style="margin-right:2.5mm">เรื่อง</b>${esc(subjectOf(t))}</div>
       <div class="hl" style="top:${L.rows[3]}mm;left:${L.left}mm"><b style="margin-right:3.5mm">เรียน</b>${esc(s.addressee)}</div>`;
   }
 
-  function notes(t, lay) {
-    const L = LAYOUT[lay];
-    const list = Store.settings().forms[t.formType].notes || [];
-    return `<div class="notes" style="top:${L.notes[0]}mm;left:${L.notes[1]}mm">
-      ${list.map((n, i) => i === 0 ? `<div>หมายเหตุ – ${esc(n)}</div>` : `<div style="padding-left:${L.notes[2] - L.notes[1]}mm">– ${esc(n)}</div>`).join('')}</div>`;
+  // ───────── เนื้อหา: 1. รายการ 2. สถานที่ 3. อาการ ─────────
+  // รายการ/อุปกรณ์: ชื่อรายการ + จำนวนชิ้นท้ายชื่อ (เช่น "หลอดตะเกียบ 3 หลอด") · รวมจำนวน = จำนวนรายการ
+  const itemsText = t => t.items.map(i => i.unit && i.qty ? `${i.name} ${i.qty} ${String(i.unit).split('/')[0]}` : i.name).join(', ');
+  const symptomsText = t => [
+    ...t.items.filter(i => String(i.detail || '').trim()).map(i => t.items.length > 1 ? `${i.name}: ${i.detail}` : i.detail),
+    t.note ? `หมายเหตุ: ${t.note}` : ''
+  ].filter(Boolean).join(' · ');
+
+  function infoSection(t) {
+    const r = t.reporter || {};
+    const lh = L.sec.info / 13;
+    const IN = 13; // ระยะย่อหน้ารายการย่อย
+    return `
+      <div class="sec" style="height:${L.sec.info}mm;--l:${lh}mm">
+        ${ln(`ด้วยข้าพเจ้า${G(r.name, 1.25)}ตำแหน่ง${G(r.position, 1)}`)}
+        ${ln(`กลุ่มงาน/กลุ่มสาระฯ${G(r.dept, 1.15)}เบอร์ติดต่อ${G(r.phone, 1)}`)}
+        ${ln('มีความประสงค์ขอแจ้งซ่อมแซม/บำรุงรักษา เนื่องจากตรวจพบการชำรุดหรือขัดข้อง โดยมีรายละเอียดดังนี้')}
+        ${ln('1. รายการที่แจ้งซ่อม')}
+        ${ln(`รายการ/อุปกรณ์${G(itemsText(t), 1, 'left')}`, { pl: IN })}
+        ${ln(`รวมจำนวน${F(t.items.length, 46)}รายการ`, { pl: IN })}
+        ${ln('2. สถานที่')}
+        <div style="padding-left:${IN}mm">${MF(UI.locationText(t), 2, lh, 84)}</div>
+        ${ln('3. ลักษณะการชำรุด/อาการที่พบ')}
+        <div style="padding-left:${IN}mm">${MF(symptomsText(t), 3, lh, 84)}</div>
+      </div>`;
   }
 
-  // บล็อกพิจารณาอนุมัติ 2 คอลัมน์ (ลงลายเซ็นอัตโนมัติเมื่อเริ่มดำเนินการ)
-  function approvals(t, { lh, sigLeft, sigRight, h }) {
+  // ───────── ผู้พิจารณา 2 คอลัมน์ (ลงลายเซ็นอัตโนมัติเมื่อเริ่มดำเนินการ) ─────────
+  function approvals(t) {
+    const lh = 6.9; // 7 บรรทัด + ช่องว่างก่อนลายเซ็น = ความสูงช่องพอดี
+
     const k1 = Store.step1Key(t), k2 = Store.STEP2_KEY;
     const a1 = t.approvals?.step1, a2 = t.approvals?.step2;
     const p1 = a1?.by || Store.signer(k1), p2 = a2?.by || Store.signer(k2);
-    const sigBlock = (sig, name, title, pl) => `
-      <div style="padding-left:${pl}mm">
-        <div class="sigblk">
-          ${ln(`ลงชื่อ${SIG(sig, 44)}`, { l: lh, cls: 'center' })}
-          ${ln(name ? `(${esc(name)})` : `(${F('', 42)})`, { l: lh, cls: 'center' })}
-          ${ln(esc(title), { l: lh, cls: 'center' })}
-        </div>
+    const head = title => ln(`<b style="${String(title || '').length > 42 ? 'font-size:91%' : ''}">${esc(title)}</b>`, { l: lh });
+    const sigBlock = (sig, name, title) => `
+      <div class="sigblk">
+        ${ln(`ลงชื่อ${SIG(sig, 44)}`, { l: lh, cls: 'center' })}
+        ${ln(name ? `(${esc(name)})` : `(${F('', 42)})`, { l: lh, cls: 'center' })}
+        ${ln(`<span style="${String(title || '').length > 42 ? 'font-size:91%' : ''}">${esc(title)}</span>`, { l: lh, cls: 'center' })}
       </div>`;
     return `
-      <div class="sec two" style="height:${h}mm;padding:0">
+      <div class="sec two" style="height:${L.sec.approve}mm;padding:0;grid-template-columns:84.9mm 1fr">
         <div>
-          ${ln(`<b>${esc(p1.title)}</b>`, { l: lh })}
-          ${ln(`${RB(!!a1)}เห็นควรพิจารณาอนุญาตดำเนินการ`, { l: lh })}
-          ${MF(`${RB(false)}ไม่อนุญาต เนื่องจาก`, '', 2, lh)}
-          ${spacer(h - lh * 7 - .4)}
-          ${sigBlock(a1?.by.signature, p1.name, p1.title, sigLeft)}
+          ${head(p1.title)}
+          ${ln(`${CB(!!a1)}เห็นควรพิจารณาอนุญาตดำเนินการ`, { l: lh })}
+          ${ln(`${CB(false)}ไม่อนุญาต เนื่องจาก`, { l: lh })}
+          ${MF('', 1, lh)}
+          ${spacer(2.4)}
+          ${sigBlock(a1?.by.signature, p1.name, p1.title)}
         </div>
         <div>
-          ${ln(`<b>${esc(p2.title)}</b>`, { l: lh })}
-          ${ln('พิจารณาสั่งการ', { l: lh })}
-          ${MF('', a2?.note || '', 2, lh)}
-          ${spacer(h - lh * 7 - .4)}
-          ${sigBlock(a2?.by.signature, p2.name, p2.title, sigRight)}
+          ${head(p2.title)}
+          ${ln('พิจารณา/สั่งการ', { l: lh })}
+          ${MF(a2?.note || '', 2, lh, 44)}
+          ${spacer(2.4)}
+          ${sigBlock(a2?.by.signature, p2.name, p2.title)}
         </div>
       </div>`;
   }
 
-  // จัดแถวรายการในแต่ละหมวด (ตามคอลัมน์ของแบบฟอร์ม)
-  function categoryBlocks(t) {
-    const picked = new Map(t.items.map(i => [i.itemId, i]));
-    const pickedByName = new Map(t.items.map(i => [`${i.catId}|${i.name}`, i]));
-    const current = Store.allCategories().filter(c => c.forms.includes(t.formType));
-    const used = c => t.items.some(i => i.catId === c.id);
-    // หมวดที่ไม่มีในแบบฟอร์มกระดาษเดิม (เช่น เครื่องปรับอากาศ) แสดงเฉพาะเมื่อมีการเลือก
-    const cats = current.filter(c => used(c) || (c.active !== false && !c.pdfWhenUsed)).map(c => ({ ...c, items: Store.itemsFor(c, t.formType) }));
-    // รายการที่ถูกลบออกจากระบบภายหลัง ยังต้องแสดงในเอกสารเดิม
-    for (const it of t.items.filter(i => !i.custom)) {
-      let c = cats.find(x => x.id === it.catId);
-      if (!c) { c = { id: it.catId, name: it.catName, items: [] }; cats.push(c); }
-      if (!c.items.some(x => x.id === it.itemId || x.name === it.name)) c.items.push({ id: it.itemId, name: it.name, unit: it.unit });
-    }
-    const blocks = [];
-    for (const c of cats) {
-      const other = t.items.filter(i => i.custom && i.catId === c.id).map(i => i.name).join(', ');
-      if (c.freeOnly && !other) continue;
-      const on = it => picked.get(it.id) || pickedByName.get(`${c.id}|${it.name}`);
-      const rows = [];
-      const hasUnits = c.items.some(i => i.unit);
-      const tpl = hasUnits ? 'A' : 'B';
-      const cell = (it, col) => `<span class="cell" style="grid-column:${col}">${CB(!!on(it))}${esc(it.name)}</span>`;
-      if (hasUnits) {
-        const groups = [];
-        for (const it of c.items) {
-          const g = groups.at(-1);
-          if (g && g.unit === (it.unit || '')) g.items.push(it); else groups.push({ unit: it.unit || '', items: [it] });
-        }
-        for (const g of groups) {
-          for (let i = 0; i < g.items.length; i += 4) {
-            let html = g.items.slice(i, i + 4).map((it, j) => cell(it, j + 1)).join('');
-            if (g.unit && i === 0) {
-              const sum = g.items.reduce((a, it) => a + (on(it)?.qty || 0), 0);
-              html += `<span class="cell" style="grid-column:5">จำนวน${G(sum || '')}${esc(g.unit)}</span>`;
-            }
-            rows.push(html);
-          }
-        }
-        rows.push(`<span class="cell" style="grid-column:1 / -1">${CB(!!other)}อื่นๆ${G(other, 1, 'left')}</span>`);
-      } else if (c.freeOnly) {
-        rows.push(`<span class="cell" style="grid-column:1 / -1">${CB(true)}${G(other, 1, 'left')}</span>`);
-      } else {
-        // ชื่อรายการยาว (เช่น เครื่องปรับอากาศ) ใช้ 3 คอลัมน์ ไม่ให้ทับกัน
-        // หมวดตามแบบฟอร์มเดิมใช้ 5 คอลัมน์เหมือนกระดาษ หมวดที่เพิ่มภายหลังและชื่อยาวใช้ 3 คอลัมน์
-        const cols = c.pdfWhenUsed || Math.max(...c.items.map(i => i.name.length)) > 20 ? 3 : 5;
-        let cur = [];
-        c.items.forEach(it => { if (cur.length === cols) { rows.push(cur.join('')); cur = []; } cur.push(cell(it, cur.length + 1)); });
-        if (cur.length === cols) { rows.push(cur.join('')); cur = []; }
-        cur.push(`<span class="cell" style="grid-column:${cur.length + 1} / -1">${CB(!!other)}อื่นๆ${G(other, 1, 'left')}</span>`);
-        rows.push(cur.join(''));
-        blocks.push({ title: c.name, rows, tpl: cols === 3 ? 'C' : 'B' });
-        continue;
-      }
-      blocks.push({ title: c.name, rows, tpl });
-    }
-    return blocks;
-  }
-
-  // ───────── แบบ A: ทั่วไป / หอพัก ─────────
-  function memoA(t, style) {
-    const L = LAYOUT.a;
-    const dorm = t.formType === 'dorm';
-    const loc = t.location || {};
-    const blocks = categoryBlocks(t);
-    const details = UI.detailsText(t);
-    const symLines = Math.min(4, Math.max(1, Math.ceil(details.length / 92)));
-    const lines = blocks.reduce((a, b) => a + 1 + b.rows.length, 0) + 1 + symLines;
-    const CATS_H = 108.4;
-    const lh = Math.max(4.4, Math.min(6.35, CATS_H / lines));
-    const fontScale = lh < 5.3 ? lh / 5.3 : 1;
+  // ───────── ผู้ตรวจงาน: ติ๊กเมื่อปิดงานแล้วเท่านั้น (เสร็จสิ้น / ซ่อมไม่ได้) ─────────
+  function inspection(t) {
+    const lh = 6.6;
     const insp = t.inspection;
-    const failed = t.status === 'cannot_fix';
-    const [cd, cm, cy] = dateParts(t.completion?.at || t.cannot?.at);
-    const repLine2 = dorm
-      ? `<b>สถานที่ซ่อมหอ</b>${G(loc.locationName, 46)}<b>ล็อคนอน</b>${G(loc.zone || loc.lock, 39)}<b>ห้อง</b>${G([loc.room, loc.point].filter(Boolean).join(' '), 41)}`
-      : `<b>สถานที่ซ่อม</b>${G(UI.locationText(t).replace(/ · /g, ' '), 1, 'left')}`;
+    const done = t.status === 'done', cannot = t.status === 'cannot_fix';
+    const [dd, mm, yy] = dateParts(insp?.at || t.completion?.at || t.cannot?.at);
+    // บันทึกผลการซ่อมในพื้นที่ว่างของช่อง (เฉพาะงานที่ปิดแล้ว)
+    const remarks = done ? [t.completion?.worker && `ผู้ปฏิบัติงาน: ${t.completion.worker}`, t.completion?.note && `ผลการซ่อม: ${t.completion.note}`]
+      : cannot ? [t.cannot?.reason && `เหตุผลที่ซ่อมไม่ได้: ${t.cannot.reason}`, t.cannot?.note && `รายละเอียด: ${t.cannot.note}`] : [];
+    const rem = remarks.filter(Boolean);
     return `
-      <div class="sheet memo-a ${style}" style="--lh:${lh}mm;${fontScale < 1 ? `font-size:${(11.6 * fontScale).toFixed(2)}pt` : ''}">
-        ${style === 'plain' ? plainHeader(t, 'a') : memoHeader(t, 'a')}
+      <div class="sec" style="height:${L.sec.inspect}mm;--l:${lh}mm">
+        ${ln('<b>ผู้ตรวจงาน</b>')}
+        ${ln(`<b>การดำเนินงาน</b><span class="gap"></span>${CB(done)}เรียบร้อยดี<span class="gap"></span>${CB(false)}ยังไม่แล้วเสร็จ<span class="gap"></span>${CB(cannot)}ไม่สามารถแก้ไขได้<span class="gap"></span>${CB(false)}อื่นๆ${G('', 1, 'left')}`)}
+        <div class="remarks" style="height:33mm;padding:2.5mm 0 0 2mm">${rem.map(x => `<div>${esc(x)}</div>`).join('')}</div>
+        ${ln(`ลงชื่อ${SIG(insp?.by.signature, 48)}ผู้ตรวจงาน`, { pl: 93 })}
+        ${ln(`(${F(insp?.by.name, 50)})`, { pl: 92 })}
+        ${ln(`วันที่${F(dd, 11)}/${F(mm, 22)}/${F(yy, 13)}`, { pl: 92 })}
+      </div>`;
+  }
+
+  function memo(t, style) {
+    return `
+      <div class="sheet memo ${style}">
+        ${style === 'plain' ? plainHeader(t) : memoHeader(t)}
         <div class="box" style="top:${L.box[0]}mm;left:${L.box[1]}mm;right:${L.box[2]}mm">
-          <div class="sec" style="height:19.1mm;padding-top:4.3mm">
-            ${ln(`<b>ผู้แจ้งซ่อม</b>${G(t.reporter.name, 61.5)}<b>เบอร์ติดต่อ</b>${G(t.reporter.phone, 35)}<b>เวลาแจ้ง</b>${G(UI.time(t.createdAt), 26.5)}น.`, { l: 7.2 })}
-            ${ln(repLine2, { l: 7.2 })}
-          </div>
-          <div class="sec cats" style="height:${(CATS_H + .2).toFixed(2)}mm">
-            ${blocks.map(b => `${ln(`<b>${esc(b.title)}</b>`)}${b.rows.map(r => `<div class="cgrid ${b.tpl}">${r}</div>`).join('')}`).join('')}
-            ${ln('<b>ระบุอาการชำรุดตามรายการที่แจ้ง</b>')}
-            ${MF('', details, symLines, lh)}
-          </div>
-          ${approvals(t, { lh: 7.35, sigLeft: 11, sigRight: 19, h: 56.3 })}
-          <div class="sec" style="height:38.2mm;padding-top:5.1mm">
-            ${ln(`<b>ชื่อผู้ปฏิบัติงาน</b>${G(t.completion?.worker, 1)}<b style="margin-left:.5mm">วันที่</b>${F(cd, 9.6)}/${F(cm, 21.5)}/${F(cy, 14.3)}`, { l: 7.3 })}
-            ${ln(`<b>การดำเนินงาน</b><span class="gap"></span><span class="gap"></span>${CB(insp?.result === 'ok')}เรียบร้อยดี<span class="gap"></span>${CB(false)}ยังไม่แล้วเสร็จ<span class="gap"></span>${CB(failed)}ไม่สามารถแก้ไขได้<span class="gap"></span>${CB(false)}อื่นๆ${G('', 1, 'left')}`, { l: 7.3 })}
-            ${spacer(4.2)}
-            ${ln(`ลงชื่อ${SIG(insp?.by.signature, 54)}`, { l: 7.3, pl: 101 })}
-            ${ln(`(${F(insp?.by.name, 55)}) ผู้ตรวจงาน`, { l: 7.3, pl: 98 })}
-          </div>
+          ${infoSection(t)}
+          ${approvals(t)}
+          ${inspection(t)}
         </div>
-        ${notes(t, 'a')}
       </div>`;
   }
 
@@ -229,7 +185,7 @@ const Doc = (() => {
       </div>`;
   }
 
-  const sheet = (t, style = 'memo') => memoA(t, style);
+  const sheet = (t, style = 'memo') => memo(t, style);
   const sheets = (t, withPhotos, style) => sheet(t, style) + (withPhotos ? photoSheet(t) : '');
 
   // ย่อตัวอักษรในช่องที่ข้อความยาวเกินจุดไข่ปลา ไม่ให้ล้นกรอบ
