@@ -18,6 +18,16 @@ const App = (() => {
   const adminHome = u => Store.hasRole(u, 'admin') ? '/admin' : Store.isStaff(u) ? '/admin/jobs' : '/admin/stats';
 
   // ───────── แถบเมนูเว็บไซต์ ─────────
+  // แถบเหตุฉุกเฉินสีแดง บนสุดของทุกหน้าฝั่งผู้ใช้ (ทุกคนเห็น ไม่ต้องเข้าสู่ระบบ) · มือถือกดเบอร์แล้วโทรได้
+  function emergencyHTML() {
+    const e = Store.banners().emergency || {};
+    if (!e.enabled || !String(e.text || '').trim()) return '';
+    const tel = String(e.phone || '').replace(/[^\d+]/g, '');
+    return `<div class="emergency-bar" role="note">
+      <div class="container eb-inner"><span class="eb-dot" aria-hidden="true"></span><span class="eb-text">${esc(e.text)}</span>
+        ${e.phone ? (tel.length >= 3 ? `<a class="eb-call" href="tel:${tel}">${icon('phone')} ${esc(e.phone)}</a>` : `<span class="eb-call">${icon('phone')} ${esc(e.phone)}</span>`) : ''}</div></div>`;
+  }
+
   function navHTML(path, onHero) {
     const s = Store.settings();
     const me = Store.me();
@@ -157,7 +167,7 @@ const App = (() => {
   // ───────── วาดหน้า ─────────
   const Layout = {
     public(view, path) {
-      $('#app').innerHTML = `${navHTML(path, view.heroNav)}<main id="view" class="page-enter">${view.html}</main>${footerHTML()}`;
+      $('#app').innerHTML = `${emergencyHTML()}${navHTML(path, view.heroNav)}<main id="view" class="page-enter">${view.html}</main>${footerHTML()}`;
     },
     admin(view, path) {
       $('#app').innerHTML = `

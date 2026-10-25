@@ -51,6 +51,7 @@ const Pages = (() => {
         <div class="hero-shade" aria-hidden="true"></div>
         <div class="container hero-inner">
           <div class="hero-content rise">
+            ${noticeHTML()}
             <span class="eyebrow">${esc(s.division)}</span>
             <h1 id="hero-title"><span class="h1-a">แผนกแจ้งซ่อม</span><span class="h1-b">อาคารและสถานที่</span></h1>
             <p class="hero-lead"><span class="nw">แจ้งซ่อมอาคาร ห้องเรียน หอพัก</span> <span class="nw">ไฟฟ้า ประปา และเครื่องปรับอากาศ</span> <span class="nw">ได้ในที่เดียว</span> <span class="nw">ติดตามความคืบหน้าได้ทุกขั้นตอน</span></p>
@@ -109,6 +110,16 @@ const Pages = (() => {
         </div>
       </section>
 
+      <section class="section mini-sec" aria-labelledby="md-title">
+        <div class="container">
+          <div class="mdash-wrap ${live ? '' : 'is-locked'}">
+            <div class="mdash reveal" id="mdash" ${live ? '' : 'aria-hidden="true"'}>${mdashHTML(live ? mdashData() : MDASH_DEMO, { animate: true })}</div>
+            ${live ? '' : `<div class="md-lock"><span class="md-lock-ic">${icon('shield')}</span><strong>สถานะงานซ่อมแบบเรียลไทม์</strong>
+              <p>เข้าสู่ระบบด้วยบัญชีโรงเรียน เพื่อดูความเคลื่อนไหวงานซ่อมล่าสุด</p><a class="btn btn-primary" href="#/login">${icon('google')} เข้าสู่ระบบเพื่อดูสถานะสด</a></div>`}
+          </div>
+        </div>
+      </section>
+
       ${live ? `<section class="section" aria-labelledby="stats-title">
         <div class="container">
           <div class="stats reveal">
@@ -134,8 +145,125 @@ const Pages = (() => {
         </div>
       </section>` : ''}
       `,
-      mount(root) { UI.reveal(root); }
+      mount(root) {
+        UI.reveal(root);
+        // ปิดแถบประกาศ (จำไว้ในเครื่อง ประกาศเดิมไม่เด้งซ้ำ ประกาศใหม่จะแสดงอีกครั้ง)
+        $('[data-notice-close]', root)?.addEventListener('click', e => {
+          try { localStorage.setItem(NOTICE_KEY, e.currentTarget.dataset.noticeClose); } catch (err) { /* ignore */ }
+          e.currentTarget.closest('.hero-notice').remove();
+        });
+        if (!live) return;
+        // แดชบอร์ดมินิ: อัปเดตเรียลไทม์เมื่อข้อมูลเปลี่ยน · รายการใหม่ในฟีดเลื่อนเข้ามาพร้อมแสงวาบ
+        const box = $('#mdash', root);
+        let last = mdashData();
+        const draw = (force = false) => {
+          const d = mdashData();
+          if (!force && d.sig === last.sig) return;
+          const seen = new Set(last.feed.map(f => f.key));
+          const prev = last.counts;
+          last = d;
+          box.innerHTML = mdashHTML(d, { fresh: new Set(d.feed.map(f => f.key).filter(k => !seen.has(k))), prev });
+        };
+        App.onCleanup(Store.subscribe(() => draw()));
+        // เวลา "x นาทีที่แล้ว" ให้ขยับตาม (ไม่เล่นแอนิเมชันซ้ำ)
+        const timer = setInterval(() => { last.feed.forEach(f => { const el = box.querySelector(`[data-ago="${f.key}"]`); if (el) el.textContent = UI.ago(f.at); }); }, 30000);
+        App.onCleanup(() => clearInterval(timer));
+      }
     };
+  }
+
+  // ───────── แถบประกาศ (หน้าแรก) ─────────
+  const NOTICE_KEY = 'pcshs-notice-closed';
+  function noticeHTML() {
+    const n = Store.banners().notice || {};
+    if (!n.enabled || !String(n.text || '').trim()) return '';
+    const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+    if ((n.from && today < n.from) || (n.to && today > n.to)) return '';
+    const sig = `${n.text}|${n.from || ''}|${n.to || ''}`;
+    let closed = '';
+    try { closed = localStorage.getItem(NOTICE_KEY) || ''; } catch (e) { /* ignore */ }
+    if (closed === sig) return '';
+    return `<div class="hero-notice" role="status"><span class="hn-ic">${icon('bell')}</span><span class="hn-text"><b>ประกาศ</b> ${esc(n.text)}</span>
+      <button type="button" class="hn-x" data-notice-close="${esc(sig)}" aria-label="ปิดประกาศ">${icon('close')}</button></div>`;
+  }
+
+  // ───────── แดชบอร์ดมินิ (หน้าแรก) ─────────
+  const MD_COLS = [['pending', 'รออนุมัติ'], ['in_progress', 'กำลังซ่อม'], ['review', 'รอพิจารณา'], ['done', 'เสร็จ (30 วัน)']];
+  const MD_FEED = {
+    'แจ้งซ่อม': ['pending', 'inbox', 'แจ้งใหม่'], 'กำลังดำเนินการซ่อม': ['in_progress', 'wrench', 'เริ่มซ่อม'],
+    'รอพิจารณา': ['review', 'hourglass', 'รอพิจารณา'], 'เสร็จสิ้น': ['done', 'checkCircle', 'ซ่อมเสร็จ'], 'ไม่สามารถซ่อมได้': ['cannot_fix', 'x', 'ซ่อมไม่ได้']
+  };
+  const dayKey = d => { const x = new Date(d); return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`; };
+  function mdashData() {
+    const ts = Store.tickets().filter(t => t.status !== 'cancelled');
+    const since30 = Date.now() - 30 * 864e5;
+    const counts = {
+      pending: ts.filter(t => t.status === 'pending').length,
+      in_progress: ts.filter(t => t.status === 'in_progress').length,
+      review: ts.filter(t => t.status === 'review').length,
+      done: ts.filter(t => t.status === 'done' && new Date(t.completion?.at || t.createdAt) >= since30).length
+    };
+    const days = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (13 - i));
+      return { d, n: ts.filter(t => dayKey(t.createdAt) === dayKey(d)).length };
+    });
+    const feed = ts.flatMap(t => (t.history || []).map((h, i) => ({ t, h, i })))
+      .filter(x => MD_FEED[x.h.action] || x.h.action.startsWith('แจ้งซ้ำ'))
+      .sort((a, b) => b.h.at.localeCompare(a.h.at)).slice(0, 5)
+      .map(({ t, h, i }) => {
+        const [st, ic, label] = MD_FEED[h.action] || ['pending', 'refresh', 'แจ้งซ้ำ'];
+        return { key: `${t.id}#${i}`, st, ic, label, no: t.id.split('-').pop(), where: UI.locationText({ ...t.location, point: '' }), at: h.at };
+      });
+    return { counts, days, feed, sig: JSON.stringify([counts, days.map(x => x.n), feed.map(f => f.key)]) };
+  }
+  // ข้อมูลตัวอย่างสำหรับผู้ที่ยังไม่เข้าสู่ระบบ (แสดงแบบเบลอ ไม่ใช่ข้อมูลจริง)
+  const MDASH_DEMO = (() => {
+    const now = Date.now(), m = 6e4;
+    return {
+      counts: { pending: 3, in_progress: 5, review: 2, done: 18 },
+      days: [2, 4, 1, 3, 5, 2, 0, 3, 6, 4, 2, 5, 3, 4].map((n, i) => ({ d: new Date(now - (13 - i) * 864e5), n })),
+      feed: [['in_progress', 'wrench', 'เริ่มซ่อม', 'ห้องเรียน ม.4 · ห้อง 402', 2], ['done', 'checkCircle', 'ซ่อมเสร็จ', 'ห้อง Lab เคมี 1', 25],
+        ['pending', 'inbox', 'แจ้งใหม่', 'หอ D3 บัวชมพู (ญ) · ล็อค 2', 40], ['review', 'hourglass', 'รอพิจารณา', 'โรงอาหาร', 90], ['done', 'checkCircle', 'ซ่อมเสร็จ', 'หอสมุด · ชั้น 2', 180]]
+        .map(([st, ic, label, where, ago], i) => ({ key: 'demo' + i, st, ic, label, no: String(80 - i).padStart(4, '0'), where, at: new Date(now - ago * m).toISOString() })),
+      sig: 'demo'
+    };
+  })();
+  function mdashHTML(d, { animate = false, fresh = new Set(), prev = null } = {}) {
+    const total = Math.max(1, MD_COLS.reduce((a, [k]) => a + d.counts[k], 0));
+    const C = 2 * Math.PI * 26;
+    const maxDay = Math.max(1, ...d.days.map(x => x.n));
+    return `
+      <div class="md-head">
+        <span class="md-live"><span class="live-dot"></span>LIVE</span>
+        <h2 id="md-title">ความเคลื่อนไหวงานซ่อม</h2>
+        <span class="md-upd">อัปเดตอัตโนมัติ · ${UI.time(new Date().toISOString())} น.</span>
+        <a class="md-more" href="#/board">เปิดแดชบอร์ดเต็ม ${icon('arrow')}</a>
+      </div>
+      <div class="md-body">
+        <div class="md-left">
+          <div class="md-tiles">
+            ${MD_COLS.map(([k, label], i) => {
+              const n = d.counts[k], off = (C * (1 - n / total)).toFixed(1);
+              const bump = prev && prev[k] !== n;
+              return `<div class="md-tile ${bump ? 'bump' : ''}" style="--c:${UI.STATUS[k].color};--i:${i}">
+                <svg class="md-ring" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" class="trk"/><circle cx="32" cy="32" r="26" class="val" style="stroke-dasharray:${C.toFixed(1)};--off:${off}"/></svg>
+                <strong ${animate ? `data-count="${n}"` : ''}>${animate ? 0 : n}</strong><span>${label}</span></div>`;
+            }).join('')}
+          </div>
+          <div class="md-spark" aria-label="จำนวนแจ้งซ่อม 14 วันล่าสุด">
+            <div class="md-bars">${d.days.map((x, i) => `<span class="md-bar" style="--h:${Math.max(6, x.n / maxDay * 100)}%;--i:${i}" title="${UI.date(x.d.toISOString())} · ${x.n} งาน"><i></i></span>`).join('')}</div>
+            <small>แจ้งซ่อม 14 วันล่าสุด · รวม ${d.days.reduce((a, x) => a + x.n, 0)} งาน</small>
+          </div>
+        </div>
+        <ol class="md-feed">
+          ${d.feed.map((f, i) => `
+            <li class="md-item ${fresh.has(f.key) ? 'is-new' : ''}" style="--c:${UI.STATUS[f.st].color};--i:${i}">
+              <span class="md-ic">${icon(f.ic)}</span>
+              <span class="md-txt"><b>#${esc(f.no)} ${esc(f.label)}</b><small>${esc(f.where)}</small></span>
+              <time data-ago="${esc(f.key)}">${UI.ago(f.at)}</time>
+            </li>`).join('') || `<li class="md-empty">ยังไม่มีความเคลื่อนไหว</li>`}
+        </ol>
+      </div>`;
   }
 
   // ═══════════ เข้าสู่ระบบ ═══════════

@@ -17,7 +17,7 @@ const Store = (() => {
   const STEP2_KEY = 'deputy_general';
   // สถานะที่กดเปลี่ยนได้ (รออนุมัติเป็นสถานะเริ่มต้นเท่านั้น)
   const ACTIONS = ['in_progress', 'review', 'done', 'cannot_fix'];
-  const CONFIG_VERSION = 2;
+  const CONFIG_VERSION = 3;
 
   // ───────── ตัวช่วย ─────────
   const uid = (p = 'id') => p + '_' + Math.random().toString(36).slice(2, 9);
@@ -163,6 +163,14 @@ const Store = (() => {
     ];
   }
 
+  // แถบเหตุฉุกเฉิน (สีแดง บนสุดทุกหน้า) และแถบประกาศ (หน้าแรก) · ทุกคนเห็นได้ แอดมินแก้ได้ในตั้งค่าระบบ
+  function seedBanners() {
+    return {
+      emergency: { enabled: true, text: 'เหตุฉุกเฉิน เช่น ไฟช็อต น้ำท่วม ไฟไหม้ ท่อแตก โทรแจ้งงานอาคารทันที', phone: '02-xxx-xxxx' },
+      notice: { enabled: true, text: 'ตัวอย่างประกาศ: วันเสาร์ 9.00–12.00 น. งดจ่ายน้ำหอพัก D3 เพื่อซ่อมท่อประปา', from: '', to: '' }
+    };
+  }
+
   function seedSettings(domain) {
     return {
       schoolName: 'โรงเรียนวิทยาศาสตร์จุฬาภรณราชวิทยาลัย ปทุมธานี',
@@ -189,6 +197,7 @@ const Store = (() => {
       },
       reopenDays: 14,
       configVersion: CONFIG_VERSION,
+      banners: seedBanners(),
       notify: { email: true, inApp: true, line: false },
       contact: {
         phone: '02-xxx-xxxx ต่อ xxx', email: `building@${domain}`, line: '',
@@ -209,9 +218,12 @@ const Store = (() => {
   }
 
   // อัปเดตค่าตั้งระบบที่มีอยู่แล้วให้เป็นชุดล่าสุด (ทำครั้งเดียว ข้อมูลที่แอดมินแก้เองไม่หาย)
-  // v2: สถานที่แจ้งซ่อมทั่วไปชุดใหม่ + ข้อความตามแบบฟอร์ม "บท00 ขอแจ้งซ่อม"
+  // v2: สถานที่แจ้งซ่อมทั่วไปชุดใหม่ + ข้อความตามแบบฟอร์ม "บท00 ขอแจ้งซ่อม" · v3: แถบเหตุฉุกเฉินและประกาศ
   function upgradeConfig(d) {
-    if ((d.settings.configVersion || 1) >= CONFIG_VERSION) return false;
+    const v = d.settings.configVersion || 1;
+    if (v >= CONFIG_VERSION) return false;
+    if (!d.settings.banners) d.settings.banners = seedBanners();
+    if (v >= 2) { d.settings.configVersion = CONFIG_VERSION; return true; }
     // สถานที่ทั่วไป: ใช้ชุดใหม่ คง id เดิมของชื่อที่มีอยู่แล้ว (สถิติไม่หาย) สถานที่ที่แอดมินเพิ่มเองต่อท้าย · หอพักไม่แตะ
     const fresh = seedLocations().filter(l => l.type === 'building');
     const old = d.locations.filter(l => l.type === 'building');
@@ -566,6 +578,7 @@ const Store = (() => {
 
     // ตั้งค่า / ข้อมูลหลัก
     settings: () => db.settings,
+    banners: () => db.settings.banners || seedBanners(),
     saveSettings(patch) { return commit(d => { Object.assign(d.settings, patch); }); },
     categories(formType) { return db.categories.filter(c => c.active !== false && (!formType || c.forms.includes(formType))); },
     allCategories: () => db.categories,

@@ -1034,6 +1034,21 @@ const Admin = (() => {
             <label class="checkbox"><input type="checkbox" id="nApp" ${s.notify.inApp ? 'checked' : ''}>กระดิ่งแจ้งเตือนในเว็บ</label>
             <label class="checkbox" style="opacity:.55"><input type="checkbox" disabled>LINE Official Account (เพิ่มในระยะถัดไป)</label>
           </div></section>
+          <section class="card span-12"><div class="card-head"><h3>${icon('bell')}แถบเหตุฉุกเฉิน และประกาศหน้าเว็บ</h3><span class="small faint">ทุกคนเห็นได้ ไม่ต้องเข้าสู่ระบบ · กด "บันทึกการตั้งค่า" ด้านบนเมื่อแก้เสร็จ</span></div>
+            <div class="card-body grid-2 banner-edit">
+              <div class="stack" style="gap:12px">
+                <label class="checkbox"><input type="checkbox" id="bnEm" ${Store.banners().emergency?.enabled ? 'checked' : ''}><b style="color:#B91C1C">แถบสีแดง (เหตุฉุกเฉิน)</b> · แสดงบนสุดทุกหน้า</label>
+                <div class="field"><label for="bnEmText">ข้อความ</label><input class="input" id="bnEmText" maxlength="140" value="${esc(Store.banners().emergency?.text || '')}"></div>
+                <div class="field"><label for="bnEmPhone">เบอร์โทร (มือถือกดโทรได้)</label><input class="input" id="bnEmPhone" maxlength="30" value="${esc(Store.banners().emergency?.phone || '')}" placeholder="เช่น 02-123-4567 หรือ 081-234-5678"></div>
+              </div>
+              <div class="stack" style="gap:12px">
+                <label class="checkbox"><input type="checkbox" id="bnNo" ${Store.banners().notice?.enabled ? 'checked' : ''}><b style="color:var(--orange-700)">แถบประกาศ</b> · แสดงบนรูปหน้าแรก (ผู้ชมกด ✕ ปิดได้)</label>
+                <div class="field"><label for="bnNoText">ข้อความประกาศ</label><textarea class="textarea" id="bnNoText" maxlength="200" style="min-height:70px">${esc(Store.banners().notice?.text || '')}</textarea></div>
+                <div class="grid-2"><div class="field"><label for="bnNoFrom">เริ่มแสดง (ไม่บังคับ)</label><input type="date" class="input" id="bnNoFrom" value="${esc(Store.banners().notice?.from || '')}"></div>
+                  <div class="field"><label for="bnNoTo">แสดงถึงวันที่ (ไม่บังคับ)</label><input type="date" class="input" id="bnNoTo" value="${esc(Store.banners().notice?.to || '')}"></div></div>
+                <span class="hint">เว้นวันที่ว่าง = แสดงตลอดจนกว่าจะปิด · เลยวันสิ้นสุดแล้วประกาศหายเอง</span>
+              </div>
+            </div></section>
           <section class="card span-6"><div class="card-head"><h3>${icon('phone')}ช่องทางติดต่อ (หน้าติดต่อเรา)</h3></div><div class="card-body grid-2">
             ${f('cPhone', 'โทรศัพท์', s.contact.phone)}${f('cEmail', 'อีเมล', s.contact.email)}${f('cOffice', 'สำนักงาน', s.contact.office)}${f('cHours', 'เวลาทำการ', s.contact.hours)}
           </div></section>
@@ -1066,6 +1081,7 @@ const Admin = (() => {
         const val = id => $('#' + id, root).value.trim();
         $('#saveAll').addEventListener('click', () => {
           if (!val('domain').includes('.')) return UI.toast('โดเมนอีเมลไม่ถูกต้อง', 'error');
+          if (val('bnNoFrom') && val('bnNoTo') && val('bnNoTo') < val('bnNoFrom')) return UI.toast('วันที่สิ้นสุดประกาศต้องไม่ก่อนวันที่เริ่ม', 'error');
           Store.saveSettings({
             schoolName: val('schoolName'), division: val('division'), unit: val('unit'), addressee: val('addressee'), domain: val('domain').replace(/^@/, ''),
             docPrefix: val('docPrefix'), showRefOnDoc: $('#showRef', root).checked, staleDays: Math.max(1, +val('staleDays') || 7), reopenDays: Math.max(1, +val('reopenDays') || 14),
@@ -1073,6 +1089,10 @@ const Admin = (() => {
             forms: Object.fromEntries(Store.FORM_KEYS.map(k => [k, { ...s.forms[k], enabled: $('#en_' + k, root).checked, name: val('fn_' + k), desc: val('fd_' + k), subject: val('fs_' + k), notes: lines('fx_' + k) }])),
             notify: { ...s.notify, email: $('#nEmail', root).checked, inApp: $('#nApp', root).checked },
             contact: { ...s.contact, phone: val('cPhone'), email: val('cEmail'), office: val('cOffice'), hours: val('cHours') },
+            banners: {
+              emergency: { enabled: $('#bnEm', root).checked, text: val('bnEmText'), phone: val('bnEmPhone') },
+              notice: { enabled: $('#bnNo', root).checked, text: val('bnNoText'), from: val('bnNoFrom'), to: val('bnNoTo') }
+            },
             departments: lines('lDept'), positions: lines('lPos'), workers: lines('lWork'), reviewReasons: lines('lRev'), cannotReasons: lines('lCan')
           });
           UI.toast('บันทึกการตั้งค่าแล้ว');
