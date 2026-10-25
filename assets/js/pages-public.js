@@ -835,6 +835,7 @@ const Pages = (() => {
           $$('.field.invalid', root).forEach(f => f.classList.remove('invalid'));
           const fail = (msg, el) => { UI.toast(msg, 'error'); el?.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
           if (!$('#phone', root).value.trim()) { $('#phone', root).closest('.field').classList.add('invalid'); return fail('กรุณาระบุเบอร์ติดต่อ', $('#phone', root)); }
+          if (!/^0\d{8,9}$/.test($('#phone', root).value.replace(/\D/g, ''))) { $('#phone', root).closest('.field').classList.add('invalid'); return fail('เบอร์ติดต่อต้องขึ้นต้นด้วย 0 และมี 9–10 หลัก', $('#phone', root)); }
           if (dorm && !state.dorm) { $('#dormSel', root).closest('.field').classList.add('invalid'); return fail('กรุณาเลือกหอพัก', $('#dormSel', root)); }
           const bad = state.blocks.findIndex(b => issueOf(b));
           if (bad >= 0) {
@@ -1378,10 +1379,149 @@ const Pages = (() => {
         $('#pf', root).addEventListener('submit', async e => {
           e.preventDefault();
           const v = id => $('#' + id, root).value.trim();
-          if (!v('first') || !v('last')) return UI.toast('กรุณากรอกชื่อและนามสกุล', 'error');
-          await Store.updateProfile({ prefix: v('prefix'), first: v('first'), last: v('last'), position: v('position'), dept: v('dept'), phone: v('phone') });
+          const patch = { prefix: v('prefix'), first: v('first'), last: v('last'), position: v('position'), dept: v('dept'), phone: v('phone') };
+          // ข้อมูลต้องครบและถูกต้องเสมอ (ลบจนว่างไม่ได้)
+          const bad = Object.entries(Store.profileIssues({ ...Store.me(), ...patch })).filter(([k]) => k !== 'signature');
+          if (bad.length) return UI.toast(bad.map(([, m]) => m).join(' · '), 'error');
+          await Store.updateProfile(patch);
           UI.toast('บันทึกข้อมูลแล้ว');
         });
+      }
+    };
+  }
+
+  // ═══════════ ตั้งค่าบัญชีครั้งแรก (บังคับกรอกให้ครบก่อนใช้งาน) ═══════════
+  function setup(params) {
+    const me = Store.me();
+    const s = S();
+    const next = params.next && params.next.startsWith('/') && !params.next.startsWith('/setup') ? params.next : '/';
+    if (Store.profileComplete(me)) { setTimeout(() => App.go(next)); return { title: 'ตั้งค่าบัญชี', html: '' }; }
+    const STEPS = [['user', 'ข้อมูลส่วนตัว'], ['sign', 'ลายเซ็น'], ['checkCircle', 'ตรวจทานและยืนยัน']];
+    const FIELDS = ['prefix', 'first', 'last', 'position', 'dept', 'phone'];
+    const opt = (list, sel, ph) => `<option value="">${ph}</option>` + [...new Set([sel, ...list])].filter(Boolean).map(v => `<option ${v === sel ? 'selected' : ''}>${esc(v)}</option>`).join('');
+    return {
+      title: 'ตั้งค่าบัญชี',
+      html: `
+      ${pageHero({ title: 'ตั้งค่าบัญชีก่อนเริ่มใช้งาน', desc: 'กรอกข้อมูลให้ครบ 3 ขั้นตอน ข้อมูลและลายเซ็นนี้ใช้ในใบแจ้งซ่อมและเอกสาร PDF ทำครั้งเดียว แก้ไขภายหลังได้ที่หน้าโปรไฟล์', crumbs: [{ label: 'ตั้งค่าบัญชี' }] })}
+      <div class="page-body"><div class="container setup-wrap">
+        <ol class="setup-steps" id="stSteps"></ol>
+        <div class="card" id="stBody"></div>
+        <p class="small faint setup-foot">เข้าสู่ระบบด้วย ${esc(me.email)} · <button type="button" class="link small" data-logout>ไม่ใช่บัญชีของคุณ? ออกจากระบบ</button> · <a class="link small" href="#/contact">ติดต่อเรา</a></p>
+      </div></div>`,
+      mount(root) {
+        const data = { ...me };
+        let step = Object.keys(Store.profileIssues(data)).some(k => k !== 'signature') ? 0 : 1;
+        let pad = null;
+        const errs = () => Store.profileIssues(data);
+        const drawSteps = () => {
+          $('#stSteps', root).innerHTML = STEPS.map(([ic, label], i) =>
+            `<li class="${i < step ? 'done' : i === step ? 'now' : ''}"><span class="st-dot">${i < step ? icon('check') : icon(ic)}</span><span class="st-label"><small>ขั้นที่ ${i + 1}</small>${label}</span></li>`).join('');
+        };
+        const field = (id, label, control) => `<div class="field" data-f="${id}"><label for="s_${id}">${label} <span class="req">*</span></label>${control}<span class="f-err"></span></div>`;
+        const showErrors = keys => {
+          const e = errs();
+          keys.forEach(k => { const f = $(`[data-f="${k}"]`, root); if (!f) return; f.classList.toggle('invalid', !!e[k]); $('.f-err', f).textContent = e[k] || ''; });
+          return keys.filter(k => e[k]);
+        };
+        const views = [
+          () => `
+            <div class="card-head"><h3>${icon('user')}ขั้นที่ 1 · ข้อมูลส่วนตัว</h3><span class="small faint st-hint">* จำเป็นต้องกรอกทุกช่อง</span></div>
+            <form class="card-body stack" id="stForm" novalidate>
+              <div class="grid-3">
+                ${field('prefix', 'คำนำหน้า', `<select class="select" id="s_prefix">${opt(['นาย', 'นาง', 'นางสาว', 'ดร.', 'ว่าที่ร้อยตรี'], data.prefix, 'เลือก')}</select>`)}
+                ${field('first', 'ชื่อ (ภาษาไทย)', `<input class="input" id="s_first" value="${esc(data.first || '')}" placeholder="เช่น สมชาย" autocomplete="given-name">`)}
+                ${field('last', 'นามสกุล (ภาษาไทย)', `<input class="input" id="s_last" value="${esc(data.last || '')}" placeholder="เช่น ใจดี" autocomplete="family-name">`)}
+              </div>
+              <div class="grid-2">
+                ${field('position', 'ตำแหน่ง', `<select class="select" id="s_position">${opt(s.positions, data.position, 'เลือกตำแหน่ง')}</select>`)}
+                ${field('dept', 'ฝ่ายงาน / กลุ่มสาระฯ', `<select class="select" id="s_dept">${opt(s.departments, data.dept, 'เลือกฝ่ายงาน / กลุ่มสาระฯ')}</select>`)}
+                ${field('phone', 'เบอร์ติดต่อ', `<input class="input" id="s_phone" value="${esc(data.phone || '')}" inputmode="tel" placeholder="เช่น 0812345678" autocomplete="tel">`)}
+                <div class="field"><label>อีเมล</label><input class="input" value="${esc(me.email)}" readonly></div>
+              </div>
+              <div class="setup-actions"><span></span><button class="btn btn-primary" type="submit">ถัดไป: ลายเซ็น ${icon('arrow')}</button></div>
+            </form>`,
+          () => `
+            <div class="card-head"><h3>${icon('sign')}ขั้นที่ 2 · ลายเซ็น</h3><span class="small faint st-hint">ใช้ลงในใบแจ้งซ่อมและเอกสาร PDF</span></div>
+            <div class="card-body stack">
+              <div class="sig-preview" id="stPrev">${data.signature ? `<img src="${data.signature}" alt="ลายเซ็นของคุณ">` : '<span class="small faint">ยังไม่มีลายเซ็น</span>'}</div>
+              <div class="seg" id="stMode"><button type="button" class="is-active" data-m="draw">${icon('edit')}เซ็นบนจอ</button><button type="button" data-m="upload">${icon('upload')}อัปโหลดรูป</button></div>
+              <div id="stDraw"><div class="sig-box"><canvas id="stCanvas"></canvas></div><div class="row" style="justify-content:space-between;margin-top:10px"><button type="button" class="btn btn-ghost-dark btn-sm" id="stClear">ล้าง</button><button type="button" class="btn btn-soft btn-sm" id="stUse">${icon('check')} ใช้ลายเซ็นนี้</button></div></div>
+              <div id="stUpload" hidden><label class="dropzone"><input type="file" accept="image/*" hidden id="stFile"><span class="dz-icon">${icon('image')}</span><span class="dz-text"><strong>เลือกรูปลายเซ็น</strong><small>แนะนำ PNG พื้นหลังโปร่งใส หรือเซ็นบนกระดาษขาวแล้วถ่ายรูป</small></span></label></div>
+              <div class="f-err" id="stSigErr"></div>
+              <div class="setup-actions"><button type="button" class="btn btn-ghost-dark" data-go="0">${icon('back')} ย้อนกลับ</button><button type="button" class="btn btn-primary" id="stNext">ถัดไป: ตรวจทาน ${icon('arrow')}</button></div>
+            </div>`,
+          () => `
+            <div class="card-head"><h3>${icon('checkCircle')}ขั้นที่ 3 · ตรวจทานและยืนยัน</h3></div>
+            <div class="card-body stack">
+              <div class="setup-review">
+                <dl>
+                  <div><dt>ชื่อ–นามสกุล</dt><dd>${esc(`${data.prefix}${data.first} ${data.last}`)}</dd></div>
+                  <div><dt>ตำแหน่ง</dt><dd>${esc(data.position)}</dd></div>
+                  <div><dt>ฝ่ายงาน / กลุ่มสาระฯ</dt><dd>${esc(data.dept)}</dd></div>
+                  <div><dt>เบอร์ติดต่อ</dt><dd>${esc(data.phone)}</dd></div>
+                  <div><dt>อีเมล</dt><dd>${esc(me.email)}</dd></div>
+                </dl>
+                <div class="setup-sign"><small>ตัวอย่างในใบแจ้งซ่อม</small><img src="${data.signature}" alt="ลายเซ็นของคุณ"><span>(${esc(`${data.prefix}${data.first} ${data.last}`)})</span><span>${esc(data.position)}</span></div>
+              </div>
+              <div class="setup-actions"><button type="button" class="btn btn-ghost-dark" data-go="0">${icon('edit')} แก้ไขข้อมูล</button><button type="button" class="btn btn-primary btn-lg" id="stDone">${icon('check')} ยืนยัน เริ่มใช้งาน</button></div>
+            </div>`
+        ];
+        const show = n => {
+          step = n;
+          drawSteps();
+          $('#stBody', root).innerHTML = views[step]();
+          pad = null;
+          if (step === 1) {
+            pad = UI.signaturePad($('#stCanvas', root));
+            const setSig = async url => {
+              data.signature = url;
+              $('#stPrev', root).innerHTML = `<img src="${url}" alt="ลายเซ็นของคุณ">`;
+              $('#stSigErr', root).textContent = '';
+              try { await Store.updateProfile({ signature: url }); UI.toast('บันทึกลายเซ็นแล้ว'); } catch (e) { UI.toast(e.message, 'error'); }
+            };
+            $('#stMode', root).addEventListener('click', e => {
+              const b = e.target.closest('[data-m]'); if (!b) return;
+              $$('#stMode button', root).forEach(x => x.classList.toggle('is-active', x === b));
+              $('#stDraw', root).hidden = b.dataset.m !== 'draw';
+              $('#stUpload', root).hidden = b.dataset.m !== 'upload';
+            });
+            $('#stClear', root).addEventListener('click', () => pad.clear());
+            $('#stUse', root).addEventListener('click', () => { if (pad.isEmpty()) return UI.toast('กรุณาเซ็นชื่อในกรอบก่อน', 'error'); setSig(pad.toDataURL()); });
+            $('#stFile', root).addEventListener('change', async e => {
+              const f = e.target.files[0]; if (!f) return;
+              if (f.size > 400e3) return setSig(await UI.compressImage(f, 600, .9));
+              const reader = new FileReader();
+              reader.onload = () => setSig(reader.result);
+              reader.readAsDataURL(f);
+            });
+            $('#stNext', root).addEventListener('click', async () => {
+              // เซ็นไว้ในกรอบแต่ยังไม่ได้กด "ใช้ลายเซ็นนี้" → ใช้ให้เลย
+              if (pad && !pad.isEmpty()) await setSig(pad.toDataURL());
+              if (!data.signature) { $('#stSigErr', root).textContent = 'กรุณาเซ็นชื่อ หรืออัปโหลดรูปลายเซ็นก่อน'; return; }
+              show(2);
+            });
+          }
+          if (step === 2) {
+            $('#stDone', root).addEventListener('click', () => {
+              if (!Store.profileComplete(Store.me())) { UI.toast('ข้อมูลยังบันทึกไม่ครบ กรุณาตรวจสอบอีกครั้ง', 'error'); return show(0); }
+              UI.toast('ตั้งค่าบัญชีเรียบร้อย พร้อมใช้งานแล้ว');
+              App.go(next);
+            });
+          }
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+        root.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) show(+b.dataset.go); });
+        root.addEventListener('submit', async e => {
+          if (e.target.id !== 'stForm') return;
+          e.preventDefault();
+          FIELDS.forEach(k => { data[k] = $('#s_' + k, root).value.trim(); });
+          if (showErrors(FIELDS).length) return UI.toast('กรุณากรอกข้อมูลให้ครบและถูกต้อง', 'error');
+          try { await Store.updateProfile(Object.fromEntries(FIELDS.map(k => [k, data[k]]))); } catch (err) { return UI.toast(err.message, 'error'); }
+          show(1);
+        });
+        // แก้ช่องไหน ล้างข้อความเตือนของช่องนั้น
+        root.addEventListener('input', e => { const f = e.target.closest('[data-f]'); if (f) { f.classList.remove('invalid'); $('.f-err', f).textContent = ''; } });
+        show(step);
       }
     };
   }
@@ -1393,5 +1533,5 @@ const Pages = (() => {
     return { title: 'ไม่มีสิทธิ์', html: `${pageHero({ title: 'ไม่มีสิทธิ์เข้าถึง' })}<div class="page-body"><div class="container"><div class="card empty">${icon('shield')}<strong>${esc(msg || 'บัญชีของคุณไม่มีสิทธิ์ใช้งานหน้านี้')}</strong><a class="btn btn-primary" href="#/">กลับหน้าแรก</a></div></div></div>` };
   }
 
-  return { home, login, reportChooser, reportForm, success, myTickets, ticket, board, contact, profile, notFound, forbidden, pageHero, summary, rangeStart, semesterStart, RANGE_LABEL, formTabs };
+  return { home, login, reportChooser, reportForm, success, myTickets, ticket, board, contact, profile, setup, notFound, forbidden, pageHero, summary, rangeStart, semesterStart, RANGE_LABEL, formTabs };
 })();

@@ -170,19 +170,29 @@ const Doc = (() => {
       </div>`;
   }
 
+  // หน้าภาพประกอบ: หน้าละ 4 รูป (2×2 รูปละ ~1/4 หน้า) แสดงเต็มภาพไม่ตัดขอบ · รูปตอนแจ้งก่อน แล้วต่อด้วยรูปหลังซ่อม (มีป้ายกำกับ)
   function photoSheet(t) {
-    // รูปแยกตามรายการที่แจ้ง แล้วตามด้วยรูปหลังซ่อม
+    const PER_PAGE = 4;
     const groups = [
-      ...t.items.map((i, n) => [`รายการที่ ${n + 1}: ${i.name}${i.detail ? ` — ${i.detail}` : ''}`, i.photos]),
-      ['รูปประกอบเพิ่มเติม', t.photos], ['รูปหลังซ่อม', t.completion?.photos], ['รูปประกอบกรณีซ่อมไม่ได้', t.cannot?.photos]
-    ].filter(g => g[1]?.length);
-    if (!groups.length) return '';
-    return `
+      ...t.items.map((i, n) => ['before', `รายการที่ ${n + 1}: ${i.name}${i.detail ? ` — ${i.detail}` : ''}`, i.photos]),
+      ['before', 'รูปประกอบเพิ่มเติม', t.photos],
+      ['after', 'รูปหลังซ่อม', t.completion?.photos], ['after', 'รูปประกอบกรณีซ่อมไม่ได้', t.cannot?.photos]
+    ];
+    const tag = { before: 'ก่อนซ่อม (ตอนแจ้ง)', after: 'หลังซ่อม' };
+    const all = groups.flatMap(([phase, label, list]) => (list || []).map((src, i) => ({ phase, label, src, n: i + 1, of: list.length })));
+    if (!all.length) return '';
+    const pages = [];
+    for (let i = 0; i < all.length; i += PER_PAGE) pages.push(all.slice(i, i + PER_PAGE));
+    return pages.map((list, p) => `
       <div class="sheet photos">
-        <h2>ภาพประกอบใบแจ้งซ่อม</h2>
+        <h2>ภาพประกอบใบแจ้งซ่อม${pages.length > 1 ? ` <span class="ph-pg">(หน้า ${p + 1}/${pages.length})</span>` : ''}</h2>
         <div class="meta">เลขที่ ${esc(t.docNo)} · อ้างอิงระบบ ${esc(t.id)} · ${esc(UI.locationText(t))}</div>
-        ${groups.map(([h, list]) => `<h3>${esc(h)}</h3><div class="ph-grid">${list.map((p, i) => `<figure><img ${Store.img(p)} alt=""><figcaption>ภาพที่ ${i + 1}</figcaption></figure>`).join('')}</div>`).join('')}
-      </div>`;
+        <div class="ph-grid">${list.map(ph => `
+          <figure class="ph-${ph.phase}">
+            <div class="ph-frame"><img ${Store.img(ph.src)} alt=""></div>
+            <figcaption><span class="ph-tag">${tag[ph.phase]}</span> ${esc(ph.label)}${ph.of > 1 ? ` · ภาพที่ ${ph.n}/${ph.of}` : ''}</figcaption>
+          </figure>`).join('')}</div>
+      </div>`).join('');
   }
 
   const sheet = (t, style = 'memo') => memo(t, style);

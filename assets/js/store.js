@@ -637,6 +637,22 @@ const Store = (() => {
         return { added, updated };
       });
     },
+    // ข้อมูลโปรไฟล์ที่ยังขาด/ไม่ถูกต้อง (ว่าง = ครบ ใช้งานได้) · ทุกคนต้องกรอกครบก่อนใช้ระบบ
+    profileIssues(u) {
+      if (!u) return [];
+      const thai = v => /^[฀-๿]+(\s+[฀-๿]+)*$/.test(String(v || '').trim());
+      const digits = String(u.phone || '').replace(/\D/g, '');
+      const issues = {};
+      if (!u.prefix) issues.prefix = 'เลือกคำนำหน้า';
+      if (!thai(u.first)) issues.first = u.first ? 'ชื่อต้องเป็นภาษาไทยเท่านั้น' : 'กรอกชื่อ';
+      if (!thai(u.last)) issues.last = u.last ? 'นามสกุลต้องเป็นภาษาไทยเท่านั้น' : 'กรอกนามสกุล';
+      if (!u.position) issues.position = 'เลือกตำแหน่ง';
+      if (!u.dept) issues.dept = 'เลือกฝ่ายงาน / กลุ่มสาระฯ';
+      if (!/^0\d{8,9}$/.test(digits)) issues.phone = digits ? 'เบอร์โทรต้องขึ้นต้นด้วย 0 และมี 9–10 หลัก' : 'กรอกเบอร์ติดต่อ';
+      if (!u.signature) issues.signature = 'เพิ่มลายเซ็น';
+      return issues;
+    },
+    profileComplete(u) { return !Object.keys(this.profileIssues(u)).length; },
     updateProfile(patch) {
       const me = currentUser();
       return commit(d => { Object.assign(d.users.find(u => u.email === me.email), patch); });
@@ -706,7 +722,8 @@ const Store = (() => {
       }
       const list = commit(d => {
         const user = d.users.find(u => u.email === me.email);
-        if (input.phone && input.phone !== user.phone) user.phone = input.phone;
+        // เบอร์ใหม่จากฟอร์ม → อัปเดตโปรไฟล์ (เฉพาะเบอร์ที่ถูกต้อง ไม่ให้โปรไฟล์กลายเป็นไม่ครบ)
+        if (input.phone && input.phone !== user.phone && /^0\d{8,9}$/.test(input.phone.replace(/\D/g, ''))) user.phone = input.phone;
         const batch = entries.length > 1 ? uid('B') : null;
         const made = entries.map(({ location, items }) => newTicket(d, { ...input, location, items }, user, batch ? { batch } : {}));
         if (batch) made.forEach(t => { t.batchIds = made.map(x => x.id); });

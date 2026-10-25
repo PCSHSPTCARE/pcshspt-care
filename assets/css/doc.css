@@ -95,14 +95,18 @@
 .mfill .txt .v { position: relative; top: -.9mm; color: #000; }
 
 /* หน้าภาพประกอบ */
-.sheet.photos { padding: 18mm 18mm 16mm; }
+.sheet.photos { padding: 14mm 16mm 14mm; display: flex; flex-direction: column; }
 .sheet.photos h2 { font-size: 15pt; font-weight: 700; text-align: center; margin: 0; }
-.sheet.photos .meta { text-align: center; margin-top: 2mm; font-size: 11pt; }
-.sheet.photos h3 { font-size: 12.5pt; margin: 8mm 0 3mm; border-bottom: .3mm solid #000; padding-bottom: 1mm; }
-.ph-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
-.ph-grid figure { margin: 0; }
-.ph-grid img { width: 100%; height: 52mm; object-fit: cover; border: .3mm solid #999; }
-.ph-grid figcaption { font-size: 9.5pt; text-align: center; margin-top: 1mm; }
+.sheet.photos h2 .ph-pg { font-size: 11pt; font-weight: 400; }
+.sheet.photos .meta { text-align: center; margin-top: 1mm; padding-bottom: 3mm; border-bottom: .3mm solid #000; font-size: 11pt; }
+/* 2×2 รูปละประมาณ 1/4 หน้า · แสดงเต็มภาพ ไม่ตัดขอบ */
+.ph-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 5mm 6mm; margin-top: 5mm; }
+.ph-grid figure { margin: 0; display: flex; flex-direction: column; min-height: 0; }
+.ph-frame { flex: 1; min-height: 0; border: .3mm solid #999; background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.ph-frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.ph-grid figcaption { flex: none; font-size: 10pt; line-height: 1.35; margin-top: 1.5mm; max-height: 2.7em; overflow: hidden; }
+.ph-tag { display: inline-block; padding: 0 1.6mm; border: .3mm solid #000; border-radius: 1mm; font-weight: 700; font-size: 9pt; }
+.ph-after .ph-tag { background: #000; color: #fff; }
 
 /* ตัวเลือกในแถบเครื่องมือ */
 .seg-dark { background: rgba(255, 255, 255, .1); }

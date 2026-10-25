@@ -204,6 +204,8 @@ const App = (() => {
       const o = r.opts;
       if ((o.auth || o.staff || o.roles || o.teacher) && !me) return go('/login?next=' + encodeURIComponent(full));
       if (o.guestOnly && me) return go(Store.isBackOffice(me) ? adminHome(me) : '/');
+      // ข้อมูลโปรไฟล์ยังไม่ครบ (รวมลายเซ็น) → ต้องตั้งค่าบัญชีให้ครบก่อน · ดูหน้าติดต่อเราได้
+      if (me && !Store.profileComplete(me) && !['/setup', '/contact'].includes(path)) return go('/setup?next=' + encodeURIComponent(full));
       if (path === '/admin' && me && !Store.hasRole(me, 'admin') && Store.isBackOffice(me)) return go(adminHome(me));
       if (o.teacher && !Store.hasRole(me, 'teacher')) view = Pages.forbidden('การแจ้งซ่อมเปิดให้เฉพาะครูและบุคลากรเท่านั้น');
       else if (o.staff && !Store.isStaff(me)) view = Pages.forbidden('หน้านี้สำหรับแอดมินและผู้อนุมัติเท่านั้น');
@@ -292,6 +294,7 @@ App.route('/ticket/:id', Pages.ticket, { auth: true });
 App.route('/board', Pages.board, { auth: true });
 App.route('/contact', Pages.contact);
 App.route('/profile', Pages.profile, { auth: true });
+App.route('/setup', Pages.setup, { auth: true });
 App.route('/doc/:id', Doc.page, { auth: true, layout: 'bare' });
 App.route('/print', Print.batch, { auth: true, layout: 'bare' });
 App.route('/print-report', Print.report, { roles: ['admin', 'executive'], layout: 'bare' });
