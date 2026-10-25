@@ -17,7 +17,7 @@ const Store = (() => {
   const STEP2_KEY = 'deputy_general';
   // สถานะที่กดเปลี่ยนได้ (รออนุมัติเป็นสถานะเริ่มต้นเท่านั้น)
   const ACTIONS = ['in_progress', 'review', 'done', 'cannot_fix'];
-  const CONFIG_VERSION = 3;
+  const CONFIG_VERSION = 4;
 
   // ───────── ตัวช่วย ─────────
   const uid = (p = 'id') => p + '_' + Math.random().toString(36).slice(2, 9);
@@ -57,14 +57,15 @@ const Store = (() => {
     return [
       { id: 'elec', name: 'งานไฟฟ้า', icon: 'zap', forms: ['general', 'dorm'], active: true, items: [
         it('นีออนสั้น', 'หลอด/ดวง'), it('นีออนยาว', 'หลอด/ดวง'), it('หลอดตะเกียบ', 'หลอด/ดวง'), it('หลอดสปอตไลท์', 'หลอด/ดวง'),
-        it('พัดลมเพดาน', 'ตัว'), it('พัดลมผนัง', 'ตัว'), it('ปลั๊ก', '', DORM)] },
+        it('พัดลมเพดาน', 'ตัว'), it('พัดลมผนัง', 'ตัว'), it('ปลั๊ก', 'จุด', DORM)] },
       { id: 'plumb', name: 'งานประปา', icon: 'droplet', forms: ['general', 'dorm'], active: true, items: [
-        it('ก๊อกสนาม'), it('ก๊อกซิ้งค์'), it('ก๊อกอ่าง'), it('สายชำระ'), it('สายน้ำดี'), it('สะดืออ่าง'), it('โถปัสสาวะ'), it('โถชักโครก'),
-        it('ฝาชักโครก', '', DORM), it('ฝักบัว', '', DORM), it('อ่างล้างมือ', '', DORM)] },
+        it('ก๊อกสนาม', 'ตัว'), it('ก๊อกซิ้งค์', 'ตัว'), it('ก๊อกอ่าง', 'ตัว'), it('สายชำระ', 'เส้น'), it('สายน้ำดี', 'เส้น'), it('สะดืออ่าง', 'ชิ้น'), it('โถปัสสาวะ', 'ชุด'), it('โถชักโครก', 'ชุด'),
+        it('ฝาชักโครก', 'ชิ้น', DORM), it('ฝักบัว', 'ชุด', DORM), it('อ่างล้างมือ', 'ชุด', DORM)] },
       { id: 'wood', name: 'งานไม้', icon: 'hammer', forms: ['general', 'dorm'], active: true, items: [
-        it('ประตู'), it('หน้าต่าง'), it('โต๊ะ/ตู้/กระดาน', '', GEN), it('กลอนประตู'), it('กุญแจลิ้นชัก'), it('บานพับ'), it('สายยู'), it('ลูกบิดประตู'), it('เตียง', '', DORM)] },
+        it('ประตู', 'บาน'), it('หน้าต่าง', 'บาน'), it('โต๊ะ/ตู้/กระดาน', 'ตัว', GEN), it('กลอนประตู', 'ตัว'), it('กุญแจลิ้นชัก', 'ตัว'), it('บานพับ', 'ตัว'), it('สายยู', 'ตัว'), it('ลูกบิดประตู', 'ตัว'), it('เตียง', 'หลัง', DORM)] },
       { id: 'alu', name: 'งานอลูมิเนียม+กระจก', icon: 'window', forms: ['general', 'dorm'], active: true, items: [
-        it('ประตูบานสวิง'), it('ประตูบานเลื่อน'), it('หน้าต่างบานเลื่อน'), it('หน้าต่างบานเปิด-ปิด'), it('มือจับประตู')] },
+        it('ประตูบานสวิง', 'บาน'), it('ประตูบานเลื่อน', 'บาน'), it('หน้าต่างบานเลื่อน', 'บาน'), it('หน้าต่างบานเปิด-ปิด', 'บาน'), it('มือจับประตู', 'ตัว')] },
+      // เครื่องเสียง / ทีวี / แอร์: รายการเป็น "อาการ" ไม่ใช่ของที่นับเป็นชิ้น จึงไม่มีหน่วยนับ
       { id: 'sound', name: 'เครื่องเสียง', icon: 'speaker', forms: ['general', 'dorm'], active: true, items: [
         it('เสียงขาดหาย'), it('เปิดไม่ติด')] },
       { id: 'tv', name: 'จอทีวี/โปรเจคเตอร์', icon: 'monitor', forms: ['general'], active: true, items: [
@@ -219,11 +220,20 @@ const Store = (() => {
 
   // อัปเดตค่าตั้งระบบที่มีอยู่แล้วให้เป็นชุดล่าสุด (ทำครั้งเดียว ข้อมูลที่แอดมินแก้เองไม่หาย)
   // v2: สถานที่แจ้งซ่อมทั่วไปชุดใหม่ + ข้อความตามแบบฟอร์ม "บท00 ขอแจ้งซ่อม" · v3: แถบเหตุฉุกเฉินและประกาศ
+  // v4: หน่วยนับของรายการที่จับต้องได้ (ใส่เฉพาะรายการที่ยังไม่มีหน่วย ไม่ทับที่แอดมินตั้งเอง)
   function upgradeConfig(d) {
     const v = d.settings.configVersion || 1;
     if (v >= CONFIG_VERSION) return false;
+    if (v < 2) upgradeV2(d);
     if (!d.settings.banners) d.settings.banners = seedBanners();
-    if (v >= 2) { d.settings.configVersion = CONFIG_VERSION; return true; }
+    if (v < 4) {
+      const units = new Map(seedCategories().flatMap(c => c.items.filter(i => i.unit).map(i => [`${c.id}|${i.name}`, i.unit])));
+      d.categories.forEach(c => (c.items || []).forEach(i => { const u = units.get(`${c.id}|${i.name}`); if (u && !i.unit) i.unit = u; }));
+    }
+    d.settings.configVersion = CONFIG_VERSION;
+    return true;
+  }
+  function upgradeV2(d) {
     // สถานที่ทั่วไป: ใช้ชุดใหม่ คง id เดิมของชื่อที่มีอยู่แล้ว (สถิติไม่หาย) สถานที่ที่แอดมินเพิ่มเองต่อท้าย · หอพักไม่แตะ
     const fresh = seedLocations().filter(l => l.type === 'building');
     const old = d.locations.filter(l => l.type === 'building');
@@ -237,8 +247,6 @@ const Store = (() => {
     FORM_KEYS.forEach(k => { if (String(d.settings.forms[k]?.subject || '').startsWith(OLD_SUBJECT)) d.settings.forms[k].subject = NEW.forms[k].subject; });
     const ds = d.settings.signatories?.deputy_student;
     if (ds && ds.title === 'รองผู้อำนวยการฝ่ายกิจการนักเรียนและหอพัก') ds.title = NEW.signatories.deputy_student.title;
-    d.settings.configVersion = CONFIG_VERSION;
-    return true;
   }
 
   const SYMPTOMS = ['ใช้งานไม่ได้ตั้งแต่เช้า', 'ชำรุดเสียหาย ต้องเปลี่ยนใหม่', 'ใช้งานได้บ้างไม่ได้บ้าง', 'หลวม/หลุด ไม่แน่นหนา', 'มีเสียงดังผิดปกติ', 'รั่วซึม ทำให้พื้นเปียก', 'กดแล้วไม่ทำงาน'];

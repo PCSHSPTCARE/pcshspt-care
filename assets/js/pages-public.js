@@ -439,6 +439,9 @@ const Pages = (() => {
       if (p?.zones?.length && (roomMode(p) ? !b.room : !b.zone)) return roomMode(p) ? 'ยังไม่ได้เลือกห้อง' : 'ยังไม่ได้เลือกล็อค/โซน';
       if (!b.items.size) return 'ยังไม่ได้เลือกรายการ';
       if ([...b.items.values()].some(v => !String(v.detail || '').trim())) return 'ยังระบุอาการไม่ครบ';
+      // รายการที่มีหน่วยนับ (ของจับต้องได้) ต้องระบุจำนวน · รายการที่พิมพ์เองไม่บังคับ
+      const noQty = [...b.items.values()].find(v => !v.custom && v.unit && !(v.qty >= 1));
+      if (noQty) return `ยังไม่ได้ระบุจำนวน${noQty.name}`;
       return '';
     };
     const titleOf = (b, i) => {
@@ -592,7 +595,8 @@ const Pages = (() => {
             <li class="detail-row" data-key="${esc(k)}">
               <div class="dr-head"><span class="dr-no">${n + 1}</span><span class="dr-ic">${icon(c?.icon || 'wrench')}</span>
                 <div class="dr-title"><strong>${esc(v.name)}</strong><span>${esc(v.catName)}${v.custom ? ' · ระบุเอง' : ''}</span></div>
-                ${v.unit ? `<span class="qty"><button type="button" data-q="-" aria-label="ลดจำนวน">${icon('minus')}</button><input type="number" min="1" value="${v.qty || 1}" data-qin aria-label="จำนวน ${esc(v.name)}"><button type="button" data-q="+" aria-label="เพิ่มจำนวน">${icon('plus')}</button></span><span class="unit">${esc(v.unit)}</span>` : ''}
+                ${v.custom ? `<span class="qty-free"><input class="input sm" type="number" min="1" inputmode="numeric" value="${v.qty || ''}" placeholder="จำนวน" data-qfree aria-label="จำนวน ${esc(v.name)} (ไม่บังคับ)"><input class="input sm" value="${esc(v.unit || '')}" maxlength="12" placeholder="หน่วย" data-ufree aria-label="หน่วยนับ ${esc(v.name)} (ไม่บังคับ)"></span>`
+                  : v.unit ? `<span class="qty"><button type="button" data-q="-" aria-label="ลดจำนวน">${icon('minus')}</button><input type="number" min="1" value="${v.qty || ''}" data-qin aria-label="จำนวน ${esc(v.name)}"><button type="button" data-q="+" aria-label="เพิ่มจำนวน">${icon('plus')}</button></span><span class="unit">${esc(v.unit)}</span>` : ''}
                 <button type="button" class="icon-btn sm" data-remove="${esc(k)}" aria-label="นำ ${esc(v.name)} ออก">${icon('close')}</button></div>
               <div class="field"><input class="input" data-detail value="${esc(v.detail || '')}" maxlength="200" placeholder="อาการของ${esc(v.name)} เช่น ${c?.id === 'ac' ? 'เปิดแล้วไม่เย็น มีน้ำหยด' : 'ชำรุด / หลวม / ใช้งานไม่ได้'}" aria-label="อาการของ ${esc(v.name)}"></div>
               <div class="dr-photos"><div class="thumbs-row">${thumbs(v)}</div>
@@ -778,8 +782,8 @@ const Pages = (() => {
           const q = e.target.closest('[data-q]');
           if (q) {
             const v = b.items.get(q.closest('[data-key]').dataset.key);
-            v.qty = Math.max(1, (v.qty || 1) + (q.dataset.q === '+' ? 1 : -1));
-            q.parentElement.querySelector('[data-qin]').value = v.qty; renderSummary(); return;
+            v.qty = Math.max(1, (v.qty || 0) + (q.dataset.q === '+' ? 1 : -1));
+            q.parentElement.querySelector('[data-qin]').value = v.qty; q.closest('.qty').classList.remove('invalid'); renderSummary(); renderHead(b); return;
           }
           const pick = e.target.closest('[data-item]');
           if (pick) {
@@ -804,7 +808,11 @@ const Pages = (() => {
           if (!b) return;
           const row = e.target.closest('[data-key]');
           if (row && e.target.matches('[data-detail]')) { b.items.get(row.dataset.key).detail = e.target.value; e.target.closest('.field').classList.remove('invalid'); renderHead(b); }
-          if (row && e.target.matches('[data-qin]')) { b.items.get(row.dataset.key).qty = Math.max(1, parseInt(e.target.value) || 1); renderSummary(); }
+          // จำนวน: ลบจนว่างได้ระหว่างพิมพ์ (0 = ยังไม่ระบุ → ส่งไม่ได้จนกว่าจะใส่)
+          if (row && e.target.matches('[data-qin]')) e.target.closest('.qty').classList.remove('invalid');
+          if (row && e.target.matches('[data-qin]')) { b.items.get(row.dataset.key).qty = Math.max(0, parseInt(e.target.value) || 0); renderSummary(); renderHead(b); }
+          if (row && e.target.matches('[data-qfree]')) b.items.get(row.dataset.key).qty = Math.max(0, parseInt(e.target.value) || 0);
+          if (row && e.target.matches('[data-ufree]')) b.items.get(row.dataset.key).unit = e.target.value.trim();
           if (e.target.matches('[data-point]')) b.point = e.target.value;
           // พิมพ์ค้นหา: อัปเดตเฉพาะรายการผลลัพธ์ (ไม่วาดการ์ดใหม่ ช่องพิมพ์ไม่หลุดโฟกัส)
           if (e.target.matches('[data-ppq]')) { b.q = e.target.value; const res = e.target.closest('.field').querySelector('[data-ppres]'); res.innerHTML = ppResults(b.q); res.scrollTop = 0; }
@@ -843,6 +851,7 @@ const Pages = (() => {
             if (!b.open) { b.open = true; renderBlock(b); }
             const el = $(`[data-block="${b.key}"]`, root);
             $$('[data-detail]', el).forEach(inp => { if (!inp.value.trim()) inp.closest('.field').classList.add('invalid'); });
+            $$('[data-qin]', el).forEach(inp => { if (!(parseInt(inp.value) >= 1)) inp.closest('.qty').classList.add('invalid'); });
             return fail(`${titleOf(b, bad)}: ${issueOf(b)}`, $('.field.invalid', el) || el);
           }
           const entries = state.blocks.map(b => ({ location: locOf(b), items: [...b.items.values()].map(v => ({ ...v, detail: String(v.detail || '').trim() })) }));

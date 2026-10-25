@@ -233,6 +233,13 @@ p { margin: 0; }
 .qty button:hover { background: var(--orange-100); }
 .qty input { width: 34px; border: 0; text-align: center; font-weight: 600; background: none; -moz-appearance: textfield; padding: 0; }
 .qty input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.qty.invalid { border-color: #EF4444; box-shadow: 0 0 0 3px rgba(239, 68, 68, .14); }
+/* รายการที่พิมพ์เอง: จำนวน + หน่วย (ไม่บังคับ) */
+.qty-free { display: inline-flex; gap: 6px; }
+.qty-free .input.sm { min-height: 34px; padding: 4px 10px; font-size: .86rem; border-radius: 10px; }
+.qty-free [data-qfree] { width: 74px; -moz-appearance: textfield; }
+.qty-free [data-qfree]::-webkit-inner-spin-button { -webkit-appearance: none; }
+.qty-free [data-ufree] { width: 74px; }
 
 /* การ์ดตัวเลือกแบบวิทยุ */
 .choice-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }

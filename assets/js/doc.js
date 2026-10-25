@@ -78,7 +78,7 @@ const Doc = (() => {
 
   // ───────── เนื้อหา: 1. รายการ 2. สถานที่ 3. อาการ ─────────
   // รายการ/อุปกรณ์: ชื่อรายการ + จำนวนชิ้นท้ายชื่อ (เช่น "หลอดตะเกียบ 3 หลอด") · รวมจำนวน = จำนวนรายการ
-  const itemsText = t => t.items.map(i => i.unit && i.qty ? `${i.name} ${i.qty} ${String(i.unit).split('/')[0]}` : i.name).join(', ');
+  const itemsText = t => t.items.map(i => i.qty ? `${i.name} ${i.qty}${i.unit ? ` ${String(i.unit).split('/')[0]}` : ''}` : i.name).join(', ');
   const symptomsText = t => [
     ...t.items.filter(i => String(i.detail || '').trim()).map(i => t.items.length > 1 ? `${i.name}: ${i.detail}` : i.detail),
     t.note ? `หมายเหตุ: ${t.note}` : ''
