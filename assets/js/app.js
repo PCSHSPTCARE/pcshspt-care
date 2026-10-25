@@ -78,7 +78,7 @@ const App = (() => {
         <div class="dropdown-panel notif-panel ${right ? 'right' : ''}">
           <div class="notif-head"><strong>การแจ้งเตือน</strong>${unread ? '<button class="link small" data-readall>อ่านทั้งหมด</button>' : ''}</div>
           ${list.slice(0, 15).map(n => `
-            <div class="notif ${n.read ? '' : 'unread'}" data-notif="${n.id}" data-ticket="${esc(n.ticketId || '')}" role="button" tabindex="0">
+            <div class="notif ${n.read ? '' : 'unread'} ${n.kind === 'reopen' ? 'is-reopen' : ''}" data-notif="${n.id}" data-ticket="${esc(n.ticketId || '')}" role="button" tabindex="0">
               <div><div class="n-title">${esc(n.title)}</div><div class="n-body">${esc(n.body)}</div><div class="n-time">${UI.ago(n.at)}</div></div>
             </div>`).join('') || '<div class="empty" style="padding:30px">ยังไม่มีการแจ้งเตือน</div>'}
         </div>

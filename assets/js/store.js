@@ -17,7 +17,7 @@ const Store = (() => {
   const STEP2_KEY = 'deputy_general';
   // สถานะที่กดเปลี่ยนได้ (รออนุมัติเป็นสถานะเริ่มต้นเท่านั้น)
   const ACTIONS = ['in_progress', 'review', 'done', 'cannot_fix'];
-  const CONFIG_VERSION = 4;
+  const CONFIG_VERSION = 5;
 
   // ───────── ตัวช่วย ─────────
   const uid = (p = 'id') => p + '_' + Math.random().toString(36).slice(2, 9);
@@ -196,7 +196,7 @@ const Store = (() => {
           subject: 'ขออนุญาตแจ้งซ่อมและบำรุงรักษา ในหอพักนักเรียน',
           notes: ['ให้ผู้ขออนุญาตลงนามและกรอกข้อมูลตามแบบฟอร์มให้ละเอียดชัดเจน นำส่งที่ฝ่ายกิจการนักเรียนและหอพัก', 'ติดต่อประสานงาน นายพิทักษ์  แซ่โง้ว'] }
       },
-      reopenDays: 14,
+      reopenDays: 7,
       configVersion: CONFIG_VERSION,
       banners: seedBanners(),
       notify: { email: true, inApp: true, line: false },
@@ -221,6 +221,7 @@ const Store = (() => {
   // อัปเดตค่าตั้งระบบที่มีอยู่แล้วให้เป็นชุดล่าสุด (ทำครั้งเดียว ข้อมูลที่แอดมินแก้เองไม่หาย)
   // v2: สถานที่แจ้งซ่อมทั่วไปชุดใหม่ + ข้อความตามแบบฟอร์ม "บท00 ขอแจ้งซ่อม" · v3: แถบเหตุฉุกเฉินและประกาศ
   // v4: หน่วยนับของรายการที่จับต้องได้ (ใส่เฉพาะรายการที่ยังไม่มีหน่วย ไม่ทับที่แอดมินตั้งเอง)
+  // v5: แจ้ง "ซ่อมแล้วไม่หาย" ได้ภายใน 7 วัน (เปลี่ยนเฉพาะที่ยังเป็นค่าเดิม 14 วัน)
   function upgradeConfig(d) {
     const v = d.settings.configVersion || 1;
     if (v >= CONFIG_VERSION) return false;
@@ -230,6 +231,7 @@ const Store = (() => {
       const units = new Map(seedCategories().flatMap(c => c.items.filter(i => i.unit).map(i => [`${c.id}|${i.name}`, i.unit])));
       d.categories.forEach(c => (c.items || []).forEach(i => { const u = units.get(`${c.id}|${i.name}`); if (u && !i.unit) i.unit = u; }));
     }
+    if (v < 5 && (!d.settings.reopenDays || d.settings.reopenDays === 14)) d.settings.reopenDays = 7;
     d.settings.configVersion = CONFIG_VERSION;
     return true;
   }
@@ -497,10 +499,10 @@ const Store = (() => {
     if (action === 'edit' || action === 'cancel') return mine && t.status === 'pending';
     // แจ้ง "ยังไม่หาย" ได้ภายในจำนวนวันที่กำหนดหลังเสร็จสิ้น และแจ้งได้ครั้งเดียวต่อใบ
     if (action === 'reopen') return mine && t.status === 'done' && !t.reopenedBy &&
-      (Date.now() - new Date(t.completion?.at || 0)) / 864e5 <= (db.settings.reopenDays || 14);
+      (Date.now() - new Date(t.completion?.at || 0)) / 864e5 <= (db.settings.reopenDays || 7);
     return false;
   }
-  const deadline = t => new Date(new Date(t.completion?.at || 0).getTime() + (db.settings.reopenDays || 14) * 864e5);
+  const deadline = t => new Date(new Date(t.completion?.at || 0).getTime() + (db.settings.reopenDays || 7) * 864e5);
   // คำขอที่ยังเปิดอยู่ในสถานที่เดียวกันและมีรายการซ้ำกัน
   function duplicatesOf(input, exceptId) {
     const room = s => String(s || '').replace(/\s|ห้อง/g, '').toLowerCase();
@@ -511,12 +513,12 @@ const Store = (() => {
       && t.items.some(i => names.has(`${i.catId}|${i.name}`)));
   }
 
-  function notify(d, emails, title, body, ticketId) {
+  function notify(d, emails, title, body, ticketId, kind = '') {
     const seen = new Set();
     for (const to of emails) {
       if (!to || seen.has(to)) continue;
       seen.add(to);
-      d.notifications.push({ id: uid('n'), to, at: nowISO(), title, body, ticketId, read: false });
+      d.notifications.push({ id: uid('n'), to, at: nowISO(), title, body, ticketId, read: false, ...(kind ? { kind } : {}) });
     }
     if (d.notifications.length > 400) d.notifications = d.notifications.slice(-400);
   }
@@ -540,9 +542,11 @@ const Store = (() => {
     };
     d.tickets.push(t);
     notify(d, d.users.filter(u => u.active && isStaff(u) && formsOf(u).includes(t.formType)).map(u => u.email),
-      extra.reopenOf ? 'แจ้งซ้ำ: ซ่อมแล้วยังไม่หาย' : 'มีการแจ้งซ่อมใหม่', `${t.id} · ${t.location.locationName}`, t.id);
+      extra.reopenOf ? REOPEN_TITLE : 'มีการแจ้งซ่อมใหม่', extra.reopenOf ? reopenBody(t) : `${t.id} · ${t.location.locationName}`, t.id, extra.reopenOf ? 'reopen' : '');
     return t;
   }
+  const REOPEN_TITLE = '🚨 ซ่อมแล้วไม่หาย';
+  const reopenBody = t => `${t.id} ← ใบเดิม ${t.reopenOf}${t.reopenCount > 1 ? ` (ครั้งที่ ${t.reopenCount})` : ''} · ${t.location.locationName}`;
 
   // ───────── API ─────────
   return {
@@ -779,17 +783,20 @@ const Store = (() => {
       return t;
     },
 
-    // "ยังไม่หาย / เสียอีก" หลังเสร็จสิ้น → สร้างใบใหม่ที่อ้างอิงใบเดิม
-    async reopenTicket(id, detail) {
+    // "ยังไม่หาย / เสียอีก" หลังเสร็จสิ้น → สร้างใบใหม่ที่อ้างอิงใบเดิม (แนบรูปได้ · เก็บสรุปการซ่อมครั้งก่อนไว้ในใบใหม่)
+    async reopenTicket(id, detail, photos = []) {
       const me = currentUser();
-      if (!can(me, 'reopen', db.tickets.find(t => t.id === id))) throw new Error(`แจ้ง "ยังไม่หาย" ได้ภายใน ${db.settings.reopenDays || 14} วันหลังซ่อมเสร็จ`);
+      if (!can(me, 'reopen', db.tickets.find(t => t.id === id))) throw new Error(`แจ้ง "ยังไม่หาย" ได้ภายใน ${db.settings.reopenDays || 7} วันหลังซ่อมเสร็จ`);
       if (!String(detail || '').trim()) throw new Error('กรุณาระบุอาการที่ยังพบ');
-      if (CLOUD) await Cloud.reserve(1);
+      if (CLOUD) { photos = await Cloud.upload(photos); await Cloud.reserve(1); }
       const t = commit(d => {
         const old = d.tickets.find(x => x.id === id);
         const user = d.users.find(u => u.email === me.email);
-        const items = old.items.map(i => ({ ...i, detail: `ยังไม่หาย: ${detail}` }));
-        const t = newTicket(d, { formType: old.formType, location: old.location, items, note: `แจ้งซ้ำจาก ${old.id} (ซ่อมเสร็จเมื่อ ${new Date(old.completion.at).toLocaleDateString('th-TH')})`, photos: [] }, user, { reopenOf: old.id });
+        // รายการเดิม (ไม่เอารูปเก่ามา) · รูปใหม่ที่แนบอยู่ในรูปประกอบของใบ
+        const items = old.items.map(i => ({ ...i, detail: `ยังไม่หาย: ${detail}`, photos: [] }));
+        const prevRepair = { at: old.completion.at, worker: old.completion.worker || '', note: old.completion.note || '', by: old.completion.by || '' };
+        const t = newTicket(d, { formType: old.formType, location: old.location, items, note: `แจ้งซ้ำจาก ${old.id} (ซ่อมเสร็จเมื่อ ${new Date(old.completion.at).toLocaleDateString('th-TH')})`, photos: photos.slice(0, 3) }, user,
+          { reopenOf: old.id, reopenCount: (old.reopenCount || 0) + 1, reopenDetail: String(detail).trim(), prevRepair });
         old.reopenedBy = t.id;
         old.history.push({ at: nowISO(), by: fullName(user), action: 'แจ้งว่ายังไม่หาย', note: `เปิดใบใหม่ ${t.id} · ${detail}` });
         return t;
@@ -1228,11 +1235,12 @@ const Store = (() => {
         const mine = t.reporter.email === u.email, staff = forms.includes(t.formType) && !mine;
         t.history.forEach((h, i) => {
           if (h.at < from || h.by === myName) return;
-          const title = staff ? (h.action.startsWith('แจ้งซ้ำ') ? 'แจ้งซ้ำ: ซ่อมแล้วยังไม่หาย' : STAFF_EVENTS[h.action])
+          const reopen = staff && h.action.startsWith('แจ้งซ้ำ');
+          const title = staff ? (reopen ? REOPEN_TITLE : STAFF_EVENTS[h.action])
             : mine ? STATUS_TITLE[STATUS_EVENTS[h.action]] : null;
           if (!title) return;
           const id = `${t.id}#${i}`;
-          out.push({ id, to: u.email, at: h.at, title, body: `${t.id} · ${t.location.locationName}`, ticketId: t.id, read: h.at <= readAt || ids.has(id) });
+          out.push({ id, to: u.email, at: h.at, title, body: reopen && t.reopenOf ? reopenBody(t) : `${t.id} · ${t.location.locationName}`, ticketId: t.id, read: h.at <= readAt || ids.has(id), ...(reopen ? { kind: 'reopen' } : {}) });
         });
       }
       return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 50);

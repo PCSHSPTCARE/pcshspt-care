@@ -365,6 +365,38 @@ p { margin: 0; }
 .notif .n-title { font-family: var(--font-display); font-size: .92rem; font-weight: 500; }
 .notif .n-body { font-size: .82rem; color: var(--muted); }
 .notif .n-time { font-size: .75rem; color: var(--faint); }
+.notif.is-reopen { background: #FEF2F2; box-shadow: inset 4px 0 0 #DC2626; }
+.notif.is-reopen .n-title { color: #B91C1C; font-weight: 600; }
+
+/* ───────── ซ่อมแล้วไม่หาย (ใบแจ้งซ้ำ) ───────── */
+.reopen-badge { display: inline-flex; align-items: center; gap: 4px; margin: 3px 0; padding: 2px 9px 2px 7px; border-radius: 999px; background: #DC2626; color: #fff; font: 600 .74rem/1.4 var(--font-display); white-space: nowrap; vertical-align: middle; }
+.reopen-badge .icon { font-size: 12px; }
+.reopen-badge.is-live { animation: rbPulse 1.8s ease-in-out infinite; }
+@keyframes rbPulse { 50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, .22); } }
+.detail-head h2 .reopen-badge { font-size: .8rem; }
+.jobs-table tr.is-reopen > td { background: #FFF5F5; }
+.jobs-table tr.is-reopen > td:first-child { box-shadow: inset 4px 0 0 #DC2626; }
+.queue-item.is-reopen { background: #FFF5F5; box-shadow: inset 4px 0 0 #DC2626; }
+.reopen-filter { color: #B91C1C; font-weight: 500; }
+.reopen-filter .icon { font-size: 14px; }
+.reopen-box { display: flex; gap: 12px; margin-top: 14px; padding: 14px 16px; border-radius: 14px; background: #FEF2F2; color: #7F1D1D; border: 1px solid #FECACA; font-size: .9rem; line-height: 1.6; }
+.reopen-box .rb-ic { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #DC2626; color: #fff; font-size: 18px; }
+.reopen-box strong { color: #991B1B; }
+.reopen-box .link { color: #B91C1C; text-decoration: underline; }
+.reopen-alert { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 18px; background: linear-gradient(135deg, #DC2626, #991B1B); color: #fff; box-shadow: 0 14px 30px -16px rgba(185, 28, 28, .8); }
+.reopen-alert:hover { filter: brightness(1.05); }
+.reopen-alert .ra-ic { flex: none; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: rgba(255, 255, 255, .16); font-size: 20px; animation: rbPulse 1.8s ease-in-out infinite; }
+.reopen-alert strong { display: block; font-family: var(--font-display); font-size: 1rem; }
+.reopen-alert small { display: block; opacity: .85; font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reopen-alert > span:nth-child(2) { flex: 1; min-width: 0; }
+.reopen-alert .ra-go { flex: none; display: inline-flex; align-items: center; gap: 6px; font: 500 .88rem var(--font-display); }
+.reopen-rate { display: flex; align-items: center; gap: 16px; }
+.reopen-rate strong { font: 700 2.4rem/1 var(--font-display); color: var(--navy-800); }
+.reopen-rate strong.bad { color: #DC2626; }
+.reopen-rate strong small { font-size: 1rem; margin-left: 2px; }
+.reopen-rate > span { font-size: .86rem; color: var(--ink-2); }
+@media (prefers-reduced-motion: reduce) { .reopen-badge.is-live, .reopen-alert .ra-ic { animation: none; } }
+@media (max-width: 640px) { .reopen-alert .ra-go { display: none; } }
 .nav-toggle { display: none; }
 
 /* ═══════════ หน้าแรก: รูปโรงเรียนเต็มจอ ไล่สีกรมท่าเข้าหาข้อความด้านซ้าย ═══════════ */

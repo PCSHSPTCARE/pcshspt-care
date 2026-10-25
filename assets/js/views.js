@@ -7,13 +7,35 @@ const Views = (() => {
   const ticketIcon = t => catIcon(t.items[0]?.catId || 'other');
   const itemsTitle = t => t.items.map(i => (i.catId === 'ac' && !i.custom ? 'แอร์ ' : '') + i.name).join(', ') || '-';
   const formChip = k => `<span class="chip chip-form f-${k}">${icon(UI.FORM_ICON[k])}${esc(formShort(k))}</span>`;
+  const jobLink = id => `${location.hash.startsWith('#/admin') ? '#/admin/job/' : '#/ticket/'}${esc(id)}`;
+
+  // ป้ายแดง "ซ่อมแล้วไม่หาย" (ใบที่แจ้งซ้ำ) · ยังไม่ปิดงาน = กะพริบเบา ๆ
+  const reopenBadge = t => t.reopenOf
+    ? `<span class="reopen-badge ${UI.OPEN.includes(t.status) ? 'is-live' : ''}" title="แจ้งซ้ำจากใบ ${esc(t.reopenOf)}">${icon('refresh')}ซ่อมแล้วไม่หาย${t.reopenCount > 1 ? ` · ครั้งที่ ${t.reopenCount}` : ''}</span>` : '';
+
+  // กล่องสรุปการซ่อมครั้งก่อน (แสดงในใบที่แจ้งซ้ำ)
+  function reopenBox(t) {
+    if (!t.reopenOf) return '';
+    const p = t.prevRepair || {};
+    const days = p.at ? Math.max(0, Math.round((new Date(t.createdAt) - new Date(p.at)) / 864e5)) : null;
+    return `
+      <div class="reopen-box">
+        <span class="rb-ic">${icon('alert')}</span>
+        <div style="min-width:0">
+          <strong>ซ่อมแล้วไม่หาย${t.reopenCount > 1 ? ` (แจ้งซ้ำครั้งที่ ${t.reopenCount})` : ''} · ใบเดิม <a class="link" href="${jobLink(t.reopenOf)}">${esc(t.reopenOf)}</a></strong>
+          ${p.at ? `<div>ซ่อมเสร็จครั้งก่อนเมื่อ ${UI.dateTime(p.at)}${days !== null ? ` (${days ? `${days} วันก่อนแจ้งซ้ำ` : 'วันเดียวกับที่แจ้งซ้ำ'})` : ''}${p.worker ? ` · ผู้ปฏิบัติงาน ${esc(p.worker)}` : ''}</div>` : ''}
+          ${p.note ? `<div>สิ่งที่ซ่อมไปครั้งก่อน: ${esc(p.note)}</div>` : ''}
+          ${t.reopenDetail ? `<div>อาการที่ยังพบ: <b>${esc(t.reopenDetail)}</b></div>` : ''}
+        </div>
+      </div>`;
+  }
 
   function ticketCard(t, { href } = {}) {
     return `
       <a class="t-card" href="#${href || '/ticket/' + t.id}">
         <span class="t-ic">${icon(ticketIcon(t))}</span>
         <div class="t-main">
-          <div class="row" style="gap:10px"><span class="t-id">${esc(t.id)}</span>${formChip(t.formType)}</div>
+          <div class="row" style="gap:10px"><span class="t-id">${esc(t.id)}</span>${formChip(t.formType)}${reopenBadge(t)}</div>
           <div class="t-title">${esc(itemsTitle(t))}</div>
           <div class="t-meta">
             <span>${icon('pin')}${esc(UI.locationText(t))}</span>
@@ -70,7 +92,7 @@ const Views = (() => {
             <div><dt>เลขอ้างอิงระบบ</dt><dd>${esc(t.id)}</dd></div>
             <div class="full"><dt>รายการที่แจ้งซ่อมและอาการ (${t.items.length} รายการ)</dt><dd><ol class="item-rows-list">${items}</ol></dd></div>
             ${t.note ? `<div class="full"><dt>หมายเหตุเพิ่มเติม</dt><dd style="font-weight:400">${esc(t.note)}</dd></div>` : ''}
-            ${t.reopenOf ? `<div class="full"><dt>แจ้งซ้ำจากใบเดิม</dt><dd><a class="link" href="#/ticket/${esc(t.reopenOf)}">${esc(t.reopenOf)}</a> (ซ่อมแล้วยังไม่หาย)</dd></div>` : ''}
+            ${t.reopenOf ? `<div class="full"><dt>แจ้งซ้ำจากใบเดิม</dt><dd><a class="link" href="${jobLink(t.reopenOf)}">${esc(t.reopenOf)}</a> (ซ่อมแล้วยังไม่หาย)</dd></div>` : ''}
           </dl>
           ${t.photos?.length ? `<div><div class="label" style="margin-bottom:10px">${icon('camera')}รูปประกอบเพิ่มเติม</div>${photos(t.photos)}</div>` : ''}
           ${t.batchIds?.length > 1 ? `<div class="notice">${icon('layers')}<div>แจ้งพร้อมกัน ${t.batchIds.length} สถานที่: ${t.batchIds.map(id => id === t.id ? `<strong>${esc(id)}</strong>` : `<a class="link" href="${location.hash.startsWith('#/admin') ? '#/admin/job/' : '#/ticket/'}${esc(id)}">${esc(id)}</a>`).join(' · ')}</div></div>` : ''}
@@ -128,11 +150,12 @@ const Views = (() => {
             <span class="t-ic">${icon(ticketIcon(t))}</span>
             <div style="min-width:0;flex:1">
               <div class="small faint">${esc(formName(t.formType))} · แจ้งเมื่อ ${UI.dateTime(t.createdAt)}</div>
-              <h2 style="font-size:1.5rem;font-weight:600;color:var(--navy-800)">${esc(t.id)}</h2>
+              <h2 style="font-size:1.5rem;font-weight:600;color:var(--navy-800)">${esc(t.id)}</h2>${reopenBadge(t)}
             </div>
             ${UI.statusBadge(t.status)}
           </div>
           <p style="margin-top:12px;font-size:1.05rem">${esc(itemsTitle(t))}</p>
+          ${reopenBox(t)}
         </div>
         ${progressSteps(t)}
       </section>`;
@@ -145,5 +168,5 @@ const Views = (() => {
     });
   }
 
-  return { PROGRESS, formName, formShort, formChip, catIcon, ticketIcon, itemsTitle, ticketCard, progressSteps, photos, infoCard, resultCard, historyCard, headCard, bindZoom };
+  return { PROGRESS, reopenBadge, reopenBox, formName, formShort, formChip, catIcon, ticketIcon, itemsTitle, ticketCard, progressSteps, photos, infoCard, resultCard, historyCard, headCard, bindZoom };
 })();

@@ -9,6 +9,8 @@ const Admin = (() => {
 
   const staleDays = () => Math.max(1, +S().staleDays || 7);
   const isStale = t => UI.OPEN.includes(t.status) && (Date.now() - new Date(t.createdAt)) / DAY > staleDays();
+  // ใบแจ้งซ้ำ (ซ่อมแล้วไม่หาย) ที่ยังไม่ปิด → ขึ้นบนสุดของรายการ
+  const urgentReopen = t => (t.reopenOf && UI.OPEN.includes(t.status) ? 1 : 0);
   const finishAt = t => t.completion?.at || t.cannot?.at || null;
   const daysBetween = (a, b) => (new Date(b) - new Date(a)) / DAY;
   const firstAction = t => t.history[1]?.at || null;
@@ -80,6 +82,7 @@ const Admin = (() => {
     return {
       title: 'ภาพรวม', subtitle: `สวัสดี ${Store.fullName(me)} · ${UI.dateLong(new Date().toISOString())}`,
       html: `
+        <div id="ovReopen"></div>
         <div class="kpi-row" id="ovKpi"></div>
         <div class="chart-grid">
           <section class="card span-7"><div class="card-head"><h3>${icon('inbox')}งานรออนุมัติ</h3><a class="link small" href="#/admin/jobs?status=pending">จัดการทั้งหมด ${icon('arrow')}</a></div><div class="card-body" id="queue" style="padding-top:6px"></div></section>
@@ -101,11 +104,16 @@ const Admin = (() => {
             ['รอพิจารณา', 'hourglass', n('review'), '', '?status=review'],
           ];
           $('#ovKpi', root).innerHTML = kpis.map(([l, ic, v, cls, q]) => `<a class="kpi ${cls}" href="#/admin/jobs${q}"><div class="kpi-label">${l}${icon(ic)}</div><div class="kpi-value">${v}<small>รายการ</small></div></a>`).join('');
-          const pending = all.filter(t => t.status === 'pending').sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+          // งานซ่อมแล้วไม่หายที่ยังไม่ปิด → แถบแดงด้านบนสุด
+          const reopenOpen = all.filter(t => t.reopenOf && UI.OPEN.includes(t.status));
+          $('#ovReopen', root).innerHTML = reopenOpen.length ? `<a class="reopen-alert" href="#/admin/jobs?reopen=1">
+            <span class="ra-ic">${icon('refresh')}</span><span><strong>ซ่อมแล้วไม่หาย ${reopenOpen.length} รายการ ที่ยังไม่ปิดงาน</strong>
+            <small>${reopenOpen.slice(0, 3).map(t => `${esc(t.id)} · ${esc(UI.locationText(t))}`).join(' · ')}${reopenOpen.length > 3 ? ' …' : ''}</small></span><span class="ra-go">ดูรายการ ${icon('arrow')}</span></a>` : '';
+          const pending = all.filter(t => t.status === 'pending').sort((a, b) => (urgentReopen(b) - urgentReopen(a)) || a.createdAt.localeCompare(b.createdAt));
           $('#queue', root).innerHTML = pending.length ? pending.slice(0, 8).map(t => `
-            <a class="queue-item" href="#/admin/job/${t.id}">
+            <a class="queue-item ${t.reopenOf ? 'is-reopen' : ''}" href="#/admin/job/${t.id}">
               <span class="t-ic" style="width:44px;height:44px;font-size:20px">${icon(Views.ticketIcon(t))}</span>
-              <div style="flex:1;min-width:0"><div class="row" style="gap:8px"><span class="t-id">${esc(t.id)}</span>${Views.formChip(t.formType)}${isStale(t) ? '<span class="badge tone-red">ค้างนาน</span>' : ''}</div>
+              <div style="flex:1;min-width:0"><div class="row" style="gap:8px"><span class="t-id">${esc(t.id)}</span>${Views.formChip(t.formType)}${Views.reopenBadge(t)}${isStale(t) ? '<span class="badge tone-red">ค้างนาน</span>' : ''}</div>
                 <div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(Views.itemsTitle(t))} · ${esc(UI.locationText(t))}</div></div>
               <span class="small faint nowrap">${UI.ago(t.createdAt)}</span>
             </a>`).join('') : `<div class="empty" style="padding:30px">${icon('checkCircle')}<strong>ไม่มีงานรออนุมัติ</strong></div>`;
@@ -223,7 +231,7 @@ const Admin = (() => {
   function jobs(params) {
     const me = Store.me();
     const myForms = Store.formsOf(me);
-    const state = { form: myForms.includes(params.form) ? params.form : '', status: params.status || '', q: '', cat: '', loc: '', from: '', to: '', sort: 'new', page: 1, stale: false };
+    const state = { form: myForms.includes(params.form) ? params.form : '', status: params.status || '', q: '', cat: '', loc: '', from: '', to: '', sort: 'new', page: 1, stale: false, reopen: params.reopen === '1' };
     const selected = new Set();
     const PER = 20;
     return {
@@ -242,6 +250,7 @@ const Admin = (() => {
               <span class="filter-label">วันที่แจ้ง</span><input type="date" class="input sm" id="from" aria-label="ตั้งแต่"><span class="faint fm-dash">–</span><input type="date" class="input sm" id="to" aria-label="ถึง">
               <select class="select sm" id="sort" aria-label="เรียงลำดับ"><option value="new">ใหม่ล่าสุด</option><option value="old">เก่าสุด</option></select>
               <label class="checkbox small"><input type="checkbox" id="stale"> ค้างเกิน ${staleDays()} วัน</label>
+              <label class="checkbox small reopen-filter"><input type="checkbox" id="reopen" ${state.reopen ? 'checked' : ''}> ${icon('refresh')} แจ้งซ้ำ (ซ่อมแล้วไม่หาย)</label>
               <button type="button" class="link small fm-reset" id="fReset">ล้างตัวกรอง</button>
             </div>
           </div>
@@ -261,6 +270,7 @@ const Admin = (() => {
             if (state.form && t.formType !== state.form) return false;
             if (state.status && t.status !== state.status) return false;
             if (state.stale && !isStale(t)) return false;
+            if (state.reopen && !t.reopenOf) return false;
             if (state.cat && !t.items.some(i => i.catId === state.cat)) return false;
             if (state.loc && t.location.locationName !== state.loc) return false;
             const d = new Date(t.createdAt);
@@ -268,7 +278,7 @@ const Admin = (() => {
             if (to && d >= to) return false;
             if (q && ![t.id, t.reporter.name, Views.itemsTitle(t), UI.locationText(t), UI.detailsText(t)].join(' ').toLowerCase().includes(q)) return false;
             return true;
-          }).sort((a, b) => state.sort === 'old' ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt));
+          }).sort((a, b) => (urgentReopen(b) - urgentReopen(a)) || (state.sort === 'old' ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt)));
         };
         const renderBulk = () => {
           const sel = [...selected].map(id => Store.ticket(id)).filter(Boolean);
@@ -293,7 +303,7 @@ const Admin = (() => {
           const inForm = base.filter(t => !state.form || t.formType === state.form);
           $('#stTabs', root).innerHTML = [['', 'ทั้งหมด', inForm.length], ...UI.STATUS_KEYS.map(k => [k, UI.STATUS[k].label, inForm.filter(t => t.status === k).length])]
             .map(([k, l, n]) => `<button type="button" data-st="${k}" class="${state.status === k ? 'is-active' : ''}">${k ? `<i class="dot" style="color:${UI.STATUS[k].color}"></i>` : ''}<span class="st-long">${l}</span><span class="st-short">${k ? UI.STATUS[k].short : l}</span> <span class="faint">${n}</span></button>`).join('');
-          const nf = ['cat', 'loc', 'from', 'to'].filter(k => state[k]).length + (state.stale ? 1 : 0);
+          const nf = ['cat', 'loc', 'from', 'to'].filter(k => state[k]).length + (state.stale ? 1 : 0) + (state.reopen ? 1 : 0);
           $('#fCount', root).hidden = !nf; $('#fCount', root).textContent = nf;
           const list = filtered();
           for (const id of [...selected]) if (!Store.ticket(id) || !Store.canSee(me, Store.ticket(id))) selected.delete(id);
@@ -303,9 +313,9 @@ const Admin = (() => {
           $('#rows', root).innerHTML = slice.length ? slice.map(t => {
             const acts = Store.ACTIONS.filter(a => Store.can(me, a, t));
             return `
-            <tr class="clickable ${selected.has(t.id) ? 'is-selected' : ''}" data-href="/admin/job/${t.id}">
+            <tr class="clickable ${selected.has(t.id) ? 'is-selected' : ''} ${t.reopenOf ? 'is-reopen' : ''}" data-href="/admin/job/${t.id}">
               <td class="cb-cell"><input type="checkbox" data-sel="${t.id}" ${selected.has(t.id) ? 'checked' : ''} aria-label="เลือก ${esc(t.id)}"></td>
-              <td><div class="id-cell">${esc(t.id)}</div><div class="sub">${UI.dateTime(t.createdAt)}</div>${t.batchIds?.length > 1 ? `<button type="button" class="batch-pill ${t.batchIds.every(id => selected.has(id)) ? 'is-on' : ''}" data-batch="${t.id}" title="แจ้งพร้อมกัน ${t.batchIds.length} สถานที่">${icon('layers')} ชุด ${t.batchIds.length} ใบ · เลือกทั้งชุด</button>` : ''}</td>
+              <td><div class="id-cell">${esc(t.id)}</div>${Views.reopenBadge(t)}<div class="sub">${UI.dateTime(t.createdAt)}</div>${t.batchIds?.length > 1 ? `<button type="button" class="batch-pill ${t.batchIds.every(id => selected.has(id)) ? 'is-on' : ''}" data-batch="${t.id}" title="แจ้งพร้อมกัน ${t.batchIds.length} สถานที่">${icon('layers')} ชุด ${t.batchIds.length} ใบ · เลือกทั้งชุด</button>` : ''}</td>
               <td style="max-width:240px"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(Views.itemsTitle(t))}</div><div class="sub">${Views.formChip(t.formType)}</div></td>
               <td style="max-width:180px"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(UI.locationText(t))}</div></td>
               <td><div class="nowrap">${esc(t.reporter.name)}</div><div class="sub nowrap">${esc(t.reporter.phone || '')}</div></td>
@@ -333,6 +343,7 @@ const Admin = (() => {
         render();
         root.addEventListener('input', e => {
           if (e.target.id === 'stale') { state.stale = e.target.checked; state.page = 1; render(); return; }
+          if (e.target.id === 'reopen') { state.reopen = e.target.checked; state.page = 1; render(); return; }
           if (e.target.id in state) { state[e.target.id] = e.target.value; state.page = 1; render(); }
           // ระบบจริง: ค้นวันที่เก่ากว่าข้อมูลที่โหลดไว้ → โหลดเพิ่ม
           if (e.target.id === 'from' && state.from) Store.ensureRange(state.from).then(c => { if (c && root.isConnected) render(); }).catch(err => UI.toast(err.message, 'error'));
@@ -356,7 +367,8 @@ const Admin = (() => {
             $('#fToggle', root).setAttribute('aria-expanded', open); return;
           }
           if (e.target.closest('#fReset')) {
-            Object.assign(state, { cat: '', loc: '', from: '', to: '', sort: 'new', stale: false, page: 1 });
+            Object.assign(state, { cat: '', loc: '', from: '', to: '', sort: 'new', stale: false, reopen: false, page: 1 });
+            $('#reopen', root).checked = false;
             ['cat', 'loc', 'from', 'to'].forEach(k => { $('#' + k, root).value = ''; });
             $('#sort', root).value = 'new'; $('#stale', root).checked = false;
             render(); return;
@@ -479,6 +491,14 @@ const Admin = (() => {
       depts: countBy(list, t => t.reporter.dept).slice(0, 8),
       cannot: countBy(list.filter(t => t.cannot), t => t.cannot.reason),
       workers: countBy(done, t => t.completion.worker || 'ไม่ระบุ'),
+      // ซ่อมซ้ำ: ใบที่ซ่อมเสร็จแล้วถูกแจ้งว่า "ไม่หาย" (ใบเดิมยังเป็นเสร็จสิ้น จึงนับรวมอยู่ใน done)
+      reopen: (() => {
+        const again = list.filter(t => t.reopenOf);
+        return { n: again.length, open: again.filter(t => UI.OPEN.includes(t.status)).length,
+          rate: done.length ? done.filter(t => t.reopenedBy).length / done.length * 100 : 0,
+          locs: countBy(again, t => `${t.location.locationName}${t.location.room ? ' · ' + t.location.room : ''}`).slice(0, 8),
+          items: countBy(again, t => t.items.map(i => i.name)).slice(0, 8) };
+      })(),
       formTime: Store.FORM_KEYS.map(k => {
         const ts = list.filter(t => t.formType === k), d = ts.filter(t => t.status === 'done');
         return { name: Views.formName(k), n: ts.length, done: d.length, open: ts.filter(t => UI.OPEN.includes(t.status)).length,
@@ -564,7 +584,13 @@ const Admin = (() => {
             <section class="card span-6"><div class="card-head"><h3>${icon('pin')}สถานที่ที่แจ้งซ่อมบ่อย</h3><span class="chart-sub">เสียซ้ำ ≥ 3 ครั้ง ควรพิจารณาปรับปรุง</span></div><div class="card-body">${rankList(st.locs.map(([k, v]) => [k, v, v >= 3 ? '<span class="badge tone-red" style="padding:1px 8px">เสียซ้ำ</span>' : '']), v => `${v} ครั้ง`) || '<p class="small faint">ไม่มีข้อมูล</p>'}</div></section>
             <section class="card span-6"><div class="card-head"><h3>${icon('users')}ฝ่ายงาน / กลุ่มสาระที่แจ้งซ่อม</h3></div><div class="card-body">${rankList(st.depts.map(([k, v]) => [k.replace('กลุ่มสาระการเรียนรู้', 'กลุ่มสาระฯ '), v]), v => `${v} งาน`) || '<p class="small faint">ไม่มีข้อมูล</p>'}</div></section>
             <section class="card span-6"><div class="card-head"><h3>${icon('x')}สาเหตุที่ซ่อมไม่ได้</h3></div><div class="card-body">${rankList(st.cannot, v => `${v} งาน`) || '<p class="small faint">ไม่มีรายการที่ซ่อมไม่ได้</p>'}</div></section>
-            <section class="card span-6"><div class="card-head"><h3>${icon('user')}ผู้ปฏิบัติงาน</h3><span class="chart-sub">จำนวนงานที่ซ่อมเสร็จ</span></div><div class="card-body">${rankList(st.workers, v => `${v} งาน`) || '<p class="small faint">ไม่มีข้อมูล</p>'}</div></section>`;
+            <section class="card span-6"><div class="card-head"><h3>${icon('user')}ผู้ปฏิบัติงาน</h3><span class="chart-sub">จำนวนงานที่ซ่อมเสร็จ</span></div><div class="card-body">${rankList(st.workers, v => `${v} งาน`) || '<p class="small faint">ไม่มีข้อมูล</p>'}</div></section>
+            <section class="card span-6"><div class="card-head"><h3>${icon('refresh')}อัตราซ่อมซ้ำ</h3><span class="chart-sub">ซ่อมเสร็จแล้วถูกแจ้งว่าไม่หาย</span></div><div class="card-body stack">
+              <div class="reopen-rate"><strong class="${st.reopen.rate >= 10 ? 'bad' : ''}">${st.reopen.rate.toFixed(1)}<small>%</small></strong>
+                <span>แจ้งซ้ำ ${st.reopen.n} ครั้ง · ยังไม่ปิด ${st.reopen.open} งาน<br><span class="faint">${st.reopen.rate >= 10 ? 'สูงกว่า 10% ควรตรวจสอบคุณภาพงานซ่อม' : 'ยิ่งต่ำยิ่งดี · เกิน 10% ควรตรวจสอบ'}</span></span></div>
+              <div><div class="label" style="margin-bottom:8px">รายการที่ซ่อมแล้วไม่หายบ่อย</div>${rankList(st.reopen.items, v => `${v} ครั้ง`) || '<p class="small faint">ยังไม่มีการแจ้งซ้ำในช่วงนี้</p>'}</div>
+            </div></section>
+            <section class="card span-6"><div class="card-head"><h3>${icon('pin')}จุดที่เสียซ้ำหลังซ่อม</h3><span class="chart-sub">สถานที่ที่ถูกแจ้งว่าซ่อมแล้วไม่หาย</span></div><div class="card-body">${rankList(st.reopen.locs, v => `${v} ครั้ง`) || '<p class="small faint">ยังไม่มีการแจ้งซ้ำในช่วงนี้</p>'}</div></section>`;
           chart($('#cTrend', root), lineConfig(st.buckets.map(b => b.label), [
             { label: 'แจ้งซ่อม', data: st.buckets.map(b => b.created), color: SERIES[0] },
             { label: 'เสร็จสิ้น', data: st.buckets.map(b => b.done), color: SERIES[1] }
@@ -1027,7 +1053,7 @@ const Admin = (() => {
           <section class="card span-4"><div class="card-head"><h3>${icon('clock')}งานค้าง</h3></div><div class="card-body stack">
             <div class="row" style="gap:12px">ถือว่า "ค้างนาน" เมื่อยังไม่ปิดงานเกิน<input class="input sm" type="number" min="1" id="staleDays" value="${s.staleDays || 7}" style="width:90px">วัน</div>
             <p class="hint">ใช้แสดงป้าย "ค้างนาน" ในรายการงานและนับในสถิติ</p>
-            <div class="row" style="gap:12px">ครูแจ้ง "ยังไม่หาย" ได้ภายใน<input class="input sm" type="number" min="1" id="reopenDays" value="${s.reopenDays || 14}" style="width:90px">วันหลังเสร็จสิ้น</div>
+            <div class="row" style="gap:12px">ครูแจ้ง "ยังไม่หาย" ได้ภายใน<input class="input sm" type="number" min="1" id="reopenDays" value="${s.reopenDays || 7}" style="width:90px">วันหลังเสร็จสิ้น</div>
           </div></section>
           <section class="card span-4"><div class="card-head"><h3>${icon('bell')}การแจ้งเตือน</h3></div><div class="card-body stack">
             <label class="checkbox"><input type="checkbox" id="nEmail" ${s.notify.email ? 'checked' : ''}>อีเมล (เจ้าหน้าที่เมื่อมีงานใหม่ · ครูเมื่อสถานะเปลี่ยน)</label>
@@ -1084,7 +1110,7 @@ const Admin = (() => {
           if (val('bnNoFrom') && val('bnNoTo') && val('bnNoTo') < val('bnNoFrom')) return UI.toast('วันที่สิ้นสุดประกาศต้องไม่ก่อนวันที่เริ่ม', 'error');
           Store.saveSettings({
             schoolName: val('schoolName'), division: val('division'), unit: val('unit'), addressee: val('addressee'), domain: val('domain').replace(/^@/, ''),
-            docPrefix: val('docPrefix'), showRefOnDoc: $('#showRef', root).checked, staleDays: Math.max(1, +val('staleDays') || 7), reopenDays: Math.max(1, +val('reopenDays') || 14),
+            docPrefix: val('docPrefix'), showRefOnDoc: $('#showRef', root).checked, staleDays: Math.max(1, +val('staleDays') || 7), reopenDays: Math.max(1, +val('reopenDays') || 7),
             signatories: Object.fromEntries(Object.keys(s.signatories).map(k => [k, { title: val('sigt_' + k), email: val('sigu_' + k) }])),
             forms: Object.fromEntries(Store.FORM_KEYS.map(k => [k, { ...s.forms[k], enabled: $('#en_' + k, root).checked, name: val('fn_' + k), desc: val('fd_' + k), subject: val('fs_' + k), notes: lines('fx_' + k) }])),
             notify: { ...s.notify, email: $('#nEmail', root).checked, inApp: $('#nApp', root).checked },

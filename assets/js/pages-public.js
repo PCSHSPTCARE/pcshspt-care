@@ -1032,11 +1032,29 @@ const Pages = (() => {
               actions: [{ label: 'ไม่ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'ยืนยันยกเลิก', kind: 'btn-danger', onClick: async api => { await Store.cancelTicket(params.id, $('#why', api.body).value.trim()); UI.toast('ยกเลิกคำขอแล้ว'); } }] });
           }
           if (e.target.closest('[data-reopen]')) {
+            const shots = [];
+            const MAX = 3;
+            const drawShots = body => {
+              $('#rpThumbs', body).innerHTML = shots.map((p, i) => `<figure class="thumb sm"><img src="${p}" alt="รูปที่ ${i + 1}"><button type="button" class="thumb-x" data-rpx="${i}" aria-label="ลบรูปที่ ${i + 1}">${icon('close')}</button></figure>`).join('');
+              $('#rpAdd', body).hidden = shots.length >= MAX;
+            };
             UI.modal({ title: 'แจ้งว่ายังไม่หาย / เสียอีก', subtitle: params.id,
-              body: `<p class="small muted">ระบบจะสร้างใบแจ้งซ่อมใหม่ด้วยรายการและสถานที่เดิม และอ้างอิงใบ ${esc(params.id)}</p>
-                <div class="field"><label for="why">อาการที่ยังพบ <span class="req">*</span></label><textarea class="textarea" id="why" placeholder="เช่น ซ่อมแล้ว 2 วัน ไฟกลับมากะพริบอีก"></textarea></div>`,
+              body: `<p class="small muted">ระบบจะสร้างใบแจ้งซ่อมใหม่ด้วยรายการและสถานที่เดิม อ้างอิงใบ ${esc(params.id)} และแจ้งเตือนเจ้าหน้าที่กับกลุ่มไลน์ทันที</p>
+                <div class="field"><label for="why">อาการที่ยังพบ <span class="req">*</span></label><textarea class="textarea" id="why" placeholder="เช่น ซ่อมแล้ว 2 วัน ไฟกลับมากะพริบอีก"></textarea></div>
+                <div class="field"><label>รูปประกอบ <span class="hint">ไม่บังคับ · สูงสุด ${MAX} รูป</span></label>
+                  <div class="dr-photos"><div class="thumbs-row" id="rpThumbs"></div>
+                    <label class="btn btn-outline btn-sm" id="rpAdd">${icon('camera')} แนบรูป<input type="file" accept="image/*" multiple hidden id="rpFile"></label></div></div>`,
+              onOpen: api => {
+                api.body.addEventListener('change', async ev => {
+                  if (ev.target.id !== 'rpFile') return;
+                  for (const f of [...ev.target.files].slice(0, MAX - shots.length)) shots.push(await UI.compressImage(f));
+                  ev.target.value = '';
+                  drawShots(api.body);
+                });
+                api.body.addEventListener('click', ev => { const x = ev.target.closest('[data-rpx]'); if (x) { shots.splice(+x.dataset.rpx, 1); drawShots(api.body); } });
+              },
               actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'แจ้งซ่อมซ้ำ', kind: 'btn-primary', icon: 'send', onClick: async api => {
-                const t = await Store.reopenTicket(params.id, $('#why', api.body).value.trim());
+                const t = await Store.reopenTicket(params.id, $('#why', api.body).value.trim(), shots);
                 UI.toast(`เปิดใบแจ้งซ่อมใหม่ ${t.id} แล้ว`); App.go('/ticket/' + t.id);
               } }] });
           }
