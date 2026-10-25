@@ -1536,7 +1536,9 @@ p { text-wrap: pretty; }
   .stats { border-radius: 26px; }
   .section { padding-top: 72px; }
   .section:last-of-type { padding-bottom: 72px; }
-  .notif-panel { width: calc(100vw - 32px); }
+  /* กล่องแจ้งเตือน: ยึดกับแถบเมนูทั้งแถบ (ไม่ยึดกับปุ่มกระดิ่ง) จึงกว้างพอดีจอ เว้นขอบซ้ายขวาเท่ากัน */
+  [data-bell] { position: static !important; }
+  .notif-panel, .notif-panel.right { left: 12px; right: 12px; width: auto; min-width: 0; top: calc(100% + 6px); max-height: min(460px, calc(100dvh - var(--nav-h) - 90px)); }
   .topbar { flex-wrap: wrap; row-gap: 10px; }
   .topbar h1 { font-size: 1.12rem; }
   .topbar > .row { order: 3; width: 100%; }
