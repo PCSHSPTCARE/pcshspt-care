@@ -95,6 +95,16 @@ const Pages = (() => {
         </div>
       </section>
 
+      <section class="section mini-sec" aria-labelledby="md-title">
+        <div class="container">
+          <div class="mdash-wrap ${live ? '' : 'is-locked'}">
+            <div class="mdash reveal" id="mdash" ${live ? '' : 'aria-hidden="true"'}>${mdashHTML(live ? mdashData() : MDASH_DEMO, { animate: true })}</div>
+            ${live ? '' : `<div class="md-lock"><span class="md-lock-ic">${icon('shield')}</span><strong>สถานะงานซ่อมแบบเรียลไทม์</strong>
+              <p>เข้าสู่ระบบด้วยบัญชีโรงเรียน เพื่อดูความเคลื่อนไหวงานซ่อมล่าสุด</p><a class="btn btn-primary" href="#/login">${icon('google')} เข้าสู่ระบบเพื่อดูสถานะสด</a></div>`}
+          </div>
+        </div>
+      </section>
+
       <section class="section" aria-labelledby="cat-title">
         <div class="container">
           <div class="section-title reveal">
@@ -107,16 +117,6 @@ const Pages = (() => {
                 <span class="cat-ic">${icon(c.icon)}</span>
                 <span><strong>${esc(c.name)}</strong><small>${c.freeOnly ? 'ระบุรายการเอง' : `${c.items.length} รายการ`}</small></span>
               </a>`).join('')}
-          </div>
-        </div>
-      </section>
-
-      <section class="section mini-sec" aria-labelledby="md-title">
-        <div class="container">
-          <div class="mdash-wrap ${live ? '' : 'is-locked'}">
-            <div class="mdash reveal" id="mdash" ${live ? '' : 'aria-hidden="true"'}>${mdashHTML(live ? mdashData() : MDASH_DEMO, { animate: true })}</div>
-            ${live ? '' : `<div class="md-lock"><span class="md-lock-ic">${icon('shield')}</span><strong>สถานะงานซ่อมแบบเรียลไทม์</strong>
-              <p>เข้าสู่ระบบด้วยบัญชีโรงเรียน เพื่อดูความเคลื่อนไหวงานซ่อมล่าสุด</p><a class="btn btn-primary" href="#/login">${icon('google')} เข้าสู่ระบบเพื่อดูสถานะสด</a></div>`}
           </div>
         </div>
       </section>
@@ -158,7 +158,7 @@ const Pages = (() => {
         // เวลา "x นาทีที่แล้ว" ให้ขยับตาม (ไม่เล่นแอนิเมชันซ้ำ)
         // ป้าย NEW ครบ 1 ชั่วโมง → เอาออก
         const timer = setInterval(() => {
-          last.feed.forEach(f => { const el = box.querySelector(`[data-ago="${f.key}"]`); if (el) el.textContent = UI.ago(f.at); });
+          last.feed.forEach(f => { const el = box.querySelector(`[data-ago="${f.key}"]`); if (el) el.innerHTML = agoHTML(f.at); });
           box.querySelectorAll('.has-new').forEach(li => { if (Date.now() >= +li.dataset.newUntil) { li.classList.remove('has-new'); li.querySelector('.md-new')?.remove(); } });
         }, 30000);
         App.onCleanup(() => clearInterval(timer));
@@ -210,6 +210,12 @@ const Pages = (() => {
   const MD_FEED = {
     'แจ้งซ่อม': ['pending', 'inbox', 'แจ้งใหม่'], 'กำลังดำเนินการซ่อม': ['in_progress', 'wrench', 'เริ่มซ่อม'],
     'รอพิจารณา': ['review', 'hourglass', 'รอพิจารณา'], 'เสร็จสิ้น': ['done', 'checkCircle', 'ซ่อมเสร็จ'], 'ไม่สามารถซ่อมได้': ['cannot_fix', 'x', 'ซ่อมไม่ได้']
+  };
+  // เวลาที่ผ่านมา: แบบเต็ม (จอใหญ่) + แบบย่อ "20 ชม." (มือถือ) ซ่อน/แสดงด้วย CSS
+  const agoHTML = iso => {
+    const full = UI.ago(iso);
+    const short = full.replace('ชั่วโมงที่แล้ว', 'ชม.').replace('นาทีที่แล้ว', 'นาที').replace('วันที่แล้ว', 'วัน');
+    return `<span class="ago-l">${full}</span><span class="ago-s">${short}</span>`;
   };
   const MD_NEW_MS = 60 * 6e4;   // ป้าย NEW บนรายการ "แจ้งใหม่" แสดง 1 ชั่วโมง แล้วหายเอง
   const dayKey = d => { const x = new Date(d); return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`; };
@@ -294,7 +300,7 @@ const Pages = (() => {
             <li class="md-item ${fresh.has(f.key) ? 'is-new' : ''} ${f.newUntil ? 'has-new' : ''}" ${f.newUntil ? `data-new-until="${f.newUntil}"` : ''} style="--c:${UI.STATUS[f.st].color};--i:${i}">
               <span class="md-ic">${icon(f.ic)}</span>
               <span class="md-txt"><b>#${esc(f.no)} ${esc(f.label)}${f.newUntil ? '<span class="md-new"><i></i>NEW</span>' : ''}</b><small>${esc(f.where)}</small></span>
-              <time data-ago="${esc(f.key)}">${UI.ago(f.at)}</time>
+              <time data-ago="${esc(f.key)}">${agoHTML(f.at)}</time>
             </li>`).join('') || `<li class="md-empty">ยังไม่มีความเคลื่อนไหว</li>`}
         </ol>
       </div>`;

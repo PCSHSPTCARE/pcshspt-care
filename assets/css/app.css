@@ -1248,6 +1248,8 @@ a.eb-call:hover { background: #FEF2F2; }
 .md-txt b { font: 600 .9rem var(--font-display); color: var(--navy-800); }
 .md-txt small { font-size: .8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .md-item time { flex: none; font-size: .74rem; color: var(--faint); white-space: nowrap; }
+.md-item time .ago-s { display: none; }
+.mini-sec { padding-top: 64px; }
 .md-item.is-new { animation: mdNew 1.8s ease-out; }
 @keyframes mdNew { 0% { transform: translateY(-14px); opacity: 0; background: color-mix(in srgb, var(--c) 30%, #fff); } 25% { transform: none; opacity: 1; } 100% { background: var(--card); } }
 .md-empty { padding: 30px; text-align: center; color: var(--faint); }
@@ -1278,7 +1280,8 @@ a.eb-call:hover { background: #FEF2F2; }
   .hero .hw { animation: none !important; }
 }
 @media (max-width: 900px) {
-  .md-body { grid-template-columns: 1fr; }
+  /* minmax(0, …) = กล่องกว้างไม่เกินจอ แม้ชื่อสถานที่ยาว (ข้อความยาวตัดเป็น …) */
+  .md-body { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
   .mdash { padding: 18px 14px 16px; border-radius: 22px; }
@@ -1406,7 +1409,14 @@ p { text-wrap: pretty; }
 @media (max-width: 1180px) {
   .nav-toggle { display: inline-grid; }
   .hero-shade::after { display: none; }
-  .services-grid > .svc:nth-child(3) { grid-column: 1 / -1; }
+  /* iPad: 3 การ์ดเมนูบรรทัดเดียว แบบกระชับ (ซ่อนป้ายหมวด) */
+  .services-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 14px; }
+  .svc { padding: 22px 20px 20px; gap: 10px; }
+  .svc-chips { display: none; }
+  .svc-icon { width: 50px; height: 50px; font-size: 23px; border-radius: 15px; }
+  .svc-no { font-size: 1.9rem; }
+  .svc h3 { font-size: 1.12rem; }
+  .svc p { font-size: .86rem; line-height: 1.55; }
   .menu {
     position: absolute; top: var(--nav-h); left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 2px; margin: 0;
     padding: 12px 16px 20px; background: #fff; border-bottom: 1px solid var(--line); box-shadow: 0 24px 40px -24px rgba(16, 19, 58, .35); display: none;
@@ -1420,7 +1430,7 @@ p { text-wrap: pretty; }
   .menu .dropdown[data-open="true"] > .dropdown-panel { display: block; }
   .nav-actions { margin-left: auto; }
   .nav-actions + .nav-toggle { margin-left: 0; }
-  .services-grid, .type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cat-grid, .channel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stats-grid, .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kanban { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1475,16 +1485,11 @@ p { text-wrap: pretty; }
   .nav-actions { gap: 6px; margin-left: 0; }
   .nav-actions .btn-sm { padding: 9px 13px; font-size: .86rem; }
   .nav .icon-btn { width: 40px; height: 40px; border-radius: 12px; }
-  /* หน้าแรกบนมือถือ: การ์ดประเภทงานแบบกระชับ */
-  .services { margin-top: -96px; }
-  .services-grid { gap: 12px; }
-  .svc { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 16px 18px; border-radius: 20px; }
-  .svc::before, .svc::after, .svc-no, .svc-chips { display: none; }
-  .svc-top { order: 0; }
-  .svc-icon { width: 48px; height: 48px; font-size: 22px; border-radius: 14px; }
-  .svc h3 { margin: 0; font-size: 1.08rem; flex: 1; min-width: 0; }
-  .svc p { order: 3; flex-basis: 100%; font-size: .88rem; line-height: 1.5; }
-  .svc-more { order: 4; margin: 0; padding: 0; font-size: .9rem; }
+  /* หน้าแรกบนมือถือ: ไม่แสดงการ์ดเมนู (มีปุ่มบนหัวเว็บแล้ว) · มินิแดชบอร์ดขึ้นมาลอยทับขอบล่างของรูปแทน */
+  .services { display: none; }
+  .section.mini-sec { position: relative; z-index: 5; margin-top: -96px; padding-top: 0; }
+  .md-item time .ago-l { display: none; }
+  .md-item time .ago-s { display: inline; }
   /* สถิติหน้าแรกบนมือถือ: ตาราง 2×2 กระชับ */
   .stats { padding: 24px 18px; }
   .stats h2 { font-size: 1.3rem; }
