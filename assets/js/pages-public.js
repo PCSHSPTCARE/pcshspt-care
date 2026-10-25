@@ -48,11 +48,13 @@ const Pages = (() => {
       <section class="hero" aria-labelledby="hero-title">
         <img class="hero-bg" src="images/school-hero.jpg" alt="อาคารเรียน${esc(s.schoolName)}" fetchpriority="high">
         <div class="hero-shade" aria-hidden="true"></div>
+        <div class="hero-float" aria-hidden="true">${HERO_FLOAT.map(([ic, x, y, size, dur, delay], i) =>
+          `<span class="hf hf-${i}" style="left:${x}%;top:${y}%;--s:${size}px;--d:${dur}s;--dl:${delay}s">${icon(ic)}</span>`).join('')}</div>
         <div class="container hero-inner">
           <div class="hero-content rise">
             ${noticeHTML()}
             <span class="eyebrow">${esc(s.division)}</span>
-            <h1 id="hero-title"><span class="h1-a">แผนกแจ้งซ่อม</span><span class="h1-b">อาคารและสถานที่</span></h1>
+            <h1 id="hero-title" class="split" aria-label="แผนกแจ้งซ่อม อาคารและสถานที่">${heroWords([['แผนก', 'แจ้ง', 'ซ่อม'], ['อาคาร', 'และ', 'สถานที่']])}</h1>
             <p class="hero-lead"><span class="nw">แจ้งซ่อมอาคาร ห้องเรียน หอพัก</span> <span class="nw">ไฟฟ้า ประปา และเครื่องปรับอากาศ</span> <span class="nw">ได้ในที่เดียว</span> <span class="nw">ติดตามความคืบหน้าได้ทุกขั้นตอน</span></p>
             <div class="hero-actions">
               <a class="btn btn-primary btn-lg hb-report" href="#/report">${icon('wrench')} แจ้งซ่อม</a>
@@ -121,6 +123,18 @@ const Pages = (() => {
       `,
       mount(root) {
         UI.reveal(root);
+        // หัวเรื่องบรรทัดทอง: ไล่สีต่อเนื่องข้ามคำ (แต่ละคำรู้ตำแหน่งของตัวเองในบรรทัด) ให้แสงวิ่งผ่านเป็นเส้นเดียว
+        const goldLine = $('.hero .h1-b', root);
+        if (goldLine) {
+          const place = () => {
+            goldLine.style.setProperty('--w', `${goldLine.clientWidth}px`);
+            goldLine.querySelectorAll('.hw').forEach(w => w.style.setProperty('--x', `${w.offsetLeft}px`));
+          };
+          place();
+          document.fonts?.ready.then(place);
+          window.addEventListener('resize', place);
+          App.onCleanup(() => window.removeEventListener('resize', place));
+        }
         // ปิดแถบประกาศ (จำไว้ในเครื่อง ประกาศเดิมไม่เด้งซ้ำ ประกาศใหม่จะแสดงอีกครั้ง)
         $('[data-notice-close]', root)?.addEventListener('click', e => {
           try { localStorage.setItem(NOTICE_KEY, e.currentTarget.dataset.noticeClose); } catch (err) { /* ignore */ }
@@ -142,11 +156,26 @@ const Pages = (() => {
         };
         App.onCleanup(Store.subscribe(() => draw()));
         // เวลา "x นาทีที่แล้ว" ให้ขยับตาม (ไม่เล่นแอนิเมชันซ้ำ)
-        const timer = setInterval(() => { last.feed.forEach(f => { const el = box.querySelector(`[data-ago="${f.key}"]`); if (el) el.textContent = UI.ago(f.at); }); }, 30000);
+        // ป้าย NEW ครบ 1 ชั่วโมง → เอาออก
+        const timer = setInterval(() => {
+          last.feed.forEach(f => { const el = box.querySelector(`[data-ago="${f.key}"]`); if (el) el.textContent = UI.ago(f.at); });
+          box.querySelectorAll('.has-new').forEach(li => { if (Date.now() >= +li.dataset.newUntil) { li.classList.remove('has-new'); li.querySelector('.md-new')?.remove(); } });
+        }, 30000);
         App.onCleanup(() => clearInterval(timer));
       }
     };
   }
+
+  // หัวเรื่องหน้าแรก: แยกเป็นคำ ให้ลอยขึ้นทีละคำ (แยกคำเองตามความหมาย ภาษาไทยไม่มีช่องว่าง)
+  function heroWords(lines) {
+    let i = 0;
+    return lines.map((words, n) => `<span class="h1-${n ? 'b' : 'a'}" aria-hidden="true">${words.map(w => `<span class="hw" style="--i:${i++}">${w}</span>`).join('')}</span>`).join('');
+  }
+  // ไอคอนงานช่างลายเส้นที่ลอยอยู่บนพื้นหลังหน้าแรก: [ไอคอน, ซ้าย %, บน %, ขนาด px, รอบลอย วินาที, หน่วงเริ่ม]
+  const HERO_FLOAT = [
+    ['wrench', 62, 20, 58, 9, 0], ['zap', 86, 14, 46, 7.5, -2], ['droplet', 74, 46, 40, 8.5, -4],
+    ['aircon', 90, 52, 54, 10, -1], ['hammer', 56, 62, 44, 9.5, -3], ['window', 80, 76, 38, 8, -5], ['speaker', 95, 32, 34, 11, -6]
+  ];
 
   // ไอคอนเส้นชีพจรที่วาดตัวเองวนซ้ำ (เส้นจางเป็นพื้น + เส้นที่กำลังวาดทับ)
   function pulseIcon() {
@@ -182,6 +211,7 @@ const Pages = (() => {
     'แจ้งซ่อม': ['pending', 'inbox', 'แจ้งใหม่'], 'กำลังดำเนินการซ่อม': ['in_progress', 'wrench', 'เริ่มซ่อม'],
     'รอพิจารณา': ['review', 'hourglass', 'รอพิจารณา'], 'เสร็จสิ้น': ['done', 'checkCircle', 'ซ่อมเสร็จ'], 'ไม่สามารถซ่อมได้': ['cannot_fix', 'x', 'ซ่อมไม่ได้']
   };
+  const MD_NEW_MS = 60 * 6e4;   // ป้าย NEW บนรายการ "แจ้งใหม่" แสดง 1 ชั่วโมง แล้วหายเอง
   const dayKey = d => { const x = new Date(d); return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`; };
   function mdashData() {
     const ts = Store.tickets().filter(t => t.status !== 'cancelled');
@@ -201,7 +231,8 @@ const Pages = (() => {
       .sort((a, b) => b.h.at.localeCompare(a.h.at)).slice(0, 5)
       .map(({ t, h, i }) => {
         const [st, ic, label] = MD_FEED[h.action] || ['pending', 'refresh', 'แจ้งซ้ำ'];
-        return { key: `${t.id}#${i}`, st, ic, label, no: t.id.split('-').pop(), where: UI.locationText({ ...t.location, point: '' }), at: h.at };
+        const newUntil = h.action === 'แจ้งซ่อม' ? new Date(h.at).getTime() + MD_NEW_MS : 0;
+        return { key: `${t.id}#${i}`, st, ic, label, no: t.id.split('-').pop(), where: UI.locationText({ ...t.location, point: '' }), at: h.at, newUntil: newUntil > Date.now() ? newUntil : 0 };
       });
     const sum = summary();
     const kpi = { monthName: sum.monthName, month: sum.month, avg: sum.avgDays === null ? null : sum.avgDays.toFixed(1) };
@@ -215,7 +246,7 @@ const Pages = (() => {
       days: [2, 4, 1, 3, 5, 2, 0, 3, 6, 4, 2, 5, 3, 4].map((n, i) => ({ d: new Date(now - (13 - i) * 864e5), n })),
       feed: [['in_progress', 'wrench', 'เริ่มซ่อม', 'ห้องเรียน ม.4 · ห้อง 402', 2], ['done', 'checkCircle', 'ซ่อมเสร็จ', 'ห้อง Lab เคมี 1', 25],
         ['pending', 'inbox', 'แจ้งใหม่', 'หอ D3 บัวชมพู (ญ) · ล็อค 2', 40], ['review', 'hourglass', 'รอพิจารณา', 'โรงอาหาร', 90], ['done', 'checkCircle', 'ซ่อมเสร็จ', 'หอสมุด · ชั้น 2', 180]]
-        .map(([st, ic, label, where, ago], i) => ({ key: 'demo' + i, st, ic, label, no: String(80 - i).padStart(4, '0'), where, at: new Date(now - ago * m).toISOString() })),
+        .map(([st, ic, label, where, ago], i) => ({ key: 'demo' + i, st, ic, label, no: String(80 - i).padStart(4, '0'), where, at: new Date(now - ago * m).toISOString(), newUntil: label === 'แจ้งใหม่' ? now + MD_NEW_MS : 0 })),
       kpi: { monthName: UI.TH_MONTHS[new Date().getMonth()], month: 34, avg: '2.4' },
       sig: 'demo'
     };
@@ -237,9 +268,16 @@ const Pages = (() => {
             ${MD_COLS.map(([k, label], i) => {
               const n = d.counts[k], off = (C * (1 - n / total)).toFixed(1);
               const bump = prev && prev[k] !== n;
+              // ตัวเลขเปลี่ยน → หมุนแบบมิเตอร์ (ขึ้น: เลขใหม่เลื่อนขึ้นจากล่าง · ลง: เลื่อนลงจากบน)
+              const num = animate ? `<strong data-count="${n}">0</strong>`
+                : bump ? `<strong class="md-odo ${n > prev[k] ? 'up' : 'down'}" aria-label="${n}"><span>${n > prev[k] ? `<b>${prev[k]}</b><b>${n}</b>` : `<b>${n}</b><b>${prev[k]}</b>`}</span></strong>`
+                : `<strong>${n}</strong>`;
+              // ดาวหางวิ่งรอบวง: หาง 2 ช่วง (จาง → เข้ม) + หัวสีสถานะมีแกนขาว
+              const comet = [['cmt t1', 0], ['cmt t2', -14], ['cmt hd', -28], ['cmt core', -28]]
+                .map(([c, o]) => `<circle cx="32" cy="32" r="26" class="${c}" style="--o:${o}"/>`).join('');
               return `<div class="md-tile ${bump ? 'bump' : ''}" style="--c:${UI.STATUS[k].color};--i:${i}">
-                <svg class="md-ring" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" class="trk"/><circle cx="32" cy="32" r="26" class="val" style="stroke-dasharray:${C.toFixed(1)};--off:${off}"/></svg>
-                <strong ${animate ? `data-count="${n}"` : ''}>${animate ? 0 : n}</strong><span>${label}</span></div>`;
+                <svg class="md-ring" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" class="trk"/><circle cx="32" cy="32" r="26" class="val" style="stroke-dasharray:${C.toFixed(1)};--off:${off}"/>${comet}</svg>
+                ${num}<span>${label}</span></div>`;
             }).join('')}
           </div>
           <div class="md-spark" aria-label="จำนวนแจ้งซ่อม 14 วันล่าสุด">
@@ -253,9 +291,9 @@ const Pages = (() => {
         </div>
         <ol class="md-feed">
           ${d.feed.map((f, i) => `
-            <li class="md-item ${fresh.has(f.key) ? 'is-new' : ''}" style="--c:${UI.STATUS[f.st].color};--i:${i}">
+            <li class="md-item ${fresh.has(f.key) ? 'is-new' : ''} ${f.newUntil ? 'has-new' : ''}" ${f.newUntil ? `data-new-until="${f.newUntil}"` : ''} style="--c:${UI.STATUS[f.st].color};--i:${i}">
               <span class="md-ic">${icon(f.ic)}</span>
-              <span class="md-txt"><b>#${esc(f.no)} ${esc(f.label)}</b><small>${esc(f.where)}</small></span>
+              <span class="md-txt"><b>#${esc(f.no)} ${esc(f.label)}${f.newUntil ? '<span class="md-new"><i></i>NEW</span>' : ''}</b><small>${esc(f.where)}</small></span>
               <time data-ago="${esc(f.key)}">${UI.ago(f.at)}</time>
             </li>`).join('') || `<li class="md-empty">ยังไม่มีความเคลื่อนไหว</li>`}
         </ol>
