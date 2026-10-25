@@ -120,7 +120,6 @@ const App = (() => {
               <div><strong>${esc(s.unit)}</strong><span>${esc(s.division)}<br><span class="fb-school">${esc(s.schoolName)}</span></span></div></div>
             <ul class="footer-links"><li><a href="#/report">แจ้งซ่อม</a></li><li><a href="#/my">ติดตามสถานะ</a></li><li><a href="#/board">แดชบอร์ด</a></li><li><a href="#/contact">ติดต่อเรา</a></li></ul>
           </div>
-          <div class="footer-bottom"><span><span class="line"></span>© ${new Date().getFullYear() + 543} ${esc(s.division)}</span><span>${esc(s.schoolNameEn)}</span></div>
         </div>
       </footer>`;
   }

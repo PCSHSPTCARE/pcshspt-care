@@ -21,7 +21,7 @@ const Pages = (() => {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const finished = t => t.completion?.at || t.cannot?.at;
     const recentDone = tickets.filter(t => t.completion && new Date(t.completion.at) > new Date(Date.now() - 90 * 864e5));
-    const avg = recentDone.length ? recentDone.reduce((s, t) => s + (new Date(t.completion.at) - new Date(t.createdAt)), 0) / recentDone.length / 864e5 : 0;
+    const avg = recentDone.length ? recentDone.reduce((s, t) => s + (new Date(t.completion.at) - new Date(t.createdAt)), 0) / recentDone.length / 864e5 : null;
     return {
       monthName: UI.TH_MONTHS[now.getMonth()],
       month: tickets.filter(t => new Date(t.createdAt) >= monthStart).length,
@@ -40,7 +40,6 @@ const Pages = (() => {
     const sum = summary();
     const forms = Store.FORM_KEYS.filter(k => s.forms[k].enabled);
     const cats = Store.categories();
-    const pct = (a, b) => b ? Math.min(100, Math.round(a / b * 100)) : 0;
     // ระบบจริง: ข้อมูลงานซ่อมเห็นได้เฉพาะผู้ที่เข้าสู่ระบบแล้ว
     const live = !Store.cloud || !!Store.me();
     return {
@@ -119,31 +118,6 @@ const Pages = (() => {
           </div>
         </div>
       </section>
-
-      ${live ? `<section class="section" aria-labelledby="stats-title">
-        <div class="container">
-          <div class="stats reveal">
-            <div class="stats-head">
-              <div><span class="kicker gold">ภาพรวมเดือน${sum.monthName}</span><h2 id="stats-title">สถิติงานซ่อมอาคารและสถานที่</h2></div>
-              <a class="btn btn-ghost" href="#/board"><span class="live-dot"></span> แดชบอร์ดเรียลไทม์ ${icon('arrow')}</a>
-            </div>
-            <div class="stats-grid">
-              <div class="stat"><div class="stat-top">แจ้งซ่อมเดือนนี้ ${icon('inbox')}</div>
-                <div class="stat-value"><span data-count="${sum.month}">0</span><small>รายการ</small></div>
-                <div class="stat-bar"><span style="width:100%"></span></div><div class="stat-foot">ตั้งแต่วันที่ 1 ${sum.monthName}</div></div>
-              <div class="stat"><div class="stat-top">กำลังดำเนินการซ่อม ${icon('wrench')}</div>
-                <div class="stat-value"><span data-count="${sum.working}">0</span><small>รายการ</small></div>
-                <div class="stat-bar"><span style="width:${pct(sum.working, sum.working + sum.pending + sum.review) || 4}%"></span></div><div class="stat-foot">รออนุมัติ ${sum.pending} · รอพิจารณา ${sum.review}</div></div>
-              <div class="stat"><div class="stat-top">เสร็จสิ้นเดือนนี้ ${icon('checkCircle')}</div>
-                <div class="stat-value"><span data-count="${sum.doneMonth}">0</span><small>รายการ</small></div>
-                <div class="stat-bar"><span style="width:${pct(sum.doneMonth, sum.month)}%"></span></div><div class="stat-foot">${pct(sum.doneMonth, sum.month)}% เทียบกับงานที่แจ้งเดือนนี้</div></div>
-              <div class="stat"><div class="stat-top">เวลาซ่อมเฉลี่ย ${icon('clock')}</div>
-                <div class="stat-value"><span data-count="${sum.avgDays.toFixed(1)}" data-decimals="1">0</span><small>วัน</small></div>
-                <div class="stat-bar"><span style="width:${Math.min(100, sum.avgDays / 7 * 100)}%"></span></div><div class="stat-foot">นับจากแจ้งจนซ่อมเสร็จ (90 วันล่าสุด)</div></div>
-            </div>
-          </div>
-        </div>
-      </section>` : ''}
       `,
       mount(root) {
         UI.reveal(root);
@@ -214,7 +188,9 @@ const Pages = (() => {
         const [st, ic, label] = MD_FEED[h.action] || ['pending', 'refresh', 'แจ้งซ้ำ'];
         return { key: `${t.id}#${i}`, st, ic, label, no: t.id.split('-').pop(), where: UI.locationText({ ...t.location, point: '' }), at: h.at };
       });
-    return { counts, days, feed, sig: JSON.stringify([counts, days.map(x => x.n), feed.map(f => f.key)]) };
+    const sum = summary();
+    const kpi = { monthName: sum.monthName, month: sum.month, avg: sum.avgDays === null ? null : sum.avgDays.toFixed(1) };
+    return { counts, days, feed, kpi, sig: JSON.stringify([counts, days.map(x => x.n), feed.map(f => f.key), kpi]) };
   }
   // ข้อมูลตัวอย่างสำหรับผู้ที่ยังไม่เข้าสู่ระบบ (แสดงแบบเบลอ ไม่ใช่ข้อมูลจริง)
   const MDASH_DEMO = (() => {
@@ -225,6 +201,7 @@ const Pages = (() => {
       feed: [['in_progress', 'wrench', 'เริ่มซ่อม', 'ห้องเรียน ม.4 · ห้อง 402', 2], ['done', 'checkCircle', 'ซ่อมเสร็จ', 'ห้อง Lab เคมี 1', 25],
         ['pending', 'inbox', 'แจ้งใหม่', 'หอ D3 บัวชมพู (ญ) · ล็อค 2', 40], ['review', 'hourglass', 'รอพิจารณา', 'โรงอาหาร', 90], ['done', 'checkCircle', 'ซ่อมเสร็จ', 'หอสมุด · ชั้น 2', 180]]
         .map(([st, ic, label, where, ago], i) => ({ key: 'demo' + i, st, ic, label, no: String(80 - i).padStart(4, '0'), where, at: new Date(now - ago * m).toISOString() })),
+      kpi: { monthName: UI.TH_MONTHS[new Date().getMonth()], month: 34, avg: '2.4' },
       sig: 'demo'
     };
   })();
@@ -253,6 +230,10 @@ const Pages = (() => {
           <div class="md-spark" aria-label="จำนวนแจ้งซ่อม 14 วันล่าสุด">
             <div class="md-bars">${d.days.map((x, i) => `<span class="md-bar" style="--h:${Math.max(6, x.n / maxDay * 100)}%;--i:${i}" title="${UI.date(x.d.toISOString())} · ${x.n} งาน"><i></i></span>`).join('')}</div>
             <small>แจ้งซ่อม 14 วันล่าสุด · รวม ${d.days.reduce((a, x) => a + x.n, 0)} งาน</small>
+          </div>
+          <div class="md-kpis">
+            <div class="md-kpi"><span class="md-kpi-ic">${icon('inbox')}</span><span><small>แจ้งซ่อมเดือน${esc(d.kpi.monthName)}</small><b>${d.kpi.month}</b> รายการ</span></div>
+            <div class="md-kpi"><span class="md-kpi-ic">${icon('clock')}</span><span><small>เวลาซ่อมเฉลี่ย (90 วัน)</small>${d.kpi.avg === null ? '<b>–</b> ยังไม่มีงานที่ซ่อมเสร็จ' : `<b>${d.kpi.avg}</b> วัน`}</span></div>
           </div>
         </div>
         <ol class="md-feed">
