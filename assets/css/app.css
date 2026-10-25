@@ -1212,12 +1212,13 @@ a.eb-call:hover { background: #FEF2F2; }
 .md-tile strong { position: absolute; top: 34px; left: 0; right: 0; text-align: center; transform: translateY(-50%); font: 700 1.35rem var(--font-display); color: var(--navy-800); }
 .md-tile > span { margin-top: 4px; font: 500 .82rem var(--font-display); color: color-mix(in srgb, var(--c) 70%, #222); text-align: center; }
 /* ดาวหางวิ่งรอบวง (หาง 2 ช่วง + หัว) · เริ่มคนละจุดในแต่ละวง */
-.md-ring .cmt { stroke: var(--c); stroke-dashoffset: var(--o); animation: mdOrbit 6s linear infinite; animation-delay: calc(var(--i) * -1.5s); }
+.md-ring .cmt-g { transform-box: view-box; transform-origin: 50% 50%; animation: mdOrbit 6s linear infinite; animation-delay: calc(var(--i) * -1.5s); }
+.md-ring .cmt { stroke: var(--c); }
 .md-ring .t1 { stroke-dasharray: 28 135.4; opacity: .16; }
 .md-ring .t2 { stroke-dasharray: 14 149.4; opacity: .35; }
 .md-ring .hd { stroke-dasharray: .01 163.39; stroke-width: 10; }
 .md-ring .core { stroke: #fff; stroke-dasharray: .01 163.39; stroke-width: 4; }
-@keyframes mdOrbit { from { stroke-dashoffset: var(--o); } to { stroke-dashoffset: calc(var(--o) - 163.4); } }
+@keyframes mdOrbit { to { transform: rotate(360deg); } }
 /* ตัวเลขหมุนแบบมิเตอร์เมื่อค่าเปลี่ยน */
 .md-odo { height: 1.25em; line-height: 1.25em; overflow: hidden; }
 .md-odo > span { display: flex; flex-direction: column; }
@@ -1272,7 +1273,7 @@ a.eb-call:hover { background: #FEF2F2; }
   .md-tile, .md-item, .md-ring .val, .md-bar i { transition: none !important; }
   .md-item.is-new, .md-tile.bump, .eb-dot, .hero-notice, .mdash::before, .md-item.has-new, .md-new i, .md-bar:last-child i, .md-odo > span { animation: none !important; }
   .md-odo.up > span { transform: translateY(-50%); }
-  .md-ring .cmt { display: none; }
+  .md-ring .cmt-g { display: none; }
   .hf { animation: none !important; opacity: .55; }
   .hero .hw { animation: none !important; }
 }

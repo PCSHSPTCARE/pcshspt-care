@@ -272,9 +272,9 @@ const Pages = (() => {
               const num = animate ? `<strong data-count="${n}">0</strong>`
                 : bump ? `<strong class="md-odo ${n > prev[k] ? 'up' : 'down'}" aria-label="${n}"><span>${n > prev[k] ? `<b>${prev[k]}</b><b>${n}</b>` : `<b>${n}</b><b>${prev[k]}</b>`}</span></strong>`
                 : `<strong>${n}</strong>`;
-              // ดาวหางวิ่งรอบวง: หาง 2 ช่วง (จาง → เข้ม) + หัวสีสถานะมีแกนขาว
-              const comet = [['cmt t1', 0], ['cmt t2', -14], ['cmt hd', -28], ['cmt core', -28]]
-                .map(([c, o]) => `<circle cx="32" cy="32" r="26" class="${c}" style="--o:${o}"/>`).join('');
+              // ดาวหางวิ่งรอบวง: หาง 2 ช่วง (จาง → เข้ม) + หัวสีสถานะมีแกนขาว · หมุนทั้งกลุ่ม (ใช้ได้ทุกเบราว์เซอร์)
+              const comet = `<g class="cmt-g">${[['t1', 0], ['t2', -14], ['hd', -28], ['core', -28]]
+                .map(([c, o]) => `<circle cx="32" cy="32" r="26" class="cmt ${c}" stroke-dashoffset="${o}"/>`).join('')}</g>`;
               return `<div class="md-tile ${bump ? 'bump' : ''}" style="--c:${UI.STATUS[k].color};--i:${i}">
                 <svg class="md-ring" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" class="trk"/><circle cx="32" cy="32" r="26" class="val" style="stroke-dasharray:${C.toFixed(1)};--off:${off}"/>${comet}</svg>
                 ${num}<span>${label}</span></div>`;
