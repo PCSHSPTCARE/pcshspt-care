@@ -1,32 +1,28 @@
 /* ใบขออนุญาตแจ้งซ่อมและบำรุงรักษา — จัดวางตามแบบฟอร์มของโรงเรียน (บท00 ขอแจ้งซ่อมทั่วไป / หอพัก)
    ทั้งสองแบบใช้โครงเดียวกัน ต่างกันที่ "เรื่อง" และผู้พิจารณาช่องซ้าย (หัวหน้างานอาคารฯ / รอง ผอ.ฝ่ายกิจการนักเรียนและหอพัก)
-   style 'memo' = บันทึกข้อความมีตราครุฑ · 'plain' = หัวกระดาษตราโรงเรียน (ไม่มีตราครุฑ)
-   ตัวเลขทั้งหมดเป็นมิลลิเมตร วัดจากต้นฉบับ (ตำแหน่งบรรทัดหัวเอกสารเป็นจุดกึ่งกลางบรรทัด) */
+   style 'memo' = บันทึกข้อความมีตราครุฑ · 'plain' = หัวกระดาษตราโรงเรียน (ไม่มีตราครุฑ) เนื้อหาเหมือนกัน
+   ตำแหน่งวัดจากไฟล์ "บท00 ขอแจ้งซ่อม… ว่าง.pdf" เป็นมิลลิเมตร (y = กึ่งกลางบรรทัด · ระยะบรรทัด 7.4)
+   กรอกข้อความลงช่องว่างตรง ๆ ไม่มีจุดไข่ปลา · ข้อความยาวเกินช่อง → ย่อตัวอักษรอัตโนมัติ (fit) */
 const Doc = (() => {
+  const LH = 7.4;
   const L = {
-    garuda: [23.5, 2.6, 12.5], title: 13.6, rows: [23, 29.8, 36.4, 50.4], left: 23.5, right: 16.2,
-    rule: [42.5, 23.5, 20.4], date: 103.8, box: [54.4, 23.5, 16.2],
-    sec: { info: 85.2, approve: 50.7, inspect: 76.5 }
+    garuda: [18.8, 5.4, 21], title: 18.4,
+    head: { org: 26.3, no: 33.75, subject: 41.2, rule: 47.8, to: 55.9 },
+    me: 67.6, dept: 74.9, intro: 82.35, items: 89.8, qty: 97.1, place: 104.5, symptom: 111.9, symptomEnd: 136.4,
+    rsign: 141.5, rname: 148.9,
+    ap: { head: 156.3, ok: 163.75, no: 171.1, sign: 186.1, name: 193.5, title: 200.9, top: 153.2, bottom: 205.5 },
+    ins: { head: 216, result: 223.7, sign: 238.5, name: 245.9, date: 253.3 }
   };
+  const DIVIDER = { general: 112.5, dorm: 115 }; // เส้นตั้งคั่นช่องผู้พิจารณา (ช่องซ้ายของหอพักยาวกว่า)
 
   // ───────── ชิ้นส่วนเอกสาร ─────────
-  const val = v => (v === 0 || v) ? `<span>${esc(v)}</span>` : '<span><i class="fe"></i></span>';
-  const F = (v, w) => `<span class="fill" style="width:${w}mm">${val(v)}</span>`;
-  const G = (v, weight = 1, cls = '') => `<span class="fill ${cls}" style="flex:${weight} 1 0">${val(v)}</span>`;
-  const SIG = (img, w) => `<span class="fill sig" style="width:${w}mm"><span><i class="fe"></i></span>${img ? `<img src="${img}" alt="">` : ''}</span>`;
+  const T = (html, x, y) => `<div class="hl" style="left:${x}mm;top:${y}mm">${html}</div>`;
+  const V = (v, x, y, w, align = 'left', bold = false) =>
+    `<div class="fv ${bold ? 'b' : ''}" style="left:${x}mm;top:${y}mm;width:${w}mm;text-align:${align}"><span>${esc(v ?? '')}</span></div>`;
+  const P = (html, x, y, w, lines) => `<div class="fpara" style="left:${x}mm;top:${y - LH / 2}mm;width:${w}mm;height:${lines * LH}mm">${html}</div>`;
+  // ลายเซ็น: วางเหนือเส้นบรรทัด "ลงชื่อ"
+  const SG = (img, x, y, w) => img ? `<img class="fsig" src="${img}" alt="" style="left:${x}mm;top:${y - 9}mm;width:${w}mm">` : '';
   const CB = on => `<span class="cb ${on ? 'on' : ''}"></span>`;
-  // ข้อความหลายบรรทัดบนจุดไข่ปลา (ยาวเกินจำนวนบรรทัด → ย่อตัวอักษรลง ไม่ให้ล้นกรอบ)
-  const MF = (text, lines, lh, cpl = 92) => {
-    const len = String(text || '').length;
-    const scale = len > lines * cpl ? Math.max(.6, (lines * cpl) / len) : 1;
-    return `
-    <div class="mfill" style="--l:${lh}mm;height:${lines * lh}mm">
-      ${Array.from({ length: lines }, (_, i) => `<div class="dots" style="top:${i * lh}mm"></div>`).join('')}
-      <div class="txt" ${scale < 1 ? `style="font-size:${Math.round(scale * 100)}%;line-height:${(lh / scale).toFixed(2)}mm"` : ''}><span class="v">${esc(text || '')}</span></div>
-    </div>`;
-  };
-  const ln = (html, { l, pl, cls = '' } = {}) => `<div class="ln ${cls}" style="${l ? `--l:${l}mm;` : ''}${pl ? `padding-left:${pl}mm;` : ''}">${html}</div>`;
-  const spacer = mm => `<div style="height:${mm}mm"></div>`;
   const GARUDA = () => typeof GARUDA_SRC !== 'undefined' ? GARUDA_SRC : 'images/garuda.png';
 
   function dateParts(iso) {
@@ -41,23 +37,27 @@ const Doc = (() => {
     const s = Store.settings();
     const [no, yr] = String(t.docNo || '').split('/');
     const [dd, mm, yy] = dateParts(t.createdAt);
+    const H = L.head;
     return `
       <img class="garuda" src="${GARUDA()}" alt="" style="left:${L.garuda[0]}mm;top:${L.garuda[1]}mm;height:${L.garuda[2]}mm">
       ${s.showRefOnDoc ? `<div class="ref">อ้างอิงระบบ ${esc(t.id)}</div>` : ''}
       <div class="doc-title" style="top:${L.title}mm">บันทึกข้อความ</div>
-      <div class="hl" style="top:${L.rows[0]}mm;left:${L.left}mm"><b>ส่วนราชการ</b>${esc(s.schoolName)}</div>
-      <div class="hl" style="top:${L.rows[1]}mm;left:${L.left}mm"><b style="margin-right:2mm">ที่</b>${F(no, 9)}/${F(yr, 17)}</div>
-      <div class="hl" style="top:${L.rows[1]}mm;left:${L.date}mm"><b style="margin-right:4.5mm">วันที่</b>${F(dd, 11)}/${F(mm, 25)}/${F(yy, 15)}</div>
-      <div class="hl" style="top:${L.rows[2]}mm;left:${L.left}mm"><b style="margin-right:2.5mm">เรื่อง</b>${esc(subjectOf(t))}</div>
-      <div class="rule" style="top:${L.rule[0]}mm;left:${L.rule[1]}mm;right:${L.rule[2]}mm"></div>
-      <div class="hl" style="top:${L.rows[3]}mm;left:${L.left}mm"><b style="margin-right:3.5mm">เรียน</b>${esc(s.addressee)}</div>`;
+      ${T('<b>ส่วนราชการ</b>', 22.5, H.org)}${V(s.schoolName, 46.5, H.org, 140)}
+      ${T('<b>ที่</b>', 22.5, H.no)}${V(no, 27, H.no, 13, 'center')}${T('/', 40.4, H.no)}${V(yr, 42, H.no, 20)}
+      ${T('<b>วันที่</b>', 98.7, H.no)}${V(dd, 109, H.no, 8, 'center')}${T('/', 117, H.no)}${V(mm, 118.5, H.no, 32, 'center')}${T('/', 151, H.no)}${V(yy, 152.5, H.no, 20)}
+      ${subjectTo(t, s)}`;
   }
+  // เรื่อง · เส้นคั่น · เรียน (ใช้ทั้งแบบมีและไม่มีตราครุฑ)
+  const subjectTo = (t, s) => `
+      ${T('<b>เรื่อง</b>', 22.5, L.head.subject)}${V(subjectOf(t), 30.6, L.head.subject, 152)}
+      <div class="rule" style="top:${L.head.rule}mm;left:23.8mm;width:160mm;border-top-width:.53mm"></div>
+      ${T('<b>เรียน</b>', 22.5, L.head.to)}${V(s.addressee, 31.4, L.head.to, 152)}`;
 
   // ส่วนหัว: ใบแจ้งซ่อม (ไม่มีตราครุฑ) หัวกระดาษตราโรงเรียน
   function plainHeader(t) {
     const s = Store.settings();
     return `
-      <div class="ph-head" style="left:${L.left}mm;right:${L.right}mm">
+      <div class="ph-head" style="left:22.5mm;right:20mm">
         <img class="ph-logo" src="images/logo.png" alt="">
         <div class="ph-title">
           <div class="ph-t1">ใบ${esc(s.forms[t.formType].name)}</div>
@@ -71,102 +71,83 @@ const Doc = (() => {
           <div><span>อ้างอิง</span><b>${esc(t.id)}</b></div>
         </div>
       </div>
-      <div class="ph-rule" style="left:${L.left}mm;right:${L.right}mm"></div>
-      <div class="hl" style="top:${L.rows[3] - 7}mm;left:${L.left}mm"><b style="margin-right:2.5mm">เรื่อง</b>${esc(subjectOf(t))}</div>
-      <div class="hl" style="top:${L.rows[3]}mm;left:${L.left}mm"><b style="margin-right:3.5mm">เรียน</b>${esc(s.addressee)}</div>`;
+      <div class="ph-rule" style="left:22.5mm;right:20mm"></div>
+      ${subjectTo(t, s)}`;
   }
 
-  // ───────── เนื้อหา: 1. รายการ 2. สถานที่ 3. อาการ ─────────
-  // รายการ/อุปกรณ์: ชื่อรายการ + จำนวนชิ้นท้ายชื่อ (เช่น "หลอดตะเกียบ 3 หลอด") · รวมจำนวน = จำนวนรายการ
-  const itemsText = t => t.items.map(i => i.qty ? `${i.name} ${i.qty}${i.unit ? ` ${String(i.unit).split('/')[0]}` : ''}` : i.name).join(', ');
+  // ───────── เนื้อหา: รายการ / รวมจำนวน / สถานที่ / อาการ (ต่อกันไม่เว้นบรรทัด) ─────────
+  // รายการ/อุปกรณ์ = ชื่อรายการ · รวมจำนวน = จำนวนพร้อมหน่วยของแต่ละรายการตามลำดับ (ไม่มีหน่วย/จำนวน = "-")
+  const qtyText = i => i.qty ? `${i.qty}${i.unit ? ` ${String(i.unit).split('/')[0]}` : ''}` : '-';
   const symptomsText = t => [
     ...t.items.filter(i => String(i.detail || '').trim()).map(i => t.items.length > 1 ? `${i.name}: ${i.detail}` : i.detail),
     t.note ? `หมายเหตุ: ${t.note}` : ''
-  ].filter(Boolean).join(' · ');
+  ].filter(Boolean).join('  ');
 
-  function infoSection(t) {
+  function body(t) {
     const r = t.reporter || {};
-    const lh = L.sec.info / 13;
-    const IN = 13; // ระยะย่อหน้ารายการย่อย
+    // ลายเซ็นผู้แจ้ง: ที่บันทึกไว้ตอนแจ้ง หรือจากโปรไฟล์ปัจจุบัน (ใบเก่าก่อนมีระบบลายเซ็นบังคับ)
+    const sig = r.signature || Store.userByEmail(r.email)?.signature || '';
+    const symLines = Math.round((L.symptomEnd - L.symptom) / LH) + 1;
     return `
-      <div class="sec" style="height:${L.sec.info}mm;--l:${lh}mm">
-        ${ln(`ด้วยข้าพเจ้า${G(r.name, 1.25)}ตำแหน่ง${G(r.position, 1)}`)}
-        ${ln(`กลุ่มงาน/กลุ่มสาระฯ${G(r.dept, 1.15)}เบอร์ติดต่อ${G(r.phone, 1)}`)}
-        ${ln('มีความประสงค์ขอแจ้งซ่อมแซม/บำรุงรักษา เนื่องจากตรวจพบการชำรุดหรือขัดข้อง โดยมีรายละเอียดดังนี้')}
-        ${ln('1. รายการที่แจ้งซ่อม')}
-        ${ln(`รายการ/อุปกรณ์${G(itemsText(t), 1, 'left')}`, { pl: IN })}
-        ${ln(`รวมจำนวน${F(t.items.length, 46)}รายการ`, { pl: IN })}
-        ${ln('2. สถานที่')}
-        <div style="padding-left:${IN}mm">${MF(UI.locationText(t), 2, lh, 84)}</div>
-        ${ln('3. ลักษณะการชำรุด/อาการที่พบ')}
-        <div style="padding-left:${IN}mm">${MF(symptomsText(t), 3, lh, 84)}</div>
-      </div>`;
+      ${T('ด้วยข้าพเจ้า', 24.5, L.me)}${V(r.name, 45, L.me, 71, 'center')}
+      ${T('ตำแหน่ง', 117.8, L.me)}${V(r.position, 133, L.me, 58, 'center')}
+      ${T('ฝ่ายงาน/กลุ่มสาระฯ', 24.5, L.dept)}${V(r.dept, 57, L.dept, 71, 'center')}
+      ${T('เบอร์ติดต่อ', 129.8, L.dept)}${V(r.phone, 150, L.dept, 41, 'center')}
+      ${T('มีความประสงค์ขอแจ้งซ่อมแซม/บำรุงรักษา เนื่องจากตรวจพบการชำรุดหรือขัดข้อง โดยมีรายละเอียดดังนี้', 24.5, L.intro)}
+      ${T('รายการ/อุปกรณ์', 37.2, L.items)}${V(t.items.map(i => i.name).join(', '), 65, L.items, 126)}
+      ${T('รวมจำนวน', 37.2, L.qty)}${V(t.items.map(qtyText).join(', '), 57, L.qty, 134)}
+      ${T('สถานที่', 37.2, L.place)}${V(UI.locationText(t), 51.3, L.place, 140)}
+      ${P(`ลักษณะการชำรุด/อาการที่พบ&nbsp;&nbsp;${esc(symptomsText(t))}`, 37.2, L.symptom, 154, symLines)}
+      ${T('ลงชื่อ', 138.8, L.rsign)}${SG(sig, 153.3, L.rsign, 23)}${T('ผู้แจ้ง', 176.9, L.rsign)}
+      ${T('(', 138.8, L.rname)}${V(r.name, 140.3, L.rname, 50, 'center')}${T(')', 191.2, L.rname)}`;
   }
 
-  // ───────── ผู้พิจารณา 2 คอลัมน์ (ลงลายเซ็นอัตโนมัติเมื่อเริ่มดำเนินการ) ─────────
+  // ───────── ผู้พิจารณา 2 คอลัมน์ คั่นด้วยเส้นตั้ง (ลงลายเซ็นอัตโนมัติเมื่อเริ่มดำเนินการ) ─────────
   function approvals(t) {
-    const lh = 6.9; // 7 บรรทัด + ช่องว่างก่อนลายเซ็น = ความสูงช่องพอดี
-
-    const k1 = Store.step1Key(t), k2 = Store.STEP2_KEY;
+    const A = L.ap, d = DIVIDER[t.formType] || DIVIDER.general, rx = d + 2;
+    const lw = d - 22.5, rw = 193 - rx;
     const a1 = t.approvals?.step1, a2 = t.approvals?.step2;
-    const p1 = a1?.by || Store.signer(k1), p2 = a2?.by || Store.signer(k2);
-    const head = title => ln(`<b style="${String(title || '').length > 42 ? 'font-size:91%' : ''}">${esc(title)}</b>`, { l: lh });
-    const sigBlock = (sig, name, title) => `
-      <div class="sigblk">
-        ${ln(`ลงชื่อ${SIG(sig, 44)}`, { l: lh, cls: 'center' })}
-        ${ln(name ? `(${esc(name)})` : `(${F('', 42)})`, { l: lh, cls: 'center' })}
-        ${ln(`<span style="${String(title || '').length > 42 ? 'font-size:91%' : ''}">${esc(title)}</span>`, { l: lh, cls: 'center' })}
-      </div>`;
+    const p1 = a1?.by || Store.signer(Store.step1Key(t)), p2 = a2?.by || Store.signer(Store.STEP2_KEY);
+    const nm = n => n ? `(${n})` : '(                                        )';
     return `
-      <div class="sec two" style="height:${L.sec.approve}mm;padding:0;grid-template-columns:84.9mm 1fr">
-        <div>
-          ${head(p1.title)}
-          ${ln(`${CB(!!a1)}เห็นควรพิจารณาอนุญาตดำเนินการ`, { l: lh })}
-          ${ln(`${CB(false)}ไม่อนุญาต เนื่องจาก`, { l: lh })}
-          ${MF('', 1, lh)}
-          ${spacer(2.4)}
-          ${sigBlock(a1?.by.signature, p1.name, p1.title)}
-        </div>
-        <div>
-          ${head(p2.title)}
-          ${ln('พิจารณา/สั่งการ', { l: lh })}
-          ${MF(a2?.note || '', 2, lh, 44)}
-          ${spacer(2.4)}
-          ${sigBlock(a2?.by.signature, p2.name, p2.title)}
-        </div>
-      </div>`;
+      <div class="vrule" style="left:${d}mm;top:${A.top}mm;height:${A.bottom - A.top}mm"></div>
+      ${V(p1.title, 24.5, A.head, lw - 3, 'left', true)}
+      ${T(`${CB(!!a1)}เห็นควรพิจารณาอนุญาตดำเนินการ`, 25.9, A.ok)}
+      ${T(`${CB(false)}ไม่อนุญาต เนื่องจาก`, 25.9, A.no)}
+      ${T('ลงชื่อ', 49.9, A.sign)}${SG(a1?.by.signature, 61.5, A.sign, 34)}
+      ${V(nm(p1.name), 22.5, A.name, lw, 'center')}
+      ${V(p1.title, 22.5, A.title, lw, 'center')}
+      ${V(p2.title, rx, A.head, rw, 'left', true)}
+      ${T('พิจารณา/สั่งการ', rx, A.ok)}
+      ${P(esc(a2?.note || ''), rx, A.no, rw, 2)}
+      ${T('ลงชื่อ', d + 27.4, A.sign)}${SG(a2?.by.signature, d + 42, A.sign, 34)}
+      ${V(nm(p2.name), rx, A.name, rw, 'center')}
+      ${V(p2.title, rx, A.title, rw, 'center')}`;
   }
 
-  // ───────── ผู้ตรวจงาน: ติ๊กเมื่อปิดงานแล้วเท่านั้น (เสร็จสิ้น / ซ่อมไม่ได้) ─────────
+  // ───────── ผู้ตรวจงาน: ติ๊ก ลงชื่อ และวันที่ เมื่อปิดงานแล้วเท่านั้น (ยังไม่ปิด = เว้นว่าง) ─────────
   function inspection(t) {
-    const lh = 6.6;
-    const insp = t.inspection;
-    const done = t.status === 'done', cannot = t.status === 'cannot_fix';
-    const [dd, mm, yy] = dateParts(insp?.at || t.completion?.at || t.cannot?.at);
-    // บันทึกผลการซ่อมในพื้นที่ว่างของช่อง (เฉพาะงานที่ปิดแล้ว)
-    const remarks = done ? [t.completion?.worker && `ผู้ปฏิบัติงาน: ${t.completion.worker}`, t.completion?.note && `ผลการซ่อม: ${t.completion.note}`]
-      : cannot ? [t.cannot?.reason && `เหตุผลที่ซ่อมไม่ได้: ${t.cannot.reason}`, t.cannot?.note && `รายละเอียด: ${t.cannot.note}`] : [];
-    const rem = remarks.filter(Boolean);
+    const I = L.ins, insp = t.inspection;
+    const done = t.status === 'done', cannot = t.status === 'cannot_fix', closed = done || cannot;
+    const [dd, mm, yy] = closed ? dateParts(insp?.at || t.completion?.at || t.cannot?.at) : ['', '', ''];
     return `
-      <div class="sec" style="height:${L.sec.inspect}mm;--l:${lh}mm">
-        ${ln('<b>ผู้ตรวจงาน</b>')}
-        ${ln(`<b>การดำเนินงาน</b><span class="gap"></span>${CB(done)}เรียบร้อยดี<span class="gap"></span>${CB(false)}ยังไม่แล้วเสร็จ<span class="gap"></span>${CB(cannot)}ไม่สามารถแก้ไขได้<span class="gap"></span>${CB(false)}อื่นๆ${G('', 1, 'left')}`)}
-        <div class="remarks" style="height:33mm;padding:2.5mm 0 0 2mm">${rem.map(x => `<div>${esc(x)}</div>`).join('')}</div>
-        ${ln(`ลงชื่อ${SIG(insp?.by.signature, 48)}ผู้ตรวจงาน`, { pl: 93 })}
-        ${ln(`(${F(insp?.by.name, 50)})`, { pl: 92 })}
-        ${ln(`วันที่${F(dd, 11)}/${F(mm, 22)}/${F(yy, 13)}`, { pl: 92 })}
-      </div>`;
+      ${T('<b>ผู้ตรวจงาน</b>', 24.5, I.head)}
+      ${T('<b>การดำเนินงาน</b>', 24.5, I.result)}
+      ${T(`${CB(done)}เรียบร้อยดี`, 50.3, I.result)}
+      ${T(`${CB(false)}ยังไม่แล้วเสร็จ`, 74.8, I.result)}
+      ${T(`${CB(cannot)}ไม่สามารถแก้ไขได้`, 104.3, I.result)}
+      ${T('ลงชื่อ', 126.1, I.sign)}${closed ? SG(insp?.by.signature, 140.6, I.sign, 23) : ''}${T('ผู้ตรวจงาน', 164.2, I.sign)}
+      ${T('(', 126.1, I.name)}${V(closed ? insp?.by.name : '', 127.6, I.name, 50.5, 'center')}${T(')', 178.4, I.name)}
+      ${T('วันที่', 126.1, I.date)}${V(dd, 136.3, I.date, 5.8, 'center')}${T('/', 142.2, I.date)}${V(mm, 143.6, I.date, 16, 'center')}${T('/', 159.7, I.date)}${V(yy, 161.2, I.date, 14)}`;
   }
 
   function memo(t, style) {
     return `
       <div class="sheet memo ${style}">
         ${style === 'plain' ? plainHeader(t) : memoHeader(t)}
-        <div class="box" style="top:${L.box[0]}mm;left:${L.box[1]}mm;right:${L.box[2]}mm">
-          ${infoSection(t)}
-          ${approvals(t)}
-          ${inspection(t)}
-        </div>
+        ${body(t)}
+        ${approvals(t)}
+        ${inspection(t)}
       </div>`;
   }
 
@@ -200,10 +181,15 @@ const Doc = (() => {
 
   // ย่อตัวอักษรในช่องที่ข้อความยาวเกินจุดไข่ปลา ไม่ให้ล้นกรอบ
   function fit(box) {
-    $$('.fill > span', box).forEach(sp => {
+    $$('.fill > span, .fv > span', box).forEach(sp => {
       sp.style.fontSize = '';
       const room = sp.parentElement.clientWidth, need = sp.offsetWidth;
       if (room > 0 && need > room) sp.style.fontSize = Math.max(55, Math.floor(room / need * 100)) + '%';
+    });
+    // หลายบรรทัด (อาการ / พิจารณาสั่งการ): ยาวเกินช่อง → ย่อตัวอักษรและระยะบรรทัดลงพร้อมกัน
+    $$('.fpara', box).forEach(p => {
+      p.style.fontSize = ''; p.style.lineHeight = '';
+      for (let f = 95; f >= 55 && p.scrollHeight > p.clientHeight + 1; f -= 5) { p.style.fontSize = f + '%'; p.style.lineHeight = (7.4 * Math.max(f, 80) / 100) + 'mm'; }
     });
   }
 
