@@ -1142,7 +1142,9 @@ a.eb-call:hover { background: #FEF2F2; }
 /* ───────── แดชบอร์ดมินิ (หน้าแรก) ───────── */
 .mdash-wrap { position: relative; }
 .mdash { position: relative; overflow: hidden; border-radius: 28px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow-card); padding: 22px 24px 24px; }
-.mdash::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: linear-gradient(90deg, #F59E0B, #EA580C, #4F46E5, #16A34A); }
+/* แถบสีรุ้งด้านบน ไหลวนช้า ๆ (ลายซ้ำ 2 ช่วง เลื่อนไป 1 ช่วงต่อรอบ จึงต่อกันเนียน) */
+.mdash::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: linear-gradient(90deg, #F59E0B, #EA580C, #4F46E5, #16A34A, #F59E0B) 0 0 / 50% 100% repeat-x; animation: mdFlow 8s linear infinite; }
+@keyframes mdFlow { to { background-position: 100% 0; } }
 .md-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 18px; }
 .md-head h2 { margin: 0; font: 600 1.25rem var(--font-display); color: var(--navy-800); }
 .md-live { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #DCFCE7; color: #15803D; font: 600 .72rem var(--font-display); letter-spacing: .12em; }
@@ -1193,7 +1195,7 @@ a.eb-call:hover { background: #FEF2F2; }
 .md-lock p { margin: 0 0 6px; color: var(--ink-2); }
 @media (prefers-reduced-motion: reduce) {
   .md-tile, .md-item, .md-ring .val, .md-bar i { transition: none !important; }
-  .md-item.is-new, .md-tile.bump, .eb-dot, .hero-notice { animation: none !important; }
+  .md-item.is-new, .md-tile.bump, .eb-dot, .hero-notice, .mdash::before { animation: none !important; }
 }
 @media (max-width: 900px) {
   .md-body { grid-template-columns: 1fr; }
