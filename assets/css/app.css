@@ -412,6 +412,25 @@ p { margin: 0; }
 .school small { display: block; font-size: .72em; font-weight: 400; letter-spacing: .04em; color: rgba(255, 255, 255, .62); }
 .hero-lead { margin: 20px 0 0; font-size: 1.12rem; color: rgba(255, 255, 255, .86); max-width: 52ch; line-height: 1.75; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 34px; }
+/* ปุ่มหลักบน hero: เอฟเฟกต์ต่างกันตามหน้าที่ของปุ่ม */
+.hero-actions .btn { position: relative; }
+.hero-actions .btn:hover { transform: translateY(-3px); }
+.hb-report { overflow: hidden; isolation: isolate; animation: hbPulse 4s ease-out infinite; }
+.hb-report::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .5), transparent); transform: skewX(-20deg); animation: hbShine 4s ease-in-out infinite; pointer-events: none; }
+@keyframes hbShine { 0% { left: -60%; } 30%, 100% { left: 130%; } }
+@keyframes hbPulse {
+  0% { box-shadow: 0 10px 24px -10px rgba(217, 86, 26, .7), 0 0 0 0 rgba(249, 115, 22, .6); }
+  50%, 100% { box-shadow: 0 10px 24px -10px rgba(217, 86, 26, .7), 0 0 0 16px rgba(249, 115, 22, 0); }
+}
+.hb-board .hb-trace { opacity: .3; }
+.hb-board .hb-pulse { stroke-dasharray: 1; stroke-dashoffset: 1; animation: hbDraw 3s ease-in-out infinite; }
+@keyframes hbDraw { 0% { stroke-dashoffset: 1; } 45%, 70% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -1; } }
+.hb-badge { position: absolute; top: -8px; right: -4px; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px; background: var(--orange-500); color: #fff; font: 700 .78rem/24px var(--font-display); text-align: center; box-shadow: 0 0 0 3px rgba(16, 19, 58, .55); }
+@media (prefers-reduced-motion: reduce) {
+  .hb-report, .hb-report::after, .hb-board .hb-pulse { animation: none !important; }
+  .hb-report::after { display: none; }
+  .hb-board .hb-pulse { stroke-dashoffset: 0; }
+}
 .hero-live {
   display: inline-flex; flex-wrap: wrap; align-items: center; gap: 10px 0; margin-top: 34px; padding: 12px 6px;
   border-radius: 18px; background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .14);
@@ -1143,7 +1162,7 @@ a.eb-call:hover { background: #FEF2F2; }
 .mdash-wrap { position: relative; }
 .mdash { position: relative; overflow: hidden; border-radius: 28px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow-card); padding: 22px 24px 24px; }
 /* แถบสีรุ้งด้านบน ไหลวนช้า ๆ (ลายซ้ำ 2 ช่วง เลื่อนไป 1 ช่วงต่อรอบ จึงต่อกันเนียน) */
-.mdash::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: linear-gradient(90deg, #F59E0B, #EA580C, #4F46E5, #16A34A, #F59E0B) 0 0 / 50% 100% repeat-x; animation: mdFlow 8s linear infinite; }
+.mdash::before { content: ""; position: absolute; inset: 0 0 auto; height: 7px; background: linear-gradient(90deg, #F59E0B, #EA580C, #4F46E5, #16A34A, #F59E0B) 0 0 / 50% 100% repeat-x; animation: mdFlow 5s linear infinite; }
 @keyframes mdFlow { to { background-position: 100% 0; } }
 .md-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 18px; }
 .md-head h2 { margin: 0; font: 600 1.25rem var(--font-display); color: var(--navy-800); }

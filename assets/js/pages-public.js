@@ -55,9 +55,9 @@ const Pages = (() => {
             <h1 id="hero-title"><span class="h1-a">แผนกแจ้งซ่อม</span><span class="h1-b">อาคารและสถานที่</span></h1>
             <p class="hero-lead"><span class="nw">แจ้งซ่อมอาคาร ห้องเรียน หอพัก</span> <span class="nw">ไฟฟ้า ประปา และเครื่องปรับอากาศ</span> <span class="nw">ได้ในที่เดียว</span> <span class="nw">ติดตามความคืบหน้าได้ทุกขั้นตอน</span></p>
             <div class="hero-actions">
-              <a class="btn btn-primary btn-lg" href="#/report">${icon('wrench')} แจ้งซ่อม</a>
-              <a class="btn btn-ghost btn-lg" href="#/board">${icon('activity')} แดชบอร์ดเรียลไทม์</a>
-              <a class="btn btn-ghost btn-lg" href="#/my">${icon('track')} งานที่ฉันแจ้ง</a>
+              <a class="btn btn-primary btn-lg hb-report" href="#/report">${icon('wrench')} แจ้งซ่อม</a>
+              <a class="btn btn-ghost btn-lg hb-board" href="#/board">${pulseIcon()} แดชบอร์ดเรียลไทม์</a>
+              <a class="btn btn-ghost btn-lg hb-my" href="#/my">${icon('track')} งานที่ฉันแจ้ง${myBadgeHTML()}</a>
             </div>
             ${live ? `<div class="hero-live" aria-label="สถานะงานซ่อมขณะนี้">
               <span class="hl-title"><span class="live-dot" aria-hidden="true"></span>สถานะงานซ่อมขณะนี้</span>
@@ -131,6 +131,8 @@ const Pages = (() => {
         const box = $('#mdash', root);
         let last = mdashData();
         const draw = (force = false) => {
+          const badge = $('.hb-my .hb-badge', root);
+          if (badge) badge.outerHTML = myBadgeHTML(); else $('.hb-my', root)?.insertAdjacentHTML('beforeend', myBadgeHTML());
           const d = mdashData();
           if (!force && d.sig === last.sig) return;
           const seen = new Set(last.feed.map(f => f.key));
@@ -144,6 +146,19 @@ const Pages = (() => {
         App.onCleanup(() => clearInterval(timer));
       }
     };
+  }
+
+  // ไอคอนเส้นชีพจรที่วาดตัวเองวนซ้ำ (เส้นจางเป็นพื้น + เส้นที่กำลังวาดทับ)
+  function pulseIcon() {
+    const svg = icon('activity'), path = svg.match(/<path[^>]*\/>/)[0];
+    return svg.replace(path, path.replace('<path', '<path class="hb-trace"') + path.replace('<path', '<path class="hb-pulse" pathLength="1"'));
+  }
+
+  // ป้ายตัวเลขบนปุ่ม "งานที่ฉันแจ้ง": งานของฉันที่ยังไม่ปิด (รออนุมัติ / กำลังซ่อม / รอพิจารณา)
+  function myBadgeHTML() {
+    const me = Store.me();
+    const n = me ? Store.tickets().filter(t => t.reporter.email === me.email && ['pending', 'in_progress', 'review'].includes(t.status)).length : 0;
+    return n ? `<span class="hb-badge" aria-label="งานค้าง ${n} งาน">${n > 99 ? '99+' : n}</span>` : '';
   }
 
   // ───────── แถบประกาศ (หน้าแรก) ─────────
