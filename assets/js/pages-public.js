@@ -61,13 +61,6 @@ const Pages = (() => {
               <a class="btn btn-ghost btn-lg hb-board" href="#/board">${pulseIcon()} แดชบอร์ดเรียลไทม์</a>
               <a class="btn btn-ghost btn-lg hb-my" href="#/my">${icon('track')} งานที่ฉันแจ้ง${myBadgeHTML()}</a>
             </div>
-            ${live ? `<div class="hero-live" aria-label="สถานะงานซ่อมขณะนี้">
-              <span class="hl-title"><span class="live-dot" aria-hidden="true"></span>สถานะงานซ่อมขณะนี้</span>
-              <span class="hl-stat"><b>${sum.pending}</b>รออนุมัติ</span>
-              <span class="hl-stat"><b>${sum.working}</b>กำลังดำเนินการ</span>
-              <span class="hl-stat"><b>${sum.review}</b>รอพิจารณา</span>
-            </div>` : `<a class="hero-live" href="#/login" style="text-decoration:none">
-              <span class="hl-title"><span class="live-dot" aria-hidden="true"></span>เข้าสู่ระบบด้วยบัญชีโรงเรียน เพื่อดูสถานะงานซ่อมขณะนี้ ${icon('arrow')}</span></a>`}
           </div>
         </div>
       </section>
