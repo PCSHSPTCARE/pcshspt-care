@@ -766,7 +766,7 @@ const Admin = (() => {
                   const rooms = (l.zones || []).reduce((a, z) => a + z.rooms.length, 0);
                   return `<div class="loc-row" style="${l.active === false ? 'opacity:.55' : ''}">
                     <div style="flex:1;min-width:0"><strong>${esc(l.name)}</strong>
-                      <div class="small faint">${rooms ? `${(l.zones || []).filter(z => z.name).length ? `${l.zones.length} กลุ่ม · ` : ''}${rooms} ห้อง` : 'ไม่มีห้องย่อย'} · แจ้งซ่อม ${n(l.id)} ครั้ง</div>
+                      <div class="small faint">${rooms ? `${(l.zones || []).filter(z => z.name).length ? `${l.zones.length} กลุ่ม · ` : ''}${rooms} ห้อง` : 'ไม่มีห้องย่อย'} · แจ้งซ่อม ${n(l.id)} ครั้ง${l.acUnits ? ` · ${icon('aircon')} แอร์ 2 ตัว` : ''}</div>
                       ${l.zones?.length ? `<div class="zone-preview">${l.zones.slice(0, 4).map(z => `<span class="chip">${esc(z.name || 'ห้อง')} ${z.rooms.length > 3 ? `${esc(z.rooms[0])}–${esc(z.rooms.at(-1))}` : esc(z.rooms.join(', '))}</span>`).join('')}${l.zones.length > 4 ? `<span class="chip">+${l.zones.length - 4} กลุ่ม</span>` : ''}</div>` : ''}
                     </div>
                     <label class="checkbox small"><input type="checkbox" data-toggle="${l.id}" ${l.active !== false ? 'checked' : ''}>ใช้งาน</label>
@@ -790,6 +790,7 @@ const Admin = (() => {
               <div class="field"><label for="lz">${l.type === 'dorm' ? 'ล็อคนอน / ชั้น และห้อง' : 'ห้องย่อย'} <span class="faint">(บรรทัดละกลุ่ม · เว้นว่างถ้าไม่มีห้องย่อย)</span></label>
                 <textarea class="textarea" id="lz" style="min-height:190px;font-size:.92rem" placeholder="${l.type === 'dorm' ? 'ส่วนกลาง: ห้อง Study, ห้องประชุม\nล็อค 1: 1/1-1/3\nชั้น 2: 201-211\nห้องพักครู: ชั้น 2, ชั้น 3' : '101-104'}">${esc(zonesText(l.zones))}</textarea>
                 <span class="hint">รูปแบบ <strong>ชื่อกลุ่ม: ห้อง, ห้อง</strong> · พิมพ์ช่วงได้ เช่น 201-211 หรือ 1/1-1/3 · ไม่ต้องมีชื่อกลุ่มก็ได้ เช่น 101-104</span></div>
+              ${l.type === 'building' ? `<label class="checkbox"><input type="checkbox" id="lac" ${l.acUnits ? 'checked' : ''}>มีแอร์ 2 ตัว — ตอนแจ้งซ่อมแอร์ให้ผู้แจ้งเลือก ตัวที่ 1 (ติดกระดาน) / ตัวที่ 2 (ไม่ติดกระดาน) / ทั้ง 2 ตัว</label>` : ''}
               <div id="lzPreview"></div>`,
             onOpen: api => {
               const prev = () => {
@@ -801,7 +802,8 @@ const Admin = (() => {
             actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'บันทึก', kind: 'btn-primary', onClick: api => {
               const name = $('#ln', api.body).value.trim();
               if (!name) throw new Error('กรุณาระบุชื่อ');
-              Store.saveLocation({ ...l, name, group: $('#lg', api.body).value.trim(), zones: parseZones($('#lz', api.body).value) });
+              Store.saveLocation({ ...l, name, group: $('#lg', api.body).value.trim(), zones: parseZones($('#lz', api.body).value),
+                ...(l.type === 'building' ? { acUnits: $('#lac', api.body).checked } : {}) });
               UI.toast('บันทึกสถานที่แล้ว');
             } }] });
         };
@@ -888,7 +890,7 @@ const Admin = (() => {
             actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'บันทึก', kind: 'btn-primary', onClick: api => {
               const v = id => $('#' + id, api.body).value.trim();
               const email = v('em').toLowerCase();
-              if (!email.endsWith('@' + s.domain)) throw new Error(`อีเมลต้องลงท้ายด้วย @${s.domain}`);
+              if (!Store.isSchoolEmail(email)) throw new Error(`อีเมลต้องลงท้ายด้วย ${Store.domains().map(d => '@' + d).join(' หรือ ')}`);
               if (!v('fn') || !v('ln')) throw new Error('กรุณากรอกชื่อและนามสกุล');
               const role = $('input[name=role]:checked', api.body).value;
               const roles = [...new Set([...(role !== 'teacher' ? [role] : []), ...($('#tc', api.body).checked || role === 'teacher' ? ['teacher'] : [])])];
@@ -922,7 +924,7 @@ const Admin = (() => {
               const rows = [], bad = [];
               $('#csv', api.body).value.split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach((line, i) => {
                 const [email, prefix, first, last, position, dept, phone] = line.split(/\t|,/).map(x => (x || '').trim());
-                if (!email?.toLowerCase().endsWith('@' + s.domain) || !first) bad.push(i + 1);
+                if (!email || !Store.isSchoolEmail(email) || !first) bad.push(i + 1);
                 else rows.push({ email: email.toLowerCase(), prefix, first, last, position: position || 'ครู', dept, phone });
               });
               if (!rows.length) throw new Error('ไม่พบข้อมูลที่ถูกต้อง');

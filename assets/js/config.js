@@ -5,6 +5,8 @@
    เปิดจากไฟล์ในเครื่อง (file://) หรือเติม ?local ท้ายลิงก์ จะใช้ข้อมูลทดลองในเบราว์เซอร์แทน */
 window.APP_CONFIG = {
   domain: 'pcshspt.ac.th',
+  // โดเมนอีเมลที่เข้าสู่ระบบได้ทั้งหมด (ต้องตรงกับ firestore.rules และ apps-script/Code.gs)
+  domains: ['pcshspt.ac.th', 'pcshs-suphan.ac.th'],
   firebase: {
     apiKey: 'AIzaSyCtpXj7Rnjzv7I6yNXLgwOQ28zA6vmXs0E',
     authDomain: 'pcshs-repair-da0cc.firebaseapp.com',

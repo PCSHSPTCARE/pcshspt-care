@@ -322,11 +322,11 @@ const Pages = (() => {
           <div class="login-box rise">
             <img src="images/logo.png" alt="" style="height:76px;margin-bottom:18px">
             <h1>เข้าสู่ระบบ</h1>
-            <p class="muted" style="margin:6px 0 24px">ใช้อีเมลโรงเรียน <strong>@${esc(s.domain)}</strong> เท่านั้น ระบบจะรู้ชื่อผู้แจ้งจากบัญชีโดยอัตโนมัติ</p>
+            <p class="muted" style="margin:6px 0 24px">ใช้อีเมลโรงเรียน ${Store.domains().map(d => `<strong class="nw">@${esc(d)}</strong>`).join(' หรือ ')} เท่านั้น ระบบจะรู้ชื่อผู้แจ้งจากบัญชีโดยอัตโนมัติ</p>
             <div id="loginErr"></div>
             ${Store.cloud ? `
             <button class="g-btn" type="button" id="gLogin">${icon('google')} เข้าสู่ระบบด้วย Google</button>
-            <p class="small faint" style="margin-top:16px;text-align:center">กดแล้วเลือกบัญชี <b>@${esc(s.domain)}</b> · ครั้งแรกระบบจะสร้างบัญชีให้อัตโนมัติ</p>` : `
+            <p class="small faint" style="margin-top:16px;text-align:center">กดแล้วเลือกบัญชีโรงเรียน · ครั้งแรกระบบจะสร้างบัญชีให้อัตโนมัติ</p>` : `
             <form id="loginForm" class="stack" novalidate>
               <div class="field">
                 <label for="email">อีเมลโรงเรียน</label>
@@ -421,6 +421,14 @@ const Pages = (() => {
     // ───── ตัวช่วยของการ์ด ─────
     const placeOf = b => placeById(dorm ? state.dorm : b.placeId);
     const roomMode = p => p.zones.length === 1 && !p.zones[0].name; // สถานที่ที่มีแต่ห้อง (เช่น ห้องเรียน ม.2) ต้องเลือกห้อง
+    // ห้องที่มีแอร์ 2 ตัว (ตั้งในหน้าจัดการสถานที่) → รายการแอร์ทุกข้อต้องเลือกว่าเป็นตัวไหน
+    const acOn = b => !dorm && !!placeOf(b)?.acUnits;
+    const needAc = (b, v) => acOn(b) && v.catId === 'ac';
+    // บรรทัดรองของสถานที่: ห้องเรียนแสดงช่วงเลขห้อง (เช่น ห้อง 401 – 406) แทนชื่อกลุ่ม "ห้องเรียน ม.1 – ม.6" ที่ชวนสับสน
+    const placeSub = p => {
+      const r = p.zones?.length && roomMode(p) ? p.zones[0].rooms : [];
+      return r.length > 1 && r.every(x => /^\d+$/.test(x)) ? `ห้อง ${r[0]} – ${r.at(-1)}` : p.group || '';
+    };
     const locOf = b => {
       const p = placeOf(b);
       if (p) return { locationId: p.id, locationName: p.name, zone: b.zone, room: b.room, point: b.point.trim() };
@@ -435,6 +443,8 @@ const Pages = (() => {
       // รายการที่มีหน่วยนับ (ของจับต้องได้) ต้องระบุจำนวน · รายการที่พิมพ์เองไม่บังคับ
       const noQty = [...b.items.values()].find(v => !v.custom && v.unit && !(v.qty >= 1));
       if (noQty) return `ยังไม่ได้ระบุจำนวน${noQty.name}`;
+      const noAc = [...b.items.values()].find(v => needAc(b, v) && !v.acUnit);
+      if (noAc) return `ยังไม่ได้เลือกแอร์ตัวไหน (${noAc.name})`;
       return '';
     };
     const titleOf = (b, i) => {
@@ -530,7 +540,7 @@ const Pages = (() => {
         })();
         const ppOpt = ({ p, zone = '', room = '' }) => `
           <button type="button" class="pp-opt" data-pick="${p.id}" data-pzone="${esc(zone)}" data-proom="${esc(room)}">
-            ${icon('pin')}<span><b>${esc(p.name)}${room ? ` · ${/^\d|\//.test(room) ? 'ห้อง ' : ''}${esc(room)}` : zone ? ` · ${esc(zone)}` : ''}</b><small>${esc(p.group || '')}</small></span></button>`;
+            ${icon('pin')}<span><b>${esc(p.name)}${room ? ` · ${/^\d|\//.test(room) ? 'ห้อง ' : ''}${esc(room)}` : zone ? ` · ${esc(zone)}` : ''}</b><small>${esc(room ? p.group || '' : placeSub(p))}</small></span></button>`;
         const OTHER_OPT = `<button type="button" class="pp-opt other" data-pick="__other" data-pzone="" data-proom="">${icon('edit')}<span><b>อื่น ๆ (ระบุเอง)</b><small>ไม่มีในรายการ พิมพ์ชื่อสถานที่เอง</small></span></button>`;
         function ppResults(q) {
           const n = norm(q);
@@ -541,7 +551,7 @@ const Pages = (() => {
               + `<div class="pp-group">ไม่พบสถานที่</div>${OTHER_OPT}`;
           }
           const placeHits = places.filter(p => norm(p.name).includes(n) || norm(p.group).includes(n)).map(p => ({ p }));
-          // ค้นเลขห้อง/ชื่อห้องย่อย เช่น "402" → ห้องเรียน ม.4 · ห้อง 402 และ ห้องเรียน 401–407 (จ.ภ.) · ห้อง 402
+          // ค้นเลขห้อง/ชื่อห้องย่อย เช่น "402" → ห้องเรียน ม.4 · ห้อง 402
           const roomHits = [];
           places.forEach(p => (p.zones || []).forEach(z => z.rooms.forEach(r => { if (norm(r).startsWith(n) || norm(`${z.name}${r}`).includes(n)) roomHits.push({ p, zone: z.name, room: r }); })));
           const hits = (/^\d/.test(n) ? [...roomHits, ...placeHits] : [...placeHits, ...roomHits]).slice(0, 30);
@@ -551,7 +561,7 @@ const Pages = (() => {
           const p = placeById(b.placeId);
           if (p || b.placeId === '__other') return `
             <div class="field"><label>สถานที่ <span class="req">*</span></label>
-              <div class="pp-selected">${icon(p ? 'pin' : 'edit')}<strong>${p ? esc(p.name) : 'อื่น ๆ (ระบุเอง)'}</strong>${p?.group ? `<small>${esc(p.group)}</small>` : ''}
+              <div class="pp-selected">${icon(p ? 'pin' : 'edit')}<strong>${p ? esc(p.name) : 'อื่น ๆ (ระบุเอง)'}</strong>${p && placeSub(p) ? `<small>${esc(placeSub(p))}</small>` : ''}
                 <button type="button" class="link small" data-ppchange>${icon('search')} เปลี่ยนสถานที่</button></div></div>
             ${p ? '' : `<div class="field"><input class="input" data-otherplace value="${esc(b.other)}" aria-label="ชื่อสถานที่" placeholder="ชื่อสถานที่ เช่น อาคาร 2 ห้องน้ำชาย ชั้น 2"></div>`}`;
           return `
@@ -591,6 +601,8 @@ const Pages = (() => {
                 ${v.custom ? `<span class="qty-free"><input class="input sm" type="number" min="1" inputmode="numeric" value="${v.qty || ''}" placeholder="จำนวน" data-qfree aria-label="จำนวน ${esc(v.name)} (ไม่บังคับ)"><input class="input sm" value="${esc(v.unit || '')}" maxlength="12" placeholder="หน่วย" data-ufree aria-label="หน่วยนับ ${esc(v.name)} (ไม่บังคับ)"></span>`
                   : v.unit ? `<span class="qty"><button type="button" data-q="-" aria-label="ลดจำนวน">${icon('minus')}</button><input type="number" min="1" value="${v.qty || ''}" data-qin aria-label="จำนวน ${esc(v.name)}"><button type="button" data-q="+" aria-label="เพิ่มจำนวน">${icon('plus')}</button></span><span class="unit">${esc(v.unit)}</span>` : ''}
                 <button type="button" class="icon-btn sm" data-remove="${esc(k)}" aria-label="นำ ${esc(v.name)} ออก">${icon('close')}</button></div>
+              ${needAc(b, v) ? `<div class="field ac-unit ${v.acUnit ? '' : 'is-missing'}"><label>${icon('aircon')} แอร์ตัวไหน <span class="req">*</span></label>
+                <div class="pick-grid">${UI.AC_UNITS.map(u => chip('data-acu', u, u, v.acUnit === u)).join('')}</div></div>` : ''}
               <div class="field"><input class="input" data-detail value="${esc(v.detail || '')}" maxlength="200" placeholder="อาการของ${esc(v.name)} เช่น ${c?.id === 'ac' ? 'เปิดแล้วไม่เย็น มีน้ำหยด' : 'ชำรุด / หลวม / ใช้งานไม่ได้'}" aria-label="อาการของ ${esc(v.name)}"></div>
               <div class="dr-photos"><div class="thumbs-row">${thumbs(v)}</div>
                 ${(v.photos || []).length < MAX_PHOTOS ? `<label class="btn btn-outline btn-sm">${icon('camera')} แนบรูป${(v.photos || []).length ? 'เพิ่ม' : ''}<input type="file" accept="image/*" multiple hidden data-photo></label>` : ''}
@@ -756,6 +768,8 @@ const Pages = (() => {
           }
           const zn = e.target.closest('[data-zone]');
           if (zn) { b.zone = b.zone === zn.dataset.zone ? '' : zn.dataset.zone; b.room = ''; renderBlock(b); return; }
+          const acu = e.target.closest('[data-acu]');
+          if (acu) { const v = b.items.get(acu.closest('[data-key]').dataset.key); v.acUnit = v.acUnit === acu.dataset.acu ? '' : acu.dataset.acu; renderBlock(b); return; }
           const rm0 = e.target.closest('[data-room]');
           if (rm0) { b.room = b.room === rm0.dataset.room ? '' : rm0.dataset.room; renderBlock(b); return; }
           if (e.target.closest('[data-copyprev]')) {
@@ -845,9 +859,12 @@ const Pages = (() => {
             const el = $(`[data-block="${b.key}"]`, root);
             $$('[data-detail]', el).forEach(inp => { if (!inp.value.trim()) inp.closest('.field').classList.add('invalid'); });
             $$('[data-qin]', el).forEach(inp => { if (!(parseInt(inp.value) >= 1)) inp.closest('.qty').classList.add('invalid'); });
+            $$('.ac-unit.is-missing', el).forEach(f => f.classList.add('invalid'));
             return fail(`${titleOf(b, bad)}: ${issueOf(b)}`, $('.field.invalid', el) || el);
           }
-          const entries = state.blocks.map(b => ({ location: locOf(b), items: [...b.items.values()].map(v => ({ ...v, detail: String(v.detail || '').trim() })) }));
+          // แอร์ตัวไหน: เก็บเฉพาะรายการแอร์ของห้องที่มีแอร์ 2 ตัว (เปลี่ยนไปห้องอื่นแล้วค่าที่เคยเลือกไม่ติดไป)
+          const entries = state.blocks.map(b => ({ location: locOf(b), items: [...b.items.values()].map(({ acUnit, ...v }) =>
+            ({ ...v, detail: String(v.detail || '').trim(), ...(needAc(b, v) && acUnit ? { acUnit } : {}) })) }));
           const keys = entries.map(x => locKey(x.location));
           const twin = keys.findIndex((k, i) => keys.indexOf(k) !== i);
           if (twin >= 0) return fail(`${UNIT}ที่ ${keys.indexOf(keys[twin]) + 1} และ ${twin + 1} เป็นที่เดียวกัน กรุณารวมรายการไว้ในการ์ดเดียว`, $(`[data-block="${state.blocks[twin].key}"]`, root));
@@ -1155,7 +1172,7 @@ const Pages = (() => {
         const where = t => UI.locationText({ ...t.location, point: '' });
 
         // อาการที่แจ้ง: ถ้ามีหลายรายการให้บอกชื่อรายการกำกับ
-        const symptoms = t => t.items.filter(i => String(i.detail || '').trim()).map(i => t.items.length > 1 ? `${i.name}: ${i.detail}` : i.detail).join(' · ');
+        const symptoms = t => t.items.filter(i => String(i.detail || '').trim()).map(i => t.items.length > 1 ? `${UI.itemName(i)}: ${i.detail}` : i.detail).join(' · ');
         const qRow = (t, k) => `
           <a class="q-row ${lastSeen.size && lastSeen.get(t.id) !== lastAct(t) ? 'q-new' : ''}" href="#${linkFor(t)}">
             <span class="q-top"><b class="q-loc">${esc(where(t))}</b><span class="q-id" title="${esc(t.id)}">#${esc(t.id.slice(9))}</span></span>
@@ -1426,7 +1443,7 @@ const Pages = (() => {
   const RATE_PRIVACY = 'ระบบจะไม่ระบุชื่อผู้ประเมินและข้อมูลที่เกี่ยวข้องใด ๆ ทั้งสิ้น ทั้งนี้ผลการประเมินจะแสดงหลังจากการประเมินนี้ 3 สัปดาห์ เพื่อพัฒนาระบบการซ่อมแซมต่อไปครับ';
   const RATE_LABEL = ['ไม่พอใจ', 'ควรปรับปรุงมาก', 'ควรปรับปรุง', 'ปานกลาง', 'ดี', 'ดีมาก'];
   const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>';
-  const itemQty = i => `${i.name}${i.qty ? ` × ${i.qty}${i.unit ? ` ${String(i.unit).split('/')[0]}` : ''}` : ''}`;
+  const itemQty = i => `${UI.itemName(i)}${i.qty ? ` × ${i.qty}${i.unit ? ` ${String(i.unit).split('/')[0]}` : ''}` : ''}`;
   // สรุปงานในชุด: แจ้งเมื่อ · จำนวนสถานที่/รายการ · แต่ละสถานที่พร้อมผลการซ่อม
   function rateSummary(g, { compact = false } = {}) {
     const n = g.tickets.reduce((a, t) => a + t.items.length, 0);

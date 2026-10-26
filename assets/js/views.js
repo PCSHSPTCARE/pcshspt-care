@@ -5,7 +5,7 @@ const Views = (() => {
   const formShort = key => formName(key).replace('แจ้งซ่อม', '').trim();
   const catIcon = id => Store.allCategories().find(c => c.id === id)?.icon || 'wrench';
   const ticketIcon = t => catIcon(t.items[0]?.catId || 'other');
-  const itemsTitle = t => t.items.map(i => (i.catId === 'ac' && !i.custom ? 'แอร์ ' : '') + i.name).join(', ') || '-';
+  const itemsTitle = t => t.items.map(i => (i.catId === 'ac' && !i.custom && !i.acUnit ? 'แอร์ ' : '') + UI.itemName(i)).join(', ') || '-';
   const formChip = k => `<span class="chip chip-form f-${k}">${icon(UI.FORM_ICON[k])}${esc(formShort(k))}</span>`;
   const jobLink = id => `${location.hash.startsWith('#/admin') ? '#/admin/job/' : '#/ticket/'}${esc(id)}`;
 
@@ -82,7 +82,7 @@ const Views = (() => {
     const r = t.reporter;
     const items = t.items.map((i, n) => `
       <li class="item-row"><span class="ir-no">${n + 1}</span><span class="ir-ic">${icon(catIcon(i.catId))}</span>
-        <div><strong>${esc(i.name)}${i.qty ? ` <span class="faint">× ${i.qty} ${esc(i.unit)}</span>` : ''}</strong><span class="ir-cat">${esc(i.catName)}${i.custom ? ' · ระบุเอง' : ''}</span>
+        <div><strong>${esc(UI.itemName(i))}${i.qty ? ` <span class="faint">× ${i.qty} ${esc(i.unit)}</span>` : ''}</strong><span class="ir-cat">${esc(i.catName)}${i.custom ? ' · ระบุเอง' : ''}</span>
         <p>${esc(i.detail || '-')}</p>${i.photos?.length ? `<div style="margin-top:10px">${photos(i.photos)}</div>` : ''}</div></li>`).join('');
     return `
       <section class="card">

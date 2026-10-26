@@ -26,6 +26,13 @@ const Print = (() => {
     const me = Store.me();
     const byStatus = UI.STATUS_KEYS.map(k => [UI.STATUS[k].label, list.filter(t => t.status === k).length]);
     const byForm = Store.FORM_KEYS.map(k => [Views.formName(k), list.filter(t => t.formType === k).length]).filter(x => x[1]);
+    // หมวดงาน: นับเป็นรายการ (ใบเดียวมีหลอดไฟ + ปลั๊ก = งานไฟฟ้า 2 ครั้ง) · แสดงทุกหมวดที่เปิดใช้ แม้เป็น 0
+    const forms = Store.FORM_KEYS.filter(k => list.some(t => t.formType === k));
+    const rows = list.flatMap(t => t.items.map(i => ({ cat: i.catId, name: i.catName, form: t.formType, done: t.status === 'done' })));
+    const cats = Store.allCategories().filter(c => c.active !== false || rows.some(r => r.cat === c.id)).map(c => [c.id, c.name]);
+    rows.forEach(r => { if (!cats.some(c => c[0] === r.cat)) cats.push([r.cat, r.name || 'อื่น ๆ']); });
+    const cnt = (f = () => true) => rows.filter(f).length;
+    const catRow = (label, f, cls = '') => `<tr class="${cls}"><td>${esc(label)}</td>${forms.length > 1 ? forms.map(k => `<td class="r">${cnt(r => f(r) && r.form === k)}</td>`).join('') : ''}<td class="r">${cnt(f)}</td><td class="r">${cnt(r => f(r) && r.done)}</td></tr>`;
     return `
       <div class="sheet rp cover">
         <div class="cv-top"><img src="images/logo.png" alt=""><div class="cv-school">${esc(S().schoolName)}</div><div class="cv-div">${esc(S().unit)} · ${esc(S().division)}</div></div>
@@ -36,6 +43,8 @@ const Print = (() => {
           <table class="rp-table"><thead><tr><th>สถานะ</th><th class="r">จำนวน</th></tr></thead><tbody>${byStatus.map(([l, n]) => `<tr><td>${l}</td><td class="r">${n}</td></tr>`).join('')}<tr class="tot"><td>รวม</td><td class="r">${list.length}</td></tr></tbody></table>
           <table class="rp-table"><thead><tr><th>หมวดหลัก</th><th class="r">จำนวน</th></tr></thead><tbody>${byForm.map(([l, n]) => `<tr><td>${esc(l)}</td><td class="r">${n}</td></tr>`).join('')}</tbody></table>
         </div>
+        <table class="rp-table cv-cats"><thead><tr><th>หมวดงาน</th>${forms.length > 1 ? forms.map(k => `<th class="r">${esc(Views.formShort(k))}</th>`).join('') : ''}<th class="r">รวม (ครั้ง)</th><th class="r">ซ่อมเสร็จ</th></tr></thead>
+          <tbody>${cats.map(([id, name]) => catRow(name, r => r.cat === id)).join('')}${catRow('รวม', () => true, 'tot')}</tbody></table>
         <div class="cv-sign">
           <div>ลงชื่อ<span class="dotline"></span>ผู้รายงาน</div>
           <div>( ${esc(Store.fullName(me))} )</div>

@@ -1326,6 +1326,11 @@ img[data-drive-state="loading"] { animation: pulseImg 1.2s ease-in-out infinite;
 .dr-title strong { font-family: var(--font-display); font-weight: 600; }
 .dr-title span { font-size: .8rem; color: var(--faint); }
 .detail-row .qty { margin-left: 0; }
+/* แอร์ตัวไหน (ห้องที่มีแอร์ 2 ตัว) */
+.ac-unit { padding: 10px 12px; border-radius: 12px; background: #F0F7FF; border: 1.5px solid #CFE3FA; }
+.ac-unit > label { display: flex; align-items: center; gap: 6px; color: var(--navy-800); }
+.ac-unit > label .icon { color: #2563EB; font-size: 16px; }
+.ac-unit.invalid { border-color: #EF4444; box-shadow: 0 0 0 4px rgba(239, 68, 68, .12); background: #FEF2F2; }
 .detail-empty { display: flex; align-items: center; gap: 12px; padding: 18px; border-radius: 16px; border: 1.5px dashed var(--line); color: var(--muted); font-size: .92rem; }
 .detail-empty .icon { font-size: 22px; color: var(--orange-400); flex: none; }
 .item-rows-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -1773,7 +1778,7 @@ p { text-wrap: pretty; }
   .bulk-slot { top: 0; padding: 8px 10px; }
   .bulk-bar .btn { flex: 1 1 auto; }
   .nw { white-space: normal; }
-  .hero-lead .nw { white-space: nowrap; }
+  .hero-lead .nw, .login-box .nw { white-space: nowrap; }
   .form-section { padding: 22px 18px; }
   .t-card { grid-template-columns: auto minmax(0, 1fr); }
   .t-side { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: center; }

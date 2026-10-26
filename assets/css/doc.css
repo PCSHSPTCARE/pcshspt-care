@@ -44,6 +44,17 @@
 .sheet .fv > span { display: inline-block; }
 .sheet .fv.b { font-weight: 700; }
 .sheet .fpara { position: absolute; line-height: 7.4mm; overflow: hidden; overflow-wrap: anywhere; }
+/* หัวบันทึกข้อความ: หัวข้อตัวหนาใหญ่ (ส่วนราชการ / ที่ / วันที่ / เรื่อง) ตามแบบหนังสือราชการ */
+.sheet.memo .mh > b { font-size: 14.5pt; margin-right: 4mm; }
+.sheet.memo:not(.plain) .doc-title { font-size: 21pt; }
+/* เนื้อความ: ย่อหน้าบรรทัดแรก 12.7 มม. · รายละเอียดย่อเข้าอีก 1 แท็บ (25.4 มม.) บรรทัดถัดไปตรงกัน · ลงชื่อผู้แจ้งต่อท้ายข้อความ */
+.sheet .fbody { overflow-wrap: break-word; text-align: justify; text-align-last: left; line-height: 7mm; overflow: visible; }
+.sheet .fbody p { margin: 0; text-indent: 12.7mm; }
+.sheet .fbody .fl { padding-left: 25.4mm; }
+.sheet .fbody .nw { white-space: nowrap; }
+.sheet .fsign { margin: 2.3mm 0 0 96mm; width: 64.5mm; text-align: center; text-align-last: center; }
+.sheet .fs-box { position: relative; display: inline-block; width: 30mm; height: 1em; margin: 0 1.5mm; vertical-align: baseline; }
+.sheet .fs-box .fsig { left: 0; right: 0; bottom: -2.5mm; width: 100%; height: 15mm; }
 .sheet .fsig { position: absolute; height: 15mm; object-fit: contain; object-position: center bottom; mix-blend-mode: multiply; }
 .sheet .vrule { position: absolute; border-left: .3mm solid #000; }
 .sheet.memo .doc-title { font-size: 13.1pt; }
@@ -172,15 +183,17 @@
 .rp-bars .bar span { display: block; height: 100%; background: #555; }
 .rp-empty { font-size: 9.5pt; color: #666; }
 .rp-note ul { margin: 0; padding-left: 5mm; font-size: 10.5pt; }
-.cover { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 30mm !important; }
-.cv-top img { height: 38mm; width: auto; margin: 0 auto 5mm; }
+.cover { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 16mm !important; }
+.cv-top img { height: 26mm; width: auto; margin: 0 auto 4mm; }
 .cv-school { font-size: 15pt; font-weight: 700; }
 .cv-div { font-size: 11.5pt; }
-.cv-title { margin-top: 18mm; font-size: 22pt; font-weight: 700; line-height: 1.3; max-width: 160mm; }
+.cv-title { margin-top: 9mm; font-size: 22pt; font-weight: 700; line-height: 1.3; max-width: 160mm; }
 .cv-sub { margin-top: 3mm; font-size: 13pt; }
 .cv-period { margin-top: 1.5mm; font-size: 11pt; color: #333; }
-.cv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; width: 150mm; margin-top: 14mm; text-align: left; align-items: start; }
-.cv-sign { margin-top: auto; margin-bottom: 16mm; align-self: flex-end; text-align: center; line-height: 2; font-size: 11pt; min-width: 80mm; }
+.cv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; width: 150mm; margin-top: 9mm; text-align: left; align-items: start; }
+.cover .rp-table th, .cover .rp-table td { padding-top: .7mm; padding-bottom: .7mm; }
+.cv-cats { width: 150mm; margin-top: 6mm; text-align: left; }
+.cv-sign { margin-top: auto; margin-bottom: 4mm; align-self: flex-end; text-align: center; line-height: 2; font-size: 11pt; min-width: 80mm; }
 .cv-sign .dotline { display: inline-block; width: 45mm; border-bottom: .3mm dotted #000; margin: 0 1.5mm; }
 .divider { display: grid; place-items: center; }
 .dv-inner { text-align: center; }

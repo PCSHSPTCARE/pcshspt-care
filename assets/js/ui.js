@@ -325,12 +325,15 @@ const UI = (() => {
     const room = l.room && (/^\d|\//.test(l.room) ? `ห้อง ${l.room}` : l.room);
     return [l.locationName, l.zone || l.lock, room, l.point].filter(Boolean).join(' · ');
   }
+  // ห้องที่มีแอร์ 2 ตัว (ตั้งที่สถานที่ acUnits): ผู้แจ้งต้องเลือกว่าเป็นแอร์ตัวไหน
+  const AC_UNITS = ['ตัวที่ 1 (ติดกระดาน)', 'ตัวที่ 2 (ไม่ติดกระดาน)', 'ทั้ง 2 ตัว'];
+  const itemName = i => `${i.name}${i.acUnit ? ` – แอร์${i.acUnit}` : ''}`;
   function itemsText(t) {
-    return t.items.map(i => `${i.name}${i.qty ? ` ×${i.qty}` : ''}${i.detail ? ` (${i.detail})` : ''}`).join(', ') || '-';
+    return t.items.map(i => `${itemName(i)}${i.qty ? ` ×${i.qty}` : ''}${i.detail ? ` (${i.detail})` : ''}`).join(', ') || '-';
   }
   // ข้อความ "ระบุอาการชำรุด" ของทุกรายการ เช่น 1) นีออนยาว: ไฟกะพริบ  2) ...
   function detailsText(t) {
-    const parts = t.items.map((i, n) => `${t.items.length > 1 ? `${n + 1}) ` : ''}${i.name}${i.detail ? `: ${i.detail}` : ''}`);
+    const parts = t.items.map((i, n) => `${t.items.length > 1 ? `${n + 1}) ` : ''}${itemName(i)}${i.detail ? `: ${i.detail}` : ''}`);
     if (t.note) parts.push(`หมายเหตุ: ${t.note}`);
     return parts.join('  ');
   }
@@ -377,6 +380,6 @@ const UI = (() => {
     STATUS, STATUS_KEYS, OPEN, FORM_ICON, TH_MONTHS, TH_MONTHS_SHORT,
     statusBadge, date, dateLong, time, dateTime, ago, money, num, bahtText,
     toast, modal, confirm, busy, thanks, compressImage, photoInput, lightbox, signaturePad,
-    avatar, initials, locationText, itemsText, detailsText, download, csv, countUp, reveal
+    avatar, initials, locationText, AC_UNITS, itemName, itemsText, detailsText, download, csv, countUp, reveal
   };
 })();

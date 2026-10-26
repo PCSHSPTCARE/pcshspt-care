@@ -17,7 +17,12 @@ const Store = (() => {
   const STEP2_KEY = 'deputy_general';
   // สถานะที่กดเปลี่ยนได้ (รออนุมัติเป็นสถานะเริ่มต้นเท่านั้น)
   const ACTIONS = ['in_progress', 'review', 'done', 'cannot_fix'];
-  const CONFIG_VERSION = 5;
+  const CONFIG_VERSION = 6;
+  // ห้องเรียนที่มีแอร์ 2 ตัว (ติดกระดาน / ไม่ติดกระดาน) → ตอนแจ้งซ่อมแอร์ต้องเลือกตัว
+  const AC_UNIT_GROUPS = ['ห้องเรียน ม.1 – ม.6', 'ห้องเรียน จ.ภ. สุพรรณบุรี'];
+  // โดเมนอีเมลที่เข้าสู่ระบบได้: โดเมนหลักในค่าตั้งระบบ + domains ใน config.js (เช่น ครู จ.ภ. สุพรรณบุรี)
+  const schoolDomains = main => [...new Set([main, ...(CFG.domains || [])].filter(Boolean).map(x => String(x).toLowerCase()))];
+  const isSchoolEmail = (email, main) => schoolDomains(main).some(d => String(email).toLowerCase().endsWith('@' + d));
 
   // ───────── ตัวช่วย ─────────
   const uid = (p = 'id') => p + '_' + Math.random().toString(36).slice(2, 9);
@@ -91,9 +96,9 @@ const Store = (() => {
       ...B('สถานที่อื่น ๆ', ['โรงอาหาร', 'โรงยิมชั้น 1', 'โรงยิมชั้น 2', 'โดมอเนกประสงค์',
         ['หอสมุด', [{ name: '', rooms: ['ชั้น 1', 'ชั้น 2', 'ชั้น 3'] }]], 'เรือนพยาบาล', 'ห้องฟิตเนส', 'มินิมาร์ท', 'เดอะ ศาลา']),
       ...[[1, 4], [2, 4], [3, 4], [4, 6], [5, 6], [6, 6]].map(([m, n]) =>
-        L('building', 'ห้องเรียน ม.1 – ม.6', `ห้องเรียน ม.${m}`, [{ name: '', rooms: nums(m * 100 + 1, m * 100 + n) }])),
+        ({ ...L('building', 'ห้องเรียน ม.1 – ม.6', `ห้องเรียน ม.${m}`, [{ name: '', rooms: nums(m * 100 + 1, m * 100 + n) }]), acUnits: true })),
       ...[[1, 5], [2, 5], [3, 5], [4, 7], [5, 7], [6, 7]].map(([m, n]) =>
-        L('building', 'ห้องเรียน จ.ภ. สุพรรณบุรี', `ห้องเรียน ${m * 100 + 1}–${m * 100 + n} (จ.ภ. สุพรรณบุรี)`, [{ name: '', rooms: nums(m * 100 + 1, m * 100 + n) }])),
+        ({ ...L('building', 'ห้องเรียน จ.ภ. สุพรรณบุรี', `ห้องเรียน ${m * 100 + n} (จ.ภ. สุพรรณบุรี)`), acUnits: true })), // ระดับชั้นละ 1 ห้อง
       ...B('ห้องปฏิบัติการ', ['ห้องคอมพิวเตอร์ 1', 'ห้องคอมพิวเตอร์ 2', 'ห้อง IOT', 'ห้อง Lab ฟิสิกส์', 'ห้อง Lab เคมี 1', 'ห้อง Lab เคมี 2',
         'ห้อง Lab ชีววิทยา 1', 'ห้อง Lab ชีววิทยา 2', 'ห้อง Lab ดาราศาสตร์', 'ห้อง Lab วิทย์ทั่วไป 1', 'ห้อง Lab วิทย์ทั่วไป 2', 'ห้อง สอวน.',
         'ห้องฟิสิกส์สัประยุทธ์', 'ห้องการงานอาชีพ', 'ห้องคหกรรม (Food Science)', 'ห้องเขียนแบบ']),
@@ -222,6 +227,7 @@ const Store = (() => {
   // v2: สถานที่แจ้งซ่อมทั่วไปชุดใหม่ + ข้อความตามแบบฟอร์ม "บท00 ขอแจ้งซ่อม" · v3: แถบเหตุฉุกเฉินและประกาศ
   // v4: หน่วยนับของรายการที่จับต้องได้ (ใส่เฉพาะรายการที่ยังไม่มีหน่วย ไม่ทับที่แอดมินตั้งเอง)
   // v5: แจ้ง "ซ่อมแล้วไม่หาย" ได้ภายใน 7 วัน (เปลี่ยนเฉพาะที่ยังเป็นค่าเดิม 14 วัน)
+  // v6: ห้องเรียน ม.1–ม.6 และ จ.ภ. สุพรรณบุรี มีแอร์ 2 ตัว (acUnits) ให้ผู้แจ้งเลือกตัว
   function upgradeConfig(d) {
     const v = d.settings.configVersion || 1;
     if (v >= CONFIG_VERSION) return false;
@@ -232,6 +238,7 @@ const Store = (() => {
       d.categories.forEach(c => (c.items || []).forEach(i => { const u = units.get(`${c.id}|${i.name}`); if (u && !i.unit) i.unit = u; }));
     }
     if (v < 5 && (!d.settings.reopenDays || d.settings.reopenDays === 14)) d.settings.reopenDays = 7;
+    if (v < 6) d.locations.forEach(l => { if (l.type === 'building' && AC_UNIT_GROUPS.includes(l.group) && l.acUnits === undefined) l.acUnits = true; });
     d.settings.configVersion = CONFIG_VERSION;
     return true;
   }
@@ -643,8 +650,7 @@ const Store = (() => {
     async login(email) {
       if (CLOUD) return Cloud.login();
       email = String(email || '').trim().toLowerCase();
-      const domain = db.settings.domain.toLowerCase();
-      if (!email.endsWith('@' + domain)) throw new Error(`ใช้ได้เฉพาะอีเมลของโรงเรียน (@${domain}) เท่านั้น`);
+      if (!isSchoolEmail(email, db.settings.domain)) throw new Error(`ใช้ได้เฉพาะอีเมลของโรงเรียน (${schoolDomains(db.settings.domain).map(x => '@' + x).join(' หรือ ')}) เท่านั้น`);
       const u = db.users.find(x => x.email.toLowerCase() === email);
       if (!u || !u.active) throw new Error('บัญชีนี้ยังไม่มีสิทธิ์ใช้งานระบบ ระบบแจ้งซ่อมเปิดให้เฉพาะครูและบุคลากร หากเป็นครูกรุณาติดต่อฝ่ายบริหารงานทั่วไปเพื่อเพิ่มรายชื่อ');
       localStorage.setItem(SESSION_KEY, u.email);
@@ -661,6 +667,8 @@ const Store = (() => {
 
     // ตั้งค่า / ข้อมูลหลัก
     settings: () => db.settings,
+    domains: () => schoolDomains(db.settings.domain),
+    isSchoolEmail: email => isSchoolEmail(email, db.settings.domain),
     banners: () => db.settings.banners || seedBanners(),
     saveSettings(patch) { return commit(d => { Object.assign(d.settings, patch); }); },
     categories(formType) { return db.categories.filter(c => c.active !== false && (!formType || c.forms.includes(formType))); },
@@ -1015,7 +1023,7 @@ const Store = (() => {
     try { fs.settings({ ignoreUndefinedProperties: true }); } catch (e) { /* ตั้งไว้แล้ว */ }
     fs.enablePersistence({ synchronizeTabs: true }).catch(() => { /* เบราว์เซอร์ไม่รองรับ ใช้แบบออนไลน์อย่างเดียว */ });
 
-    const DOMAIN = (CFG.domain || 'pcshspt.ac.th').toLowerCase();
+    const DOMAINS = schoolDomains(CFG.domain || 'pcshspt.ac.th');
     const ADMINS = (CFG.bootstrapAdmins || []).map(s => s.toLowerCase());
     const OPEN = ['pending', 'in_progress', 'review'];
     const DAY = 864e5;
@@ -1042,7 +1050,7 @@ const Store = (() => {
     const project = t => ({
       id: t.id, formType: t.formType, status: t.status, createdAt: t.createdAt, updatedAt: t.updatedAt || t.createdAt,
       location: t.location,
-      items: (t.items || []).map(i => ({ catId: i.catId, catName: i.catName, itemId: i.itemId || '', name: i.name, unit: i.unit || '', qty: i.qty || 0, detail: i.detail || '' })),
+      items: (t.items || []).map(i => ({ catId: i.catId, catName: i.catName, itemId: i.itemId || '', name: i.name, unit: i.unit || '', qty: i.qty || 0, detail: i.detail || '', ...(i.acUnit ? { acUnit: i.acUnit } : {}) })),
       batchIds: t.batchIds || null,
       completion: t.completion ? { at: t.completion.at } : null, cannot: t.cannot ? { at: t.cannot.at } : null,
       history: (t.history || []).map(h => ({ at: h.at, action: h.action })), sample: !!t.sample
@@ -1167,8 +1175,8 @@ const Store = (() => {
       me = null;
       if (u) {
         const email = String(u.email || '').toLowerCase();
-        if (!email.endsWith('@' + DOMAIN) || !u.emailVerified) {
-          loginError = `ใช้ได้เฉพาะบัญชีของโรงเรียน (@${DOMAIN}) เท่านั้น · บัญชี ${email} ไม่มีสิทธิ์ใช้งาน`;
+        if (!DOMAINS.some(d => email.endsWith('@' + d)) || !u.emailVerified) {
+          loginError = `ใช้ได้เฉพาะบัญชีของโรงเรียน (${DOMAINS.map(d => '@' + d).join(' หรือ ')}) เท่านั้น · บัญชี ${email} ไม่มีสิทธิ์ใช้งาน`;
           await auth.signOut();
         } else {
           try { await startUser(u, email); } catch (e) { console.error(e); loginError = friendly(e).message; me = null; }
@@ -1419,7 +1427,8 @@ const Store = (() => {
     async function login() {
       loginError = '';
       const provider = new firebase.auth.GoogleAuthProvider();
-      provider.setCustomParameters({ hd: DOMAIN, prompt: 'select_account' });
+      // หลายโดเมน: ไม่ล็อกหน้าเลือกบัญชีไว้โดเมนเดียว (ตรวจโดเมนจริงหลังเข้าสู่ระบบอยู่แล้ว)
+      provider.setCustomParameters(DOMAINS.length > 1 ? { prompt: 'select_account' } : { hd: DOMAINS[0], prompt: 'select_account' });
       const settled = new Promise(res => authWaiters.push(res));
       try { await auth.signInWithPopup(provider); }
       catch (e) { authWaiters = authWaiters.filter(f => f !== settled); throw new Error(AUTH_MSG[e.code] || e.message); }

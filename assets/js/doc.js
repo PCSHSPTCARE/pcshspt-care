@@ -6,10 +6,11 @@
 const Doc = (() => {
   const LH = 7.4;
   const L = {
-    garuda: [18.8, 5.4, 21], title: 18.4,
-    head: { org: 26.3, no: 33.75, subject: 41.2, rule: 47.8, to: 55.9 },
-    me: 67.6, dept: 74.9, intro: 82.35, items: 89.8, qty: 97.1, place: 104.5, symptom: 111.9, symptomEnd: 136.4,
-    rsign: 141.5, rname: 148.9,
+    // บันทึกข้อความ (มีตราครุฑ): จัดตามแบบหนังสือราชการ — ครุฑซ้าย ชื่อเอกสารกลาง หัวข้อตัวหนาใหญ่ เส้นคั่นหนา
+    memo: { garuda: [22.5, 6, 17], title: 15, org: 30.7, no: 38.4, subject: 46, rule: 51.9, to: 59.2, date: 112 },
+    head: { org: 26.3, no: 33.75, subject: 41.2, rule: 47.8, to: 55.9 }, // ใบแจ้งซ่อม (ไม่มีตราครุฑ)
+    // เนื้อความ + ลงชื่อผู้แจ้ง ไหลต่อกันในกรอบนี้ (ยาวเกิน → ย่อตัวอักษรอัตโนมัติ) ต้องจบก่อนช่องผู้พิจารณา
+    body: { top: 62.7, bottom: 151, width: 160.5 },
     ap: { head: 156.3, ok: 163.75, no: 171.1, sign: 186.1, name: 193.5, title: 200.9, top: 153.2, bottom: 205.5 },
     ins: { head: 216, result: 223.7, sign: 238.5, name: 245.9, date: 253.3 }
   };
@@ -38,15 +39,18 @@ const Doc = (() => {
     const s = Store.settings();
     const [no, yr] = String(t.docNo || '').split('/');
     const [dd, mm, yy] = dateParts(t.createdAt);
-    const H = L.head;
+    const M = L.memo;
+    const head = (label, v, x, y) => `<div class="hl mh" style="left:${x}mm;top:${y}mm"><b>${label}</b><span>${esc(v)}</span></div>`;
     return `
-      <img class="garuda" src="${GARUDA()}" alt="" style="left:${L.garuda[0]}mm;top:${L.garuda[1]}mm;height:${L.garuda[2]}mm">
+      <img class="garuda" src="${GARUDA()}" alt="" style="left:${M.garuda[0]}mm;top:${M.garuda[1]}mm;height:${M.garuda[2]}mm">
       ${s.showRefOnDoc ? `<div class="ref">อ้างอิงระบบ ${esc(t.id)}</div>` : ''}
-      <div class="doc-title" style="top:${L.title}mm">บันทึกข้อความ</div>
-      ${T('<b>ส่วนราชการ</b>', 22.5, H.org)}${V(s.schoolName, 46.5, H.org, 140)}
-      ${T('<b>ที่</b>', 22.5, H.no)}${V(no, 27, H.no, 13, 'center')}${T('/', 40.4, H.no)}${V(yr, 42, H.no, 20)}
-      ${T('<b>วันที่</b>', 98.7, H.no)}${V(dd, 109, H.no, 8, 'center')}${T('/', 117, H.no)}${V(mm, 118.5, H.no, 32, 'center')}${T('/', 151, H.no)}${V(yy, 152.5, H.no, 20)}
-      ${subjectTo(t, s)}`;
+      <div class="doc-title" style="top:${M.title}mm">บันทึกข้อความ</div>
+      ${head('ส่วนราชการ', s.schoolName, 22.5, M.org)}
+      ${head('ที่', no && yr ? `${no}/${yr}` : t.docNo || '', 22.5, M.no)}
+      ${head('วันที่', [dd, mm, yy].filter(Boolean).join(' '), M.date, M.no)}
+      ${head('เรื่อง', subjectOf(t), 22.5, M.subject)}
+      <div class="rule" style="top:${M.rule}mm;left:22.9mm;width:159.5mm;border-top-width:.6mm"></div>
+      ${T('<b>เรียน</b>', 22.5, M.to)}${V(s.addressee, 33.8, M.to, 148)}`;
   }
   // เรื่อง · เส้นคั่น · เรียน (ใช้ทั้งแบบมีและไม่มีตราครุฑ)
   const subjectTo = (t, s) => `
@@ -75,31 +79,43 @@ const Doc = (() => {
       ${subjectTo(t, s)}`;
   }
 
-  // ───────── เนื้อหา: รายการ / รวมจำนวน / สถานที่ / อาการ (ต่อกันไม่เว้นบรรทัด) ─────────
-  // รายการ/อุปกรณ์ = ชื่อรายการ · รวมจำนวน = จำนวนพร้อมหน่วยของแต่ละรายการตามลำดับ (ไม่มีหน่วย/จำนวน = "-")
-  const qtyText = i => i.qty ? `${i.qty}${i.unit ? ` ${String(i.unit).split('/')[0]}` : ''}` : '-';
+  // ───────── เนื้อหา: ย่อหน้าแบบหนังสือราชการ (ย่อหน้าแรก → รายละเอียด → จึงเรียนมา… → ลงชื่อผู้แจ้ง) ─────────
+  // รายการ: จำนวนต่อท้ายเฉพาะรายการที่มี เช่น "แอร์ไม่เย็น/เย็นน้อย และหลอดไฟ LED 2 หลอด"
+  // รายการที่เป็นอาการ (แอร์ / เครื่องเสียง / ทีวี ไม่มีหน่วยนับ) นำหน้าด้วยชื่ออุปกรณ์ให้อ่านรู้เรื่อง
+  const qtyText = i => i.qty ? ` ${i.qty}${i.unit ? ` ${String(i.unit).split('/')[0]}` : ''}` : '';
+  const memoItem = (i, withQty = true) => {
+    const what = i.custom || i.unit ? i.name
+      : i.catId === 'ac' ? `แอร์${i.acUnit ? `${i.acUnit} ` : ''}${i.name}` : `${i.catName} ${i.name}`;
+    return what + (withQty ? qtyText(i) : '');
+  };
+  const andList = a => a.length > 1 ? `${a.slice(0, -1).join(', ')} และ${a.at(-1)}` : a[0] || '-';
   const symptomsText = t => [
-    ...t.items.filter(i => String(i.detail || '').trim()).map(i => t.items.length > 1 ? `${i.name}: ${i.detail}` : i.detail),
+    ...t.items.filter(i => String(i.detail || '').trim()).map(i => t.items.length > 1 ? `${memoItem(i, false)}: ${i.detail}` : i.detail),
     t.note ? `หมายเหตุ: ${t.note}` : ''
   ].filter(Boolean).join('  ');
+  const CLOSING = 'จึงเรียนมาเพื่อทราบและพิจารณาอนุญาตและอนุมัติ ดังนี้';
 
   function body(t) {
     const r = t.reporter || {};
     // ลายเซ็นผู้แจ้ง: ที่บันทึกไว้ตอนแจ้ง หรือจากโปรไฟล์ปัจจุบัน (ใบเก่าก่อนมีระบบลายเซ็นบังคับ)
     const sig = r.signature || Store.userByEmail(r.email)?.signature || '';
-    const symLines = Math.round((L.symptomEnd - L.symptom) / LH) + 1;
+    const nw = v => `<span class="nw">${esc(v || '-')}</span>`;
+    const line = (label, v) => `<div class="fl">${label}&nbsp;&nbsp;${esc(v || '-')}</div>`;
+    const B = L.body;
     return `
-      ${T('ด้วยข้าพเจ้า', 24.5, L.me)}${V(r.name, 45, L.me, 71, 'center')}
-      ${T('ตำแหน่ง', 117.8, L.me)}${V(r.position, 133, L.me, 58, 'center')}
-      ${T('ฝ่ายงาน/กลุ่มสาระฯ', 24.5, L.dept)}${V(r.dept, 57, L.dept, 71, 'center')}
-      ${T('เบอร์ติดต่อ', 129.8, L.dept)}${V(r.phone, 150, L.dept, 41, 'center')}
-      ${T('มีความประสงค์ขอแจ้งซ่อมแซม/บำรุงรักษา เนื่องจากตรวจพบการชำรุดหรือขัดข้อง โดยมีรายละเอียดดังนี้', 24.5, L.intro)}
-      ${T('รายการ/อุปกรณ์', 37.2, L.items)}${V(t.items.map(i => i.name).join(', '), 65, L.items, 126)}
-      ${T('รวมจำนวน', 37.2, L.qty)}${V(t.items.map(qtyText).join(', '), 57, L.qty, 134)}
-      ${T('สถานที่', 37.2, L.place)}${V(UI.locationText(t), 51.3, L.place, 140)}
-      ${P(`ลักษณะการชำรุด/อาการที่พบ&nbsp;&nbsp;${esc(symptomsText(t))}`, 37.2, L.symptom, 154, symLines)}
-      ${T('ลงชื่อ', 138.8, L.rsign)}${SG(sig, 152.4, L.rsign, 24.2)}${T('ผู้แจ้ง', 176.9, L.rsign)}
-      ${T('(', 138.8, L.rname)}${V(r.name, 140.3, L.rname, 50, 'center')}${T(')', 191.2, L.rname)}`;
+      <div class="fpara fbody" style="left:22.5mm;top:${B.top}mm;width:${B.width}mm;height:${B.bottom - B.top}mm">
+        <p>ด้วยข้าพเจ้า ${nw(r.name)} ตำแหน่ง ${esc(r.position || '-')} ฝ่ายงาน/กลุ่มสาระฯ ${esc(r.dept || '-')} เบอร์ติดต่อ ${nw(r.phone)}
+          มีความประสงค์ขอแจ้งซ่อมแซม/บำรุงรักษา เนื่องจากตรวจพบการชำรุดหรือขัดข้อง โดยมีรายละเอียดดังนี้</p>
+        ${line('รายการ/อุปกรณ์', andList(t.items.map(i => memoItem(i))))}
+        ${line('สถานที่', UI.locationText(t))}
+        ${line('ลักษณะการชำรุด/อาการที่พบ', symptomsText(t))}
+        <p>${CLOSING}</p>
+        <div class="fsign">
+          <div class="fs-line">ลงชื่อ<span class="fs-box">${sig ? `<img class="fsig" src="${sig}" alt="">` : ''}</span>ผู้แจ้ง</div>
+          <div>(${esc(r.name || '')})</div>
+          ${r.dept ? `<div>${esc(r.dept)}</div>` : ''}
+        </div>
+      </div>`;
   }
 
   // ───────── ผู้พิจารณา 2 คอลัมน์ คั่นด้วยเส้นตั้ง (ลงลายเซ็นอัตโนมัติเมื่อเริ่มดำเนินการ) ─────────
@@ -155,7 +171,7 @@ const Doc = (() => {
   function photoSheet(t) {
     const PER_PAGE = 4;
     const groups = [
-      ...t.items.map((i, n) => ['before', `รายการที่ ${n + 1}: ${i.name}${i.detail ? ` — ${i.detail}` : ''}`, i.photos]),
+      ...t.items.map((i, n) => ['before', `รายการที่ ${n + 1}: ${UI.itemName(i)}${i.detail ? ` — ${i.detail}` : ''}`, i.photos]),
       ['before', 'รูปประกอบเพิ่มเติม', t.photos],
       ['after', 'รูปหลังซ่อม', t.completion?.photos], ['after', 'รูปประกอบกรณีซ่อมไม่ได้', t.cannot?.photos]
     ];
