@@ -71,7 +71,6 @@ const Doc = (() => {
           <div><span>อ้างอิง</span><b>${esc(t.id)}</b></div>
         </div>
       </div>
-      <div class="ph-rule" style="left:22.5mm;right:20mm"></div>
       ${subjectTo(t, s)}`;
   }
 

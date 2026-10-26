@@ -1296,7 +1296,7 @@ const Pages = (() => {
               <div class="pos">${esc(lead.position)}</div>
               ${lead.message ? `<blockquote>${esc(lead.message)}</blockquote>` : ''}
               ${lead.duties ? `<p class="muted" style="margin-top:6px">${esc(lead.duties)}</p>` : ''}
-              <div class="contact-line">${lead.phone ? `<a href="tel:${esc(lead.phone)}">${icon('phone')}${esc(lead.phone)}</a>` : ''}${lead.email ? `<a href="mailto:${esc(lead.email)}">${icon('mail')}${esc(lead.email)}</a>` : ''}</div>
+              <div class="contact-line">${lead.email ?`<a href="mailto:${esc(lead.email)}">${icon('mail')}${esc(lead.email)}</a>` : ''}</div>
             </div>
           </article>`).join('')}
         </div>` : ''}
@@ -1309,7 +1309,7 @@ const Pages = (() => {
                 <div class="member-photo">${photo(m)}</div>
                 <div class="member-body">
                   <h4>${nameHTML(m.name)}</h4><div class="pos">${esc(m.position)}</div>
-                  <div class="contact-line" style="font-size:.86rem">${m.phone ? `<a href="tel:${esc(m.phone)}">${icon('phone')}${esc(m.phone)}</a>` : ''}${m.email ? `<a href="mailto:${esc(m.email)}">${icon('mail')}${esc(m.email)}</a>` : ''}</div>
+                  <div class="contact-line" style="font-size:.86rem">${m.email ?`<a href="mailto:${esc(m.email)}">${icon('mail')}${esc(m.email)}</a>` : ''}</div>
                 </div>
               </article>`).join('')}
           </div>
@@ -1317,8 +1317,8 @@ const Pages = (() => {
 
         <section>
           <div class="section-title reveal"><div><span class="kicker">ช่องทางติดต่อ</span><h2 class="h2">${esc(s.division)}</h2></div></div>
-          <div class="channel-grid">
-            ${[['phone', 'โทรศัพท์', ch.phone], ['mail', 'อีเมล', ch.email], ['pin', 'สำนักงาน', ch.office], ['clock', 'เวลาทำการ', ch.hours]]
+          <div class="channel-grid" style="--n:3">
+            ${[['mail', 'อีเมล', ch.email], ['pin', 'สำนักงาน', ch.office], ['clock', 'เวลาทำการ', ch.hours]]
               .filter(x => x[2]).map(([ic, l, v]) => `<div class="channel reveal"><span class="cat-ic">${icon(ic)}</span><div><small>${l}</small><strong>${esc(v)}</strong></div></div>`).join('')}
           </div>
         </section>
