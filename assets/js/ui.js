@@ -124,6 +124,99 @@ const UI = (() => {
     setTimeout(() => ($('input,textarea,select', api.body) || $('[data-act]', wrap))?.focus(), 60);
     return api;
   }
+
+  // ───────── รอประมวลผล: นาฬิกาทรายพลิก + ขั้นตอนจริง (ปิดหรือกดซ้ำระหว่างรอไม่ได้) ─────────
+  const HOURGLASS = `<svg class="hg" viewBox="0 0 64 80" aria-hidden="true">
+    <defs><clipPath id="hgTop"><path d="M15 10h34c0 13-9 19-15 27h-4c-6-8-15-14-15-27z"/></clipPath><clipPath id="hgBot"><path d="M30 43h4c6 8 15 14 15 27H15c0-13 9-19 15-27z"/></clipPath></defs>
+    <g clip-path="url(#hgTop)"><rect class="hg-top" x="12" y="12" width="40" height="26"/></g>
+    <g clip-path="url(#hgBot)"><rect class="hg-bot" x="12" y="44" width="40" height="27"/></g>
+    <line class="hg-stream" x1="32" y1="37" x2="32" y2="69"/>
+    <path class="hg-glass" d="M15 10h34c0 13-9 19-15 30c6 11 15 17 15 30H15c0-13 9-19 15-30C24 29 15 23 15 10z"/>
+    <rect class="hg-cap" x="9" y="4" width="46" height="6" rx="3"/><rect class="hg-cap" x="9" y="70" width="46" height="6" rx="3"/>
+  </svg>`;
+  const CHECK = '<svg class="busy-check" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27"/><path d="M19 33l9 9 18-19"/></svg>';
+  function busy({ title = 'กำลังดำเนินการ', steps = [], note = 'กรุณาอย่าปิดหรือรีเฟรชหน้านี้' } = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = 'busy-backdrop';
+    wrap.setAttribute('role', 'alertdialog');
+    wrap.setAttribute('aria-busy', 'true');
+    wrap.setAttribute('aria-label', title);
+    wrap.innerHTML = `
+      <div class="busy-card" aria-live="polite">
+        <div class="busy-ic">${HOURGLASS}</div>
+        <strong class="busy-title">${esc(title)}</strong>
+        ${steps.length ? `<ol class="busy-steps">${steps.map(s => `<li><span class="bs-dot"></span><span>${esc(s)}</span></li>`).join('')}</ol>` : ''}
+        <div class="busy-bar"><i></i></div>
+        <small class="busy-note">${esc(note)}</small>
+      </div>`;
+    document.body.appendChild(wrap);
+    document.body.classList.add('modal-open');
+    document.activeElement?.blur?.();
+    requestAnimationFrame(() => wrap.classList.add('show'));
+    let cur = -1;
+    const bar = p => { $('.busy-bar i', wrap).style.width = Math.round(p * 100) + '%'; };
+    bar(.08);
+    const close = () => {
+      wrap.classList.remove('show');
+      setTimeout(() => { wrap.remove(); if (!$('.modal-backdrop, .busy-backdrop')) document.body.classList.remove('modal-open'); }, 220);
+    };
+    return {
+      step(i) {
+        if (i <= cur) return;
+        cur = i;
+        $$('.busy-steps li', wrap).forEach((li, j) => { li.className = j < i ? 'done' : j === i ? 'now' : ''; });
+        bar(steps.length ? Math.min(.95, (i + .6) / steps.length) : .6);
+      },
+      // สำเร็จ: เครื่องหมายถูกวาดตัวเองครู่หนึ่ง แล้วปิด
+      async done(msg = 'สำเร็จ') {
+        $$('.busy-steps li', wrap).forEach(li => { li.className = 'done'; });
+        bar(1);
+        $('.busy-ic', wrap).innerHTML = CHECK;
+        $('.busy-title', wrap).textContent = msg;
+        $('.busy-note', wrap).textContent = '';
+        wrap.classList.add('is-done');
+        await new Promise(r => setTimeout(r, 900));
+        close();
+      },
+      close
+    };
+  }
+
+  // ───────── หน้าขอบคุณหลังประเมิน: ดาว 5 ดวงเด้งขึ้นทีละดวง + ประกาย ─────────
+  function thanks({ title, text = '', actions = [], autoClose = 2600 } = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = 'busy-backdrop thanks';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-label', title);
+    const star = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>';
+    wrap.innerHTML = `
+      <div class="busy-card">
+        <div class="ty-stars">${[0, 1, 2, 3, 4].map(i => `<span style="--i:${i}">${star}</span>`).join('')}
+          ${Array.from({ length: 10 }, (_, i) => `<i class="ty-spark" style="--a:${i * 36}deg;--d:${i % 2 ? 46 : 62}px"></i>`).join('')}</div>
+        <div class="busy-ic">${CHECK}</div>
+        <strong class="busy-title">${esc(title)}</strong>
+        ${text ? `<p class="ty-text">${esc(text)}</p>` : ''}
+        <div class="ty-actions">${actions.map((a, i) => `<button type="button" class="btn ${a.kind || 'btn-outline'}" data-ty="${i}">${esc(a.label)}</button>`).join('')}</div>
+      </div>`;
+    document.body.appendChild(wrap);
+    document.body.classList.add('modal-open');
+    requestAnimationFrame(() => wrap.classList.add('show', 'is-done'));
+    let timer = null;
+    const close = () => {
+      clearTimeout(timer);
+      wrap.classList.remove('show');
+      setTimeout(() => { wrap.remove(); if (!$('.modal-backdrop, .busy-backdrop')) document.body.classList.remove('modal-open'); }, 220);
+    };
+    wrap.addEventListener('click', e => {
+      const b = e.target.closest('[data-ty]');
+      if (b) { close(); actions[+b.dataset.ty].onClick?.(); return; }
+      if (e.target === wrap) close();
+    });
+    // มีปุ่มให้กดต่อ = ไม่ปิดเอง
+    if (autoClose && !actions.some(a => a.keep)) timer = setTimeout(close, autoClose);
+    return { close };
+  }
+
   const confirm = (message, { title = 'ยืนยันการทำรายการ', okLabel = 'ยืนยัน', cancelLabel = 'ยกเลิก', danger = false } = {}) => new Promise(res => {
     // ปิดหน้าต่างด้วยกากบาท / Esc / คลิกนอกกรอบ = ยกเลิก
     modal({ title, size: 'sm', body: `<p class="muted">${esc(message)}</p>`, onClose: () => res(false), actions: [
@@ -283,7 +376,7 @@ const UI = (() => {
   return {
     STATUS, STATUS_KEYS, OPEN, FORM_ICON, TH_MONTHS, TH_MONTHS_SHORT,
     statusBadge, date, dateLong, time, dateTime, ago, money, num, bahtText,
-    toast, modal, confirm, compressImage, photoInput, lightbox, signaturePad,
+    toast, modal, confirm, busy, thanks, compressImage, photoInput, lightbox, signaturePad,
     avatar, initials, locationText, itemsText, detailsText, download, csv, countUp, reveal
   };
 })();

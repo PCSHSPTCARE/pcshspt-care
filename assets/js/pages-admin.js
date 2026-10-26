@@ -246,7 +246,7 @@ const Admin = (() => {
             <button type="button" class="btn btn-outline btn-sm filter-toggle" id="fToggle" aria-expanded="false" aria-controls="fMore">${icon('filter')} ตัวกรอง<b id="fCount" hidden></b></button>
             <div class="filters-more" id="fMore">
               <select class="select sm" id="cat" aria-label="หมวดงาน"><option value="">ทุกหมวดงาน</option>${Store.allCategories().filter(c => c.forms.some(f => myForms.includes(f))).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
-              <select class="select sm" id="loc" aria-label="สถานที่"><option value="">ทุกสถานที่</option>${Store.allLocations().map(l => `<option>${esc(l.name)}</option>`).join('')}</select>
+              <select class="select sm" id="loc" aria-label="สถานที่"><option value="">ทุกสถานที่</option>${Store.allLocations().filter(l => myForms.includes(l.type === 'dorm' ? 'dorm' : 'general')).map(l => `<option>${esc(l.name)}</option>`).join('')}</select>
               <span class="filter-label">วันที่แจ้ง</span><input type="date" class="input sm" id="from" aria-label="ตั้งแต่"><span class="faint fm-dash">–</span><input type="date" class="input sm" id="to" aria-label="ถึง">
               <select class="select sm" id="sort" aria-label="เรียงลำดับ"><option value="new">ใหม่ล่าสุด</option><option value="old">เก่าสุด</option></select>
               <label class="checkbox small"><input type="checkbox" id="stale"> ค้างเกิน ${staleDays()} วัน</label>
@@ -1101,6 +1101,7 @@ const Admin = (() => {
                 <span class="row" id="pgCustom" hidden><input type="date" class="input sm" id="pgFrom" aria-label="ตั้งแต่วันที่"><span class="faint">ถึง</span><input type="date" class="input sm" id="pgTo" aria-label="ถึงวันที่"></span>
                 <button type="button" class="btn btn-outline btn-sm" id="pgCheck">${icon('search')} ตรวจสอบรายการที่จะลบ</button>
               </div>
+              <label class="checkbox small"><input type="checkbox" id="pgRatings" checked> ลบ<b>ผลประเมินความพึงพอใจทั้งหมด</b>ด้วย (รวมผลที่รอเผยแพร่ · ไม่ขึ้นกับช่วงวันที่ เพราะผลประเมินไม่ผูกกับใบแจ้งซ่อม)</label>
               <div id="pgResult"></div>
             </div></section>
           ${Store.cloud ? `<section class="card span-12"><div class="card-head"><h3>${icon('trash')}ใบแจ้งซ่อมตัวอย่าง</h3></div><div class="card-body row">
@@ -1190,7 +1191,9 @@ const Admin = (() => {
             exportCsv(pg.list, `สำรองก่อนล้างข้อมูล ${stamp(pg.from)} ถึง ${stamp(new Date(pg.to - 1))}`);
             prog('ดาวน์โหลดไฟล์สำรองแล้ว · กำลังเริ่มลบ...');
             const r = await Store.purge(pg.list, prog);
-            UI.toast(`ล้างข้อมูลแล้ว: ลบ ${UI.num(r.tickets)} ใบ${r.photoTotal ? ` · ย้ายรูปไปถังขยะ ${UI.num(r.photos)} รูป` : ''}`);
+            let rated = null;
+            if ($('#pgRatings', root).checked) { prog('กำลังลบผลประเมินความพึงพอใจ...'); rated = await Store.purgeRatings(); }
+            UI.toast(`ล้างข้อมูลแล้ว: ลบ ${UI.num(r.tickets)} ใบ${r.photoTotal ? ` · ย้ายรูปไปถังขยะ ${UI.num(r.photos)} รูป` : ''}${rated ? ` · ลบผลประเมิน ${UI.num(rated.released + rated.queued)} ราย` : ''}`);
             pgReset();
           } catch (err) {
             prog('');

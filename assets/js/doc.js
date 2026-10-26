@@ -21,7 +21,8 @@ const Doc = (() => {
     `<div class="fv ${bold ? 'b' : ''}" style="left:${x}mm;top:${y}mm;width:${w}mm;text-align:${align}"><span>${esc(v ?? '')}</span></div>`;
   const P = (html, x, y, w, lines) => `<div class="fpara" style="left:${x}mm;top:${y - LH / 2}mm;width:${w}mm;height:${lines * LH}mm">${html}</div>`;
   // ลายเซ็น: วางเหนือเส้นบรรทัด "ลงชื่อ"
-  const SG = (img, x, y, w) => img ? `<img class="fsig" src="${img}" alt="" style="left:${x}mm;top:${y - 9}mm;width:${w}mm">` : '';
+  // กล่องสูง 15 มม. ขอบล่างเลยเส้นบรรทัดเล็กน้อยเหมือนเซ็นจริง · ขอบว่างรอบลายเซ็นถูกตัดออกตอนแสดงผล (trimSigs)
+  const SG = (img, x, y, w) => img ? `<img class="fsig" src="${img}" alt="" style="left:${x}mm;top:${y - 12}mm;width:${w}mm">` : '';
   const CB = on => `<span class="cb ${on ? 'on' : ''}"></span>`;
   const GARUDA = () => typeof GARUDA_SRC !== 'undefined' ? GARUDA_SRC : 'images/garuda.png';
 
@@ -97,7 +98,7 @@ const Doc = (() => {
       ${T('รวมจำนวน', 37.2, L.qty)}${V(t.items.map(qtyText).join(', '), 57, L.qty, 134)}
       ${T('สถานที่', 37.2, L.place)}${V(UI.locationText(t), 51.3, L.place, 140)}
       ${P(`ลักษณะการชำรุด/อาการที่พบ&nbsp;&nbsp;${esc(symptomsText(t))}`, 37.2, L.symptom, 154, symLines)}
-      ${T('ลงชื่อ', 138.8, L.rsign)}${SG(sig, 153.3, L.rsign, 23)}${T('ผู้แจ้ง', 176.9, L.rsign)}
+      ${T('ลงชื่อ', 138.8, L.rsign)}${SG(sig, 152.4, L.rsign, 24.2)}${T('ผู้แจ้ง', 176.9, L.rsign)}
       ${T('(', 138.8, L.rname)}${V(r.name, 140.3, L.rname, 50, 'center')}${T(')', 191.2, L.rname)}`;
   }
 
@@ -113,13 +114,13 @@ const Doc = (() => {
       ${V(p1.title, 24.5, A.head, lw - 3, 'left', true)}
       ${T(`${CB(!!a1)}เห็นควรพิจารณาอนุญาตดำเนินการ`, 25.9, A.ok)}
       ${T(`${CB(false)}ไม่อนุญาต เนื่องจาก`, 25.9, A.no)}
-      ${T('ลงชื่อ', 49.9, A.sign)}${SG(a1?.by.signature, 61.5, A.sign, 34)}
+      ${T('ลงชื่อ', 49.9, A.sign)}${SG(a1?.by.signature, 61, A.sign, 40)}
       ${V(nm(p1.name), 22.5, A.name, lw, 'center')}
       ${V(p1.title, 22.5, A.title, lw, 'center')}
       ${V(p2.title, rx, A.head, rw, 'left', true)}
       ${T('พิจารณา/สั่งการ', rx, A.ok)}
       ${P(esc(a2?.note || ''), rx, A.no, rw, 2)}
-      ${T('ลงชื่อ', d + 27.4, A.sign)}${SG(a2?.by.signature, d + 42, A.sign, 34)}
+      ${T('ลงชื่อ', d + 27.4, A.sign)}${SG(a2?.by.signature, d + 41.5, A.sign, 37)}
       ${V(nm(p2.name), rx, A.name, rw, 'center')}
       ${V(p2.title, rx, A.title, rw, 'center')}`;
   }
@@ -135,7 +136,7 @@ const Doc = (() => {
       ${T(`${CB(done)}เรียบร้อยดี`, 50.3, I.result)}
       ${T(`${CB(false)}ยังไม่แล้วเสร็จ`, 74.8, I.result)}
       ${T(`${CB(cannot)}ไม่สามารถแก้ไขได้`, 104.3, I.result)}
-      ${T('ลงชื่อ', 126.1, I.sign)}${closed ? SG(insp?.by.signature, 140.6, I.sign, 23) : ''}${T('ผู้ตรวจงาน', 164.2, I.sign)}
+      ${T('ลงชื่อ', 126.1, I.sign)}${closed ? SG(insp?.by.signature, 140.4, I.sign, 23.6) : ''}${T('ผู้ตรวจงาน', 164.2, I.sign)}
       ${T('(', 126.1, I.name)}${V(closed ? insp?.by.name : '', 127.6, I.name, 50.5, 'center')}${T(')', 178.4, I.name)}
       ${T('วันที่', 126.1, I.date)}${V(dd, 136.3, I.date, 5.8, 'center')}${T('/', 142.2, I.date)}${V(mm, 143.6, I.date, 16, 'center')}${T('/', 159.7, I.date)}${V(yy, 161.2, I.date, 14)}`;
   }
@@ -190,6 +191,53 @@ const Doc = (() => {
       p.style.fontSize = ''; p.style.lineHeight = '';
       for (let f = 95; f >= 55 && p.scrollHeight > p.clientHeight + 1; f -= 5) { p.style.fontSize = f + '%'; p.style.lineHeight = (7.4 * Math.max(f, 80) / 100) + 'mm'; }
     });
+    trimSigs(box);
+  }
+  // วัดขนาดตัวอักษรใหม่เมื่อฟอนต์เอกสารโหลดเสร็จ (iPad/มือถือโหลดฟอนต์ช้า วัดครั้งแรกด้วยฟอนต์สำรองที่กว้างกว่า → ตัวหนังสือถูกย่อเกินจริง)
+  function refit(box) {
+    fit(box);
+    const again = () => { if (box.isConnected) fit(box); };
+    if (document.fonts) {
+      document.fonts.ready.then(again);
+      ['400 16px Sarabun', '700 16px Sarabun', '400 16px DocSarabun', '700 16px DocSarabun'].forEach(f => document.fonts.load(f).then(again, () => {}));
+    }
+    [400, 1500, 3500].forEach(ms => setTimeout(again, ms));
+  }
+
+  // ลายเซ็น: ตัดขอบว่าง/โปร่งใสรอบลายเซ็นออก ให้ลายเซ็นขยายเต็มช่อง (ไฟล์ลายเซ็นเดิมไม่ถูกแก้ · จำผลไว้ไม่ต้องตัดซ้ำ)
+  const trimmed = new Map();
+  function trimSigs(box) {
+    $$('img.fsig', box).forEach(img => {
+      const src = img.dataset.raw || img.getAttribute('src');
+      if (!src || !src.startsWith('data:')) return;
+      img.dataset.raw = src;
+      if (!trimmed.has(src)) trimmed.set(src, new Promise(res => {
+        const im = new Image();
+        im.onload = () => {
+          try {
+            const c = document.createElement('canvas');
+            c.width = im.naturalWidth; c.height = im.naturalHeight;
+            const ctx = c.getContext('2d');
+            ctx.drawImage(im, 0, 0);
+            const { data, width: w, height: h } = ctx.getImageData(0, 0, c.width, c.height);
+            let x0 = w, y0 = h, x1 = -1, y1 = -1;
+            for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+              const i = (y * w + x) * 4;
+              if (data[i + 3] > 24 && (data[i] < 225 || data[i + 1] < 225 || data[i + 2] < 225)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+            }
+            if (x1 < 0) return res(src);
+            const pad = 2, cw = Math.min(w, x1 - x0 + 1 + pad * 2), ch = Math.min(h, y1 - y0 + 1 + pad * 2);
+            const o = document.createElement('canvas');
+            o.width = cw; o.height = ch;
+            o.getContext('2d').drawImage(c, Math.max(0, x0 - pad), Math.max(0, y0 - pad), cw, ch, 0, 0, cw, ch);
+            res(o.toDataURL('image/png'));
+          } catch (e) { res(src); }
+        };
+        im.onerror = () => res(src);
+        im.src = src;
+      }));
+      trimmed.get(src).then(url => { if (img.getAttribute('src') !== url) img.src = url; });
+    });
   }
 
   // ดาวน์โหลด PDF จากกลุ่มหน้า A4
@@ -199,6 +247,8 @@ const Doc = (() => {
     btn.disabled = true; btn.innerHTML = `${icon('refresh')} กำลังสร้าง PDF...`;
     try {
       await document.fonts.ready;
+      fit(box);
+      await Promise.all([...trimmed.values()]);
       const clone = box.cloneNode(true);
       clone.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm;background:#fff;zoom:1';
       $$('.sheet', clone).forEach((s, i, all) => { s.style.margin = '0'; s.style.boxShadow = 'none'; s.style.pageBreakAfter = i < all.length - 1 ? 'always' : 'auto'; });
@@ -249,9 +299,8 @@ const Doc = (() => {
       </div>`,
       mount(root) {
         const box = $('#sheets', root);
-        const draw = () => { box.innerHTML = sheets(Store.ticket(t.id), state.photos, state.style); fit(box); };
+        const draw = () => { box.innerHTML = sheets(Store.ticket(t.id), state.photos, state.style); refit(box); };
         draw();
-        document.fonts?.ready.then(() => fit(box));
         $('#styleSeg', root).addEventListener('click', e => {
           const b = e.target.closest('[data-style]'); if (!b) return;
           state.style = b.dataset.style;
@@ -266,5 +315,5 @@ const Doc = (() => {
     };
   }
 
-  return { page, sheet, sheets, photoSheet, fit, downloadPdf, dateParts };
+  return { page, sheet, sheets, photoSheet, fit, refit, downloadPdf, dateParts };
 })();

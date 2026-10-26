@@ -788,14 +788,18 @@ const Store = (() => {
       return ratingStateOf(ratingGroupOf(t, mine));
     },
     // ส่งผลประเมิน: ระบบจริงส่งผ่าน Apps Script (ไม่มีชื่อผู้ประเมิน พักไว้ 3 สัปดาห์ก่อนเข้ารายงาน)
-    async rate(key, payload) {
+    // onStep: 0 ส่งผลแบบไม่ระบุชื่อ · 1 บันทึกว่าประเมินแล้ว
+    async rate(key, payload, onStep = () => {}) {
       const g = this.ratingGroup(key);
       if (!g) throw new Error('งานนี้ประเมินไปแล้ว หรือเลยกำหนดประเมินแล้ว');
       checkScores(payload.s);
+      onStep(0);
       if (CLOUD) {
         await Cloud.callScript('rate', { ids: g.ids, s: payload.s, rep: payload.rep || '', web: payload.web || '' });
+        onStep(1);
         return Cloud.awaitRating(g.ids);
       }
+      onStep(1);
       commit(d => {
         d.tickets.forEach(t => { if (g.ids.includes(t.id)) t.rating = 'done'; });
         (d.ratings = d.ratings || []).push({ ...ratingEntry(g.tickets, payload), week: nowISO().slice(0, 10) });
@@ -815,6 +819,14 @@ const Store = (() => {
     },
     // ผลประเมินที่ปล่อยเข้ารายงานแล้ว (เฉพาะแอดมินและผู้บริหาร)
     ratings: () => db.ratings || [],
+    // ล้างผลประเมินทั้งหมด (ที่เผยแพร่แล้ว + ที่รอเผยแพร่) · เฉพาะแอดมิน · ระบบจริงลบผ่าน Apps Script
+    async purgeRatings() {
+      if (!hasRole(currentUser(), 'admin')) throw new Error('เฉพาะแอดมินเท่านั้น');
+      if (CLOUD) { const r = await Cloud.callScript('purgeratings', {}); return { released: r.released || 0, queued: r.queued || 0 }; }
+      const n = (db.ratings || []).length;
+      commit(d => { d.ratings = []; });
+      return { released: n, queued: 0 };
+    },
     // ตัวเลขบนกระดิ่ง: ยังไม่อ่าน และเข้ามาหลังเปิดดูกระดิ่งครั้งล่าสุด (เก็บเวลาที่เปิดดูไว้ในเครื่อง)
     unseenCount() {
       const me = currentUser();
@@ -847,19 +859,23 @@ const Store = (() => {
 
     // แจ้งหลายสถานที่พร้อมกัน: แยกเป็นใบแจ้งซ่อมทีละสถานที่
     // entries = [{ location, items }] แต่ละสถานที่มีรายการของตัวเอง (หรือส่ง locations + items ชุดเดียวกันทุกที่)
-    async createTickets(input) {
+    // onStep(i): แจ้งความคืบหน้าให้หน้าจอ 0 อัปโหลดรูป · 1 จองเลขที่ใบ · 2 บันทึก · 3 แจ้งเตือนเจ้าหน้าที่
+    async createTickets(input, onStep = () => {}) {
       const me = currentUser();
       if (!hasRole(me, 'teacher')) throw new Error('เฉพาะครูและบุคลากรเท่านั้นที่แจ้งซ่อมได้');
       const entries = input.entries || (input.locations || []).map(location => ({ location, items: input.items }));
       if (!entries.length) throw new Error('กรุณาเลือกสถานที่ซ่อมอย่างน้อย 1 แห่ง');
       if (entries.some(e => !e.items?.length || e.items.some(i => !String(i.detail || '').trim()))) throw new Error('กรุณาระบุรายละเอียดของทุกรายการที่แจ้งซ่อม');
+      onStep(0);
       if (CLOUD) {
         if (entries.length > 8) throw new Error('แจ้งได้ครั้งละไม่เกิน 8 สถานที่ กรุณาแบ่งส่งเป็นหลายครั้ง');
         // อัปโหลดรูปลง Drive ก่อน แล้วจองเลขที่ใบไม่ให้ซ้ำกับคนอื่น
         for (const e of entries) for (const it of e.items) it.photos = await Cloud.upload(it.photos);
         input.photos = await Cloud.upload(input.photos);
+        onStep(1);
         await Cloud.reserve(entries.length);
-      }
+      } else onStep(1);
+      onStep(2);
       const list = commit(d => {
         const user = d.users.find(u => u.email === me.email);
         // เบอร์ใหม่จากฟอร์ม → อัปเดตโปรไฟล์ (เฉพาะเบอร์ที่ถูกต้อง ไม่ให้โปรไฟล์กลายเป็นไม่ครบ)
@@ -870,19 +886,22 @@ const Store = (() => {
         return made;
       });
       await settle(list, 600);
+      onStep(3);
       if (CLOUD) Cloud.notifyNew(list.map(t => t.id));
       return list;
     },
 
-    // ผู้แจ้งแก้ไขคำขอที่ยังรออนุมัติ (เลขที่เดิม)
-    async updateTicket(id, input) {
+    // ผู้แจ้งแก้ไขคำขอที่ยังรออนุมัติ (เลขที่เดิม) · onStep: 0 อัปโหลดรูป · 1 บันทึกการแก้ไข
+    async updateTicket(id, input, onStep = () => {}) {
       const me = currentUser();
       if (!can(me, 'edit', db.tickets.find(t => t.id === id))) throw new Error('แก้ไขได้เฉพาะคำขอของคุณที่ยังรออนุมัติ');
       if (!input.items?.length || input.items.some(i => !String(i.detail || '').trim())) throw new Error('กรุณาระบุรายละเอียดของทุกรายการที่แจ้งซ่อม');
+      onStep(0);
       if (CLOUD) {
         for (const it of input.items) it.photos = await Cloud.upload(it.photos);
         input.photos = await Cloud.upload(input.photos);
       }
+      onStep(1);
       const t = commit(d => {
         const t = d.tickets.find(x => x.id === id);
         const user = d.users.find(u => u.email === me.email);
@@ -912,11 +931,13 @@ const Store = (() => {
     },
 
     // "ยังไม่หาย / เสียอีก" หลังเสร็จสิ้น → สร้างใบใหม่ที่อ้างอิงใบเดิม (แนบรูปได้ · เก็บสรุปการซ่อมครั้งก่อนไว้ในใบใหม่)
-    async reopenTicket(id, detail, photos = []) {
+    // onStep: 0 อัปโหลดรูป · 1 เปิดใบแจ้งซ่อมใหม่ · 2 แจ้งเตือนเจ้าหน้าที่
+    async reopenTicket(id, detail, photos = [], onStep = () => {}) {
       const me = currentUser();
       if (!can(me, 'reopen', db.tickets.find(t => t.id === id))) throw new Error(`แจ้ง "ยังไม่หาย" ได้ภายใน ${db.settings.reopenDays || 7} วันหลังซ่อมเสร็จ`);
       if (!String(detail || '').trim()) throw new Error('กรุณาระบุอาการที่ยังพบ');
-      if (CLOUD) { photos = await Cloud.upload(photos); await Cloud.reserve(1); }
+      onStep(0);
+      if (CLOUD) { photos = await Cloud.upload(photos); onStep(1); await Cloud.reserve(1); } else onStep(1);
       const t = commit(d => {
         const old = d.tickets.find(x => x.id === id);
         const user = d.users.find(u => u.email === me.email);
@@ -930,6 +951,7 @@ const Store = (() => {
         return t;
       });
       await settle(t, 500);
+      onStep(2);
       if (CLOUD) Cloud.notifyNew([t.id]);
       return t;
     },

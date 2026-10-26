@@ -44,7 +44,7 @@
 .sheet .fv > span { display: inline-block; }
 .sheet .fv.b { font-weight: 700; }
 .sheet .fpara { position: absolute; line-height: 7.4mm; overflow: hidden; overflow-wrap: anywhere; }
-.sheet .fsig { position: absolute; height: 12mm; object-fit: contain; object-position: center bottom; mix-blend-mode: multiply; }
+.sheet .fsig { position: absolute; height: 15mm; object-fit: contain; object-position: center bottom; mix-blend-mode: multiply; }
 .sheet .vrule { position: absolute; border-left: .3mm solid #000; }
 .sheet.memo .doc-title { font-size: 13.1pt; }
 

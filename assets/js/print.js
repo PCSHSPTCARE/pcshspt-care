@@ -126,8 +126,7 @@ const Print = (() => {
       </div>`,
       mount(root) {
         const box = $('#sheets', root);
-        Doc.fit(box);
-        document.fonts?.ready.then(() => Doc.fit(box));
+        Doc.refit(box);
         $('#printBtn', root).addEventListener('click', () => window.print());
         $('#pdfBtn', root).addEventListener('click', e => Doc.downloadPdf(box, `${job.title}.pdf`, e.currentTarget));
       }

@@ -865,10 +865,14 @@ const Pages = (() => {
             : await UI.confirm(`${editing ? 'บันทึกการแก้ไข' : 'ยืนยันส่งแจ้งซ่อม'} ${nItems} รายการ ที่ ${where}`, { title: editing ? 'ยืนยันการแก้ไข' : 'ยืนยันการแจ้งซ่อม', okLabel: editing ? 'บันทึก' : 'ส่งแจ้งซ่อม' });
           if (!proceed) return;
           const btn = $('#submitBtn', root); btn.disabled = true; btn.innerHTML = `${icon('refresh')} กำลังบันทึก...`;
+          // นาฬิกาทรายพร้อมขั้นตอนจริง ระหว่างรอ 3–5 วินาที
+          const bz = UI.busy(editing ? { title: 'กำลังบันทึกการแก้ไข', steps: ['อัปโหลดรูปภาพ', 'บันทึกการแก้ไข'] }
+            : { title: 'กำลังส่งแจ้งซ่อม', steps: ['อัปโหลดรูปภาพ', 'จองเลขที่ใบแจ้งซ่อม', 'บันทึกข้อมูล', 'แจ้งเตือนเจ้าหน้าที่'] });
           try {
-            if (editing) { await Store.updateTicket(editing.id, { ...input, ...entries[0] }); UI.toast('บันทึกการแก้ไขแล้ว'); App.go('/ticket/' + editing.id); }
-            else { const list = await Store.createTickets({ ...input, entries }); clearDraft(); App.go('/success/' + list[0].id); }
+            if (editing) { await Store.updateTicket(editing.id, { ...input, ...entries[0] }, i => bz.step(i)); await bz.done('บันทึกการแก้ไขแล้ว'); App.go('/ticket/' + editing.id); }
+            else { const list = await Store.createTickets({ ...input, entries }, i => bz.step(i)); clearDraft(); await bz.done('ส่งแจ้งซ่อมสำเร็จ'); App.go('/success/' + list[0].id); }
           } catch (err) {
+            bz.close();
             UI.toast(err.message, 'error');
             btn.disabled = false; renderSummary();
           }
@@ -1050,8 +1054,13 @@ const Pages = (() => {
                 api.body.addEventListener('click', ev => { const x = ev.target.closest('[data-rpx]'); if (x) { shots.splice(+x.dataset.rpx, 1); drawShots(api.body); } });
               },
               actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'แจ้งซ่อมซ้ำ', kind: 'btn-primary', icon: 'send', onClick: async api => {
-                const t = await Store.reopenTicket(params.id, $('#why', api.body).value.trim(), shots);
-                UI.toast(`เปิดใบแจ้งซ่อมใหม่ ${t.id} แล้ว`); App.go('/ticket/' + t.id);
+                if (!$('#why', api.body).value.trim()) throw new Error('กรุณาระบุอาการที่ยังพบ');
+                const bz = UI.busy({ title: 'กำลังแจ้งว่ายังไม่หาย', steps: ['อัปโหลดรูปภาพ', 'เปิดใบแจ้งซ่อมใหม่', 'แจ้งเตือนเจ้าหน้าที่และกลุ่มไลน์'] });
+                let t;
+                try { t = await Store.reopenTicket(params.id, $('#why', api.body).value.trim(), shots, i => bz.step(i)); }
+                catch (err) { bz.close(); throw err; }
+                await bz.done(`แจ้งซ้ำแล้ว · ใบใหม่ ${t.id}`);
+                App.go('/ticket/' + t.id);
               } }] });
           }
         });
@@ -1526,11 +1535,17 @@ const Pages = (() => {
             $(`.rt-row[data-k="${missing[0][0]}"]`, api.body).scrollIntoView({ behavior: 'smooth', block: 'center' });
             throw new Error(`ยังให้คะแนนไม่ครบ ${missing.length} ข้อ`);
           }
-          await Store.rate(key, { s: scores, rep: $('#rtRep', api.body).value, web: $('#rtWeb', api.body).value });
-          UI.toast('ขอบคุณที่ช่วยประเมินครับ ผลจะแสดงในรายงานหลังจาก 3 สัปดาห์');
-          // มีงานรอประเมินอีก (มาจากหน้าต่างเด้ง) → เปิดชุดถัดไปให้เลย
-          const next = chain && Store.ratingGroups()[0];
-          if (next) setTimeout(() => openRating(next.key, { chain: true }), 400);
+          const bz = UI.busy({ title: 'กำลังส่งแบบประเมิน', steps: ['ส่งผลแบบไม่ระบุชื่อ', 'บันทึกว่าประเมินแล้ว'] });
+          try { await Store.rate(key, { s: scores, rep: $('#rtRep', api.body).value, web: $('#rtWeb', api.body).value }, i => bz.step(i)); }
+          catch (err) { bz.close(); throw err; }
+          bz.close();
+          // หน้าขอบคุณ · ยังมีงานรอประเมิน → ปุ่มประเมินงานถัดไป
+          const rest = Store.ratingGroups();
+          UI.thanks({
+            title: 'ขอบคุณที่ช่วยประเมินครับ', text: 'ผลการประเมินจะแสดงในรายงานหลังจาก 3 สัปดาห์ โดยไม่ระบุชื่อผู้ประเมิน',
+            actions: rest.length ? [{ label: 'ไว้ทีหลัง', kind: 'btn-ghost-dark', keep: true }, { label: `ประเมินงานถัดไป (เหลือ ${rest.length} ชุด)`, kind: 'btn-primary', keep: true, onClick: () => openRating(rest[0].key, { chain }) }]
+              : [{ label: 'ปิด', kind: 'btn-outline' }]
+          });
         } }
       ]
     });

@@ -368,6 +368,66 @@ p { margin: 0; }
 .notif.is-reopen { background: #FEF2F2; box-shadow: inset 4px 0 0 #DC2626; }
 .notif.is-reopen .n-title { color: #B91C1C; font-weight: 600; }
 
+/* ───────── รอประมวลผล: นาฬิกาทรายพลิก + ขั้นตอน ───────── */
+.busy-backdrop { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; padding: 20px; background: rgba(11, 13, 42, .55); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); opacity: 0; transition: opacity .2s; }
+.busy-backdrop.show { opacity: 1; }
+.busy-card { width: 100%; max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 28px 26px 24px; border-radius: 26px; background: #fff; box-shadow: 0 40px 80px -24px rgba(11, 13, 42, .55); text-align: center; transform: translateY(10px) scale(.97); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
+.busy-backdrop.show .busy-card { transform: none; }
+.busy-ic { height: 96px; display: grid; place-items: center; }
+.hg { width: 66px; height: 84px; overflow: visible; animation: hgFlip 2.8s ease-in-out infinite; }
+.hg-glass { fill: none; stroke: var(--navy-800); stroke-width: 2.4; stroke-linejoin: round; }
+.hg-cap { fill: var(--navy-800); }
+.hg-top, .hg-bot { fill: #F59E0B; transform-box: fill-box; transform-origin: 50% 100%; }
+.hg-top { animation: hgTop 2.8s linear infinite; }
+.hg-bot { animation: hgBot 2.8s linear infinite; }
+.hg-stream { stroke: #F59E0B; stroke-width: 2; stroke-dasharray: 3 3; animation: hgStream 2.8s linear infinite; }
+@keyframes hgFlip { 0%, 76% { transform: rotate(0); } 92%, 100% { transform: rotate(180deg); } }
+@keyframes hgTop { 0% { transform: scaleY(1); } 74%, 100% { transform: scaleY(0); } }
+@keyframes hgBot { 0% { transform: scaleY(.05); } 74%, 100% { transform: scaleY(1); } }
+@keyframes hgStream { 0% { opacity: 1; stroke-dashoffset: 0; } 72% { opacity: 1; stroke-dashoffset: -30; } 76%, 100% { opacity: 0; stroke-dashoffset: -32; } }
+.busy-title { font: 600 1.12rem var(--font-display); color: var(--navy-800); }
+.busy-steps { list-style: none; margin: 0; padding: 0; align-self: stretch; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.busy-steps li { display: flex; align-items: center; gap: 10px; font-size: .9rem; color: var(--faint); transition: color .2s; }
+.busy-steps li.now { color: var(--navy-800); font-weight: 600; }
+.busy-steps li.done { color: #15803D; }
+.bs-dot { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #D9D2C8; display: grid; place-items: center; }
+.busy-steps li.now .bs-dot { border-color: var(--orange-500); border-top-color: transparent; animation: bsSpin .8s linear infinite; }
+.busy-steps li.done .bs-dot { border-color: #16A34A; background: #16A34A; }
+.busy-steps li.done .bs-dot::after { content: ""; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg); }
+@keyframes bsSpin { to { transform: rotate(360deg); } }
+.busy-bar { align-self: stretch; height: 6px; border-radius: 6px; background: var(--line-2); overflow: hidden; }
+.busy-bar i { display: block; width: 8%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--orange-500), var(--gold)); transition: width .5s ease; }
+.busy-note { font-size: .78rem; color: var(--faint); min-height: 1em; }
+/* สำเร็จ: วงกลม + เครื่องหมายถูกวาดตัวเอง */
+.busy-check { width: 76px; height: 76px; }
+.busy-check circle { fill: #DCFCE7; stroke: #16A34A; stroke-width: 3; stroke-dasharray: 170; stroke-dashoffset: 170; animation: ckDraw .5s ease-out forwards; }
+.busy-check path { fill: none; stroke: #16A34A; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 44; stroke-dashoffset: 44; animation: ckDraw .4s .35s ease-out forwards; }
+@keyframes ckDraw { to { stroke-dashoffset: 0; } }
+.busy-backdrop.is-done .busy-title { color: #15803D; }
+/* หน้าขอบคุณหลังประเมิน: ดาวเด้ง + ประกาย */
+.thanks .busy-card { max-width: 400px; position: relative; overflow: visible; }
+.thanks .busy-ic { height: 70px; }
+.thanks .busy-check { width: 62px; height: 62px; }
+.ty-stars { position: relative; display: flex; gap: 6px; margin-top: 2px; }
+.ty-stars > span { width: 34px; height: 34px; opacity: 0; transform: scale(.2) translateY(14px); animation: tyPop .5s cubic-bezier(.3, 1.6, .5, 1) forwards; animation-delay: calc(.15s + var(--i) * .11s); }
+.ty-stars svg { width: 100%; height: 100%; fill: #F59E0B; stroke: #D97706; stroke-width: 1.2; stroke-linejoin: round; filter: drop-shadow(0 4px 6px rgba(245, 158, 11, .45)); }
+@keyframes tyPop { to { opacity: 1; transform: none; } }
+.ty-spark { position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; margin: -3.5px; border-radius: 50%; background: var(--gold); opacity: 0; animation: tySpark .9s .7s ease-out forwards; }
+.ty-spark:nth-of-type(odd) { background: var(--orange-400); }
+@keyframes tySpark { 0% { opacity: 1; transform: rotate(var(--a)) translateX(0) scale(1); } 100% { opacity: 0; transform: rotate(var(--a)) translateX(var(--d)) scale(.3); } }
+.ty-text { margin: 0; font-size: .9rem; color: var(--muted); line-height: 1.6; }
+.ty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.ty-actions:empty { display: none; }
+@media (max-width: 640px) {
+  .busy-card { padding: 24px 20px 20px; }
+  .ty-actions { flex-direction: column-reverse; align-self: stretch; }
+  .ty-actions .btn { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hg, .hg-top, .hg-bot, .hg-stream, .bs-dot { animation-duration: 6s !important; }
+  .ty-stars > span, .ty-spark, .busy-check circle, .busy-check path { animation-duration: .01s !important; animation-delay: 0s !important; }
+}
+
 /* ───────── ประเมินความพึงพอใจ ───────── */
 .notif.is-rate { background: #FFFBEB; box-shadow: inset 4px 0 0 #F59E0B; }
 .notif.is-rate .n-title { color: #92400E; font-weight: 600; }
@@ -1494,6 +1554,32 @@ a.eb-call:hover { background: #FEF2F2; }
 }
 @media (max-width: 1180px) {
   .menu .mobile-only { display: block; }
+}
+/* iPad: ตารางงานแจ้งซ่อมแถวละ 2 บรรทัด เห็นครบในหน้าเดียว ปุ่ม ⋯ อยู่ขวาสุดเสมอ
+   บรรทัด 1: เลือก · เลขที่/วันที่ · รายการ · สถานะ · ⋯   บรรทัด 2: สถานที่ · ผู้แจ้ง */
+@media (min-width: 761px) and (max-width: 1180px) {
+  .jobs-table thead { display: none; }
+  .sel-all-m { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line-2); font-size: .9rem; font-family: var(--font-display); }
+  .sel-all-m input { width: 18px; height: 18px; accent-color: var(--orange-500); }
+  .jobs-table, .jobs-table tbody { display: block; }
+  .jobs-table tr { display: grid; grid-template-columns: 30px 160px minmax(0, 1fr) auto 40px; gap: 6px 14px; padding: 12px 16px; border-bottom: 1px solid var(--line-2); align-items: center; }
+  .jobs-table td { display: block; padding: 0; border: 0; max-width: none !important; min-width: 0; }
+  .jobs-table td:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; align-self: start; padding-top: 2px; }
+  .jobs-table td:nth-child(2) { grid-column: 2; grid-row: 1; }
+  .jobs-table td:nth-child(3) { grid-column: 3; grid-row: 1; }
+  .jobs-table td:nth-child(6) { grid-column: 4; grid-row: 1; text-align: right; }
+  .jobs-table td:nth-child(7) { grid-column: 5; grid-row: 1; }
+  .jobs-table td:nth-child(4) { grid-column: 2 / 4; grid-row: 2; font-size: .86rem; color: var(--muted); }
+  .jobs-table td:nth-child(5) { grid-column: 4 / 6; grid-row: 2; text-align: right; font-size: .86rem; }
+  .jobs-table td:nth-child(5) > div { display: inline; }
+  .jobs-table td:nth-child(5) .sub { margin-left: 6px; }
+  .jobs-table tr:has(.empty) { display: block; }
+  .jobs-table tr.is-reopen { background: #FFF5F5; box-shadow: inset 4px 0 0 #DC2626; }
+  .jobs-table tr.is-reopen > td, .jobs-table tr.is-reopen > td:first-child { background: none; box-shadow: none; }
+}
+@media (max-width: 760px) {
+  .jobs-table tr.is-reopen { background: #FFF5F5; box-shadow: inset 4px 0 0 #DC2626; }
+  .jobs-table tr.is-reopen > td, .jobs-table tr.is-reopen > td:first-child { background: none; box-shadow: none; }
 }
 
 /* ไม่ตัดคำกลางวลี */
