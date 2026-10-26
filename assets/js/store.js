@@ -251,6 +251,70 @@ const Store = (() => {
     if (ds && ds.title === 'รองผู้อำนวยการฝ่ายกิจการนักเรียนและหอพัก') ds.title = NEW.signatories.deputy_student.title;
   }
 
+  // ───────── ประเมินความพึงพอใจ (ไม่ระบุตัวตน) ─────────
+  // ดาว 0–5 = คะแนน 0–5 · ประเมินได้ภายใน 14 วันหลังปิดงาน · แจ้งพร้อมกันเป็นชุด = ประเมินครั้งเดียวต่อชุด
+  const RATING_TOPICS = [
+    ['speed', 'ความรวดเร็ว', 'ระยะเวลาตั้งแต่แจ้งจนซ่อมเสร็จ'],
+    ['quality', 'คุณภาพงานซ่อม', 'ซ่อมแล้วใช้งานได้ปกติ เรียบร้อย'],
+    ['service', 'การบริการ', 'ความสุภาพ เต็มใจให้บริการของช่างและเจ้าหน้าที่'],
+    ['tidy', 'ความเรียบร้อยหลังซ่อม', 'เก็บกวาดทำความสะอาดพื้นที่หลังซ่อม'],
+    ['follow', 'การติดตามงาน', 'ได้รับแจ้งสถานะและความคืบหน้าชัดเจน'],
+    ['web', 'เว็บไซต์แจ้งซ่อม', 'ความสะดวกในการแจ้งซ่อมผ่านเว็บไซต์'],
+    ['overall', 'ความพึงพอใจโดยรวม', 'ภาพรวมของการแจ้งซ่อมครั้งนี้']
+  ];
+  const RATE_DAYS = 14;
+  const closedAt = t => t.completion?.at || t.cannot?.at || null;
+  // ชุดของใบ (แจ้งพร้อมกันหลายสถานที่ = ชุดเดียว)
+  function ratingGroupOf(t, list) {
+    const ids = t.batchIds?.length > 1 ? [...t.batchIds] : [t.id];
+    return { key: ids.slice().sort().join('|'), ids, tickets: ids.map(id => list.find(x => x.id === id)).filter(Boolean) };
+  }
+  // สถานะการประเมินของชุด: pending รอประเมิน · done ประเมินแล้ว · skip ไม่ประเมิน · wait ยังปิดงานไม่ครบ · expired เลย 14 วัน · '' ไม่ต้องประเมิน
+  function ratingStateOf(g) {
+    if (!g.tickets.length || g.tickets.length < g.ids.length) return '';
+    if (g.tickets.some(t => t.rating === 'done')) return 'done';
+    if (g.tickets.some(t => t.rating === 'skip')) return 'skip';
+    if (g.tickets.some(t => !['done', 'cannot_fix', 'cancelled'].includes(t.status))) return 'wait';
+    if (!g.tickets.some(t => t.status === 'done')) return '';
+    const last = Math.max(...g.tickets.map(t => +new Date(closedAt(t) || 0)));
+    g.closedAt = new Date(last).toISOString();
+    g.daysLeft = Math.ceil((last + RATE_DAYS * 864e5 - Date.now()) / 864e5);
+    return g.daysLeft > 0 ? 'pending' : 'expired';
+  }
+  // ผลประเมิน 1 รายการ: ไม่มีชื่อ อีเมล หรือเลขใบ · มีแค่คะแนน ข้อเสนอแนะ และข้อมูลกว้าง ๆ สำหรับแยกกลุ่ม
+  function ratingEntry(tickets, p) {
+    const done = tickets.filter(t => t.status === 'done');
+    const uniq = a => [...new Set(a.filter(Boolean))];
+    return {
+      s: Object.fromEntries(RATING_TOPICS.map(([k]) => [k, p.s[k]])),
+      rep: String(p.rep || '').trim().slice(0, 1000), web: String(p.web || '').trim().slice(0, 1000),
+      form: done[0]?.formType || tickets[0].formType,
+      cats: uniq(done.flatMap(t => t.items.map(i => i.catName))),
+      places: uniq(done.map(t => t.location.locationName))
+    };
+  }
+  // ข้อมูลตัวอย่าง (โหมดทดลองในเครื่องเท่านั้น): ผลประเมินของใบตัวอย่างที่ซ่อมเสร็จ
+  function sampleRatings(d) {
+    const r = rng(77);
+    const REP = ['อยากให้แจ้งเวลาที่ช่างจะเข้าซ่อมล่วงหน้า', 'ช่างสุภาพ ซ่อมเร็วมาก ขอบคุณครับ', 'หลังซ่อมมีเศษฝุ่นเหลืออยู่บ้าง', 'ซ่อมเรียบร้อยดีค่ะ', 'ใช้เวลารออนุมัตินานไปนิด'];
+    const WEB = ['ใช้งานบนมือถือสะดวกดี', 'อยากให้ค้นหาห้องจากเลขห้องได้เลย', 'แจ้งซ่อมง่ายขึ้นมาก'];
+    const seen = new Set(), out = [];
+    d.tickets.filter(t => t.status === 'done').forEach(t => {
+      const g = ratingGroupOf(t, d.tickets);
+      if (seen.has(g.key) || r() < .3) return;
+      seen.add(g.key);
+      const base = 3 + Math.floor(r() * 3);
+      const s = Object.fromEntries(RATING_TOPICS.map(([k]) => [k, Math.max(0, Math.min(5, base + (r() < .25 ? -1 : r() < .2 ? 1 : 0)))]));
+      g.tickets.forEach(x => { x.rating = 'done'; });
+      const week = new Date(Math.min(Date.now(), +new Date(closedAt(t)) + 21 * 864e5)).toISOString().slice(0, 10);
+      out.push({ ...ratingEntry(g.tickets, { s, rep: r() < .35 ? REP[Math.floor(r() * REP.length)] : '', web: r() < .2 ? WEB[Math.floor(r() * WEB.length)] : '' }), week });
+    });
+    return out;
+  }
+  function checkScores(s) {
+    if (!s || RATING_TOPICS.some(([k]) => !Number.isInteger(s[k]) || s[k] < 0 || s[k] > 5)) throw new Error('กรุณาให้คะแนนให้ครบทุกข้อ');
+  }
+
   const SYMPTOMS = ['ใช้งานไม่ได้ตั้งแต่เช้า', 'ชำรุดเสียหาย ต้องเปลี่ยนใหม่', 'ใช้งานได้บ้างไม่ได้บ้าง', 'หลวม/หลุด ไม่แน่นหนา', 'มีเสียงดังผิดปกติ', 'รั่วซึม ทำให้พื้นเปียก', 'กดแล้วไม่ทำงาน'];
   const AC_SYMPTOMS = ['เปิดแล้วมีแต่ลม ไม่เย็น', 'น้ำหยดใส่โต๊ะนักเรียน', 'ใช้งานได้ประมาณ 10 นาทีแล้วตัด', 'มีเสียงดังจากคอยล์ร้อน'];
 
@@ -383,11 +447,12 @@ const Store = (() => {
   function seed() {
     const domain = 'pcshspt.ac.th';
     const data = {
-      version: 7, settings: seedSettings(domain),
+      version: 8, settings: seedSettings(domain),
       categories: seedCategories(), locations: seedLocations(),
-      users: seedUsers(domain), staff: seedStaff(), notifications: [], tickets: []
+      users: seedUsers(domain), staff: seedStaff(), notifications: [], tickets: [], ratings: []
     };
     data.tickets = seedTickets(data);
+    data.ratings = sampleRatings(data);
     for (const t of data.tickets.filter(x => x.status === 'pending')) {
       for (const u of data.users.filter(u => canSee(u, t) && isStaff(u))) {
         data.notifications.push({ id: uid('n'), to: u.email, at: t.createdAt, ticketId: t.id, read: false, title: 'มีการแจ้งซ่อมใหม่', body: `${t.id} · ${t.location.locationName}` });
@@ -421,6 +486,12 @@ const Store = (() => {
           d.version = 7;
           try { localStorage.setItem(DB_KEY, JSON.stringify(d)); } catch (e) { /* ignore */ }
         }
+        // เพิ่มผลประเมินความพึงพอใจตัวอย่าง
+        if ((d.version || 0) < 8) {
+          d.ratings = sampleRatings(d);
+          d.version = 8;
+          try { localStorage.setItem(DB_KEY, JSON.stringify(d)); } catch (e) { /* ignore */ }
+        }
         if (upgradeConfig(d)) { try { localStorage.setItem(DB_KEY, JSON.stringify(d)); } catch (e) { /* ignore */ } }
         return d;
       }
@@ -432,8 +503,8 @@ const Store = (() => {
   // ระบบจริง: เริ่มจากค่าตั้งต้นในโค้ด แล้วแทนที่ด้วยข้อมูลจาก Firestore เมื่อโหลดเสร็จ
   function cloudStartDb() {
     const domain = CFG.domain || 'pcshspt.ac.th';
-    return { version: 7, settings: seedSettings(domain), categories: seedCategories(), locations: seedLocations(),
-      users: [], staff: seedStaff(), notifications: [], tickets: [] };
+    return { version: 8, settings: seedSettings(domain), categories: seedCategories(), locations: seedLocations(),
+      users: [], staff: seedStaff(), notifications: [], tickets: [], ratings: [] };
   }
   let db = CLOUD ? cloudStartDb() : load();
   const Cloud = CLOUD ? makeCloud() : null;
@@ -684,9 +755,66 @@ const Store = (() => {
     notifications() {
       const me = currentUser();
       if (!me) return [];
-      if (CLOUD) return Cloud.notifications(me);
-      return db.notifications.filter(n => n.to === me.email).sort((a, b) => b.at.localeCompare(a.at));
+      // เตือนประเมินความพึงพอใจ: อยู่ในกระดิ่งจนกว่าจะประเมิน กด "ไม่ประเมิน" หรือครบ 14 วัน
+      const rate = this.ratingGroups().map(g => ({
+        id: `rate:${g.key}`, kind: 'rate', rateKey: g.key, read: false, at: g.closedAt, ticketId: g.ids[0],
+        title: '⭐ ช่วยประเมินความพึงพอใจ',
+        body: `${g.ids[0]}${g.ids.length > 1 ? ` และอีก ${g.ids.length - 1} ใบ` : ''} · ประเมินได้อีก ${g.daysLeft} วัน`
+      }));
+      const list = CLOUD ? Cloud.notifications(me) : db.notifications.filter(n => n.to === me.email);
+      return [...rate, ...list].sort((a, b) => b.at.localeCompare(a.at));
     },
+
+    // ───────── ประเมินความพึงพอใจ ─────────
+    RATING_TOPICS, RATE_DAYS,
+    // ชุดงานของฉันที่รอประเมิน (ปิดงานครบทั้งชุด มีอย่างน้อย 1 ใบเสร็จสิ้น ยังไม่ถึง 14 วัน)
+    ratingGroups() {
+      const me = currentUser();
+      if (!me) return [];
+      const mine = db.tickets.filter(t => !t._board && t.reporter?.email === me.email);
+      const seen = new Set(), out = [];
+      for (const t of mine) {
+        const g = ratingGroupOf(t, mine);
+        if (seen.has(g.key)) continue;
+        seen.add(g.key);
+        if (ratingStateOf(g) === 'pending') out.push(g);
+      }
+      return out.sort((a, b) => b.closedAt.localeCompare(a.closedAt));
+    },
+    ratingGroup(key) { return this.ratingGroups().find(g => g.key === key) || null; },
+    ratingState(t) {
+      if (!t || t._board) return '';
+      const mine = db.tickets.filter(x => !x._board && x.reporter?.email === t.reporter?.email);
+      return ratingStateOf(ratingGroupOf(t, mine));
+    },
+    // ส่งผลประเมิน: ระบบจริงส่งผ่าน Apps Script (ไม่มีชื่อผู้ประเมิน พักไว้ 3 สัปดาห์ก่อนเข้ารายงาน)
+    async rate(key, payload) {
+      const g = this.ratingGroup(key);
+      if (!g) throw new Error('งานนี้ประเมินไปแล้ว หรือเลยกำหนดประเมินแล้ว');
+      checkScores(payload.s);
+      if (CLOUD) {
+        await Cloud.callScript('rate', { ids: g.ids, s: payload.s, rep: payload.rep || '', web: payload.web || '' });
+        return Cloud.awaitRating(g.ids);
+      }
+      commit(d => {
+        d.tickets.forEach(t => { if (g.ids.includes(t.id)) t.rating = 'done'; });
+        (d.ratings = d.ratings || []).push({ ...ratingEntry(g.tickets, payload), week: nowISO().slice(0, 10) });
+      });
+      return delay(true, 300);
+    },
+    // ไม่ประเมิน: ชุดงานนี้จะไม่เด้งเตือนและไม่มีป้ายเตือนอีก (ไม่มีผลกับงานในอนาคต)
+    async skipRating(keys) {
+      const groups = keys.map(k => this.ratingGroup(k)).filter(Boolean);
+      if (!groups.length) return;
+      if (CLOUD) {
+        await Cloud.callScript('skiprate', { ids: groups.flatMap(g => g.ids).slice(0, 40) });
+        return Cloud.awaitRating(groups.flatMap(g => g.ids));
+      }
+      const ids = new Set(groups.flatMap(g => g.ids));
+      commit(d => { d.tickets.forEach(t => { if (ids.has(t.id)) t.rating = 'skip'; }); });
+    },
+    // ผลประเมินที่ปล่อยเข้ารายงานแล้ว (เฉพาะแอดมินและผู้บริหาร)
+    ratings: () => db.ratings || [],
     // ตัวเลขบนกระดิ่ง: ยังไม่อ่าน และเข้ามาหลังเปิดดูกระดิ่งครั้งล่าสุด (เก็บเวลาที่เปิดดูไว้ในเครื่อง)
     unseenCount() {
       const me = currentUser();
@@ -948,6 +1076,7 @@ const Store = (() => {
       ownUnsub?.(); ownUnsub = null;
       dataUnsubs.forEach(f => f()); dataUnsubs = [];
       sets.clear(); extra.clear(); usersList = []; loadedFrom = null;
+      db = { ...db, ratings: [] };
     }
     // เปิด listener ตามบทบาท: โหลดเฉพาะที่ต้องใช้เพื่อประหยัดโควตาการอ่านแบบฟรี
     function startData() {
@@ -969,6 +1098,10 @@ const Store = (() => {
       } else loadedFrom = hasRole(me, 'executive') ? nowISO() : '0000';
       if (isBackOffice(me)) {
         dataUnsubs.push(fs.collection('users').onSnapshot(s => { usersList = s.docs.map(d => d.data()); rebuild(); }, e => console.error(e)));
+      }
+      // ผลประเมินความพึงพอใจ (ไม่ระบุตัวตน): อ่านได้เฉพาะแอดมินและผู้บริหาร
+      if (hasRole(me, 'admin') || hasRole(me, 'executive')) {
+        dataUnsubs.push(fs.collection('ratings').onSnapshot(s => { db = { ...db, ratings: s.docs.map(d => d.data()) }; emit(); }, e => console.error('ratings', e)));
       }
       return Promise.race([Promise.all(firsts), sleep(10000)]);
     }
@@ -1279,9 +1412,18 @@ const Store = (() => {
       return e instanceof Error ? e : new Error(String(e));
     }
 
+    // รอให้ใบงานได้รับเครื่องหมาย "ประเมินแล้ว/ไม่ประเมิน" จากสคริปต์ (สูงสุด 8 วินาที)
+    function awaitRating(ids) {
+      return new Promise(res => {
+        const ok = () => ids.every(id => db.tickets.find(t => t.id === id)?.rating);
+        if (ok()) return res(true);
+        const off = Store.subscribe(() => { if (ok()) { off(); clearTimeout(tm); res(true); } });
+        const tm = setTimeout(() => { off(); res(false); }, 8000);
+      });
+    }
     return {
       ready, rebuild, persist, reserve, friendly, ensureRange, deleteSamples, upload, notifyNew, unshare, imgAttr, fetchRange, purge,
-      notifications, markRead, login,
+      notifications, markRead, login, callScript, awaitRating,
       logout: () => auth.signOut(),
       me: () => me
     };

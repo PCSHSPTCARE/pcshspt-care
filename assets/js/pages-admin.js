@@ -590,7 +590,13 @@ const Admin = (() => {
                 <span>แจ้งซ้ำ ${st.reopen.n} ครั้ง · ยังไม่ปิด ${st.reopen.open} งาน<br><span class="faint">${st.reopen.rate >= 10 ? 'สูงกว่า 10% ควรตรวจสอบคุณภาพงานซ่อม' : 'ยิ่งต่ำยิ่งดี · เกิน 10% ควรตรวจสอบ'}</span></span></div>
               <div><div class="label" style="margin-bottom:8px">รายการที่ซ่อมแล้วไม่หายบ่อย</div>${rankList(st.reopen.items, v => `${v} ครั้ง`) || '<p class="small faint">ยังไม่มีการแจ้งซ้ำในช่วงนี้</p>'}</div>
             </div></section>
-            <section class="card span-6"><div class="card-head"><h3>${icon('pin')}จุดที่เสียซ้ำหลังซ่อม</h3><span class="chart-sub">สถานที่ที่ถูกแจ้งว่าซ่อมแล้วไม่หาย</span></div><div class="card-body">${rankList(st.reopen.locs, v => `${v} ครั้ง`) || '<p class="small faint">ยังไม่มีการแจ้งซ้ำในช่วงนี้</p>'}</div></section>`;
+            <section class="card span-6"><div class="card-head"><h3>${icon('pin')}จุดที่เสียซ้ำหลังซ่อม</h3><span class="chart-sub">สถานที่ที่ถูกแจ้งว่าซ่อมแล้วไม่หาย</span></div><div class="card-body">${rankList(st.reopen.locs, v => `${v} ครั้ง`) || '<p class="small faint">ยังไม่มีการแจ้งซ้ำในช่วงนี้</p>'}</div></section>
+            ${(() => {
+              const rs = ratingSummary(state.range === 'custom' ? 'all' : state.range, state.form);
+              return `<section class="card span-12"><div class="card-head"><h3>${icon('sparkle')}ความพึงพอใจเฉลี่ย</h3><a class="link small" href="#/admin/satisfaction">ดูรายละเอียด ${icon('arrow')}</a></div><div class="card-body">
+                ${rs.n ? `<div class="reopen-rate"><strong>${rs.avg.toFixed(2)}<small>/5</small></strong><span>ระดับ <b>${rs.level}</b> · จากผู้ประเมิน ${rs.n} ราย<br><span class="faint">ไม่ระบุตัวตน · ผลพักไว้ 3 สัปดาห์ก่อนนำเข้ารายงาน</span></span></div>`
+                  : '<p class="small faint">ยังไม่มีผลประเมินที่นำเข้ารายงานในช่วงนี้</p>'}</div></section>`;
+            })()}`;
           chart($('#cTrend', root), lineConfig(st.buckets.map(b => b.label), [
             { label: 'แจ้งซ่อม', data: st.buckets.map(b => b.created), color: SERIES[0] },
             { label: 'เสร็จสิ้น', data: st.buckets.map(b => b.done), color: SERIES[1] }
@@ -1211,5 +1217,133 @@ const Admin = (() => {
     };
   }
 
-  return { overview, jobs, job, stats, categories, locations, users, staff, settings, isStale, computeStats, statsRange, catKeys, SERIES };
+  // ═══════════ ผลประเมินความพึงพอใจ (ไม่ระบุตัวตน · แอดมินและผู้บริหาร) ═══════════
+  const RATE_LEVEL = v => v >= 4.5 ? 'ดีมาก' : v >= 3.5 ? 'ดี' : v >= 2.5 ? 'ปานกลาง' : v >= 1.5 ? 'ควรปรับปรุง' : 'ควรปรับปรุงมาก';
+  const RATE_TONE = v => v >= 4.5 ? 'g' : v >= 3.5 ? 'b' : v >= 2.5 ? 'o' : 'r';
+  const MIN_GROUP = 5; // กลุ่มที่มีผู้ประเมินน้อยกว่านี้ไม่แสดงคะแนน (กันการเดาตัวผู้ประเมิน)
+  const avgOf = (list, k) => list.length ? list.reduce((a, r) => a + (r.s?.[k] ?? 0), 0) / list.length : null;
+  const RATE_RANGES = { last: 'สัปดาห์ที่ปล่อยผลล่าสุด', '90d': '90 วันล่าสุด', sem: 'ภาคเรียนนี้', '365d': '1 ปีล่าสุด', all: 'ทั้งหมด' };
+  function ratingsIn(range, form) {
+    const all = Store.ratings();
+    const weeks = [...new Set(all.map(r => r.week))].sort();
+    const from = range === 'last' ? weeks[weeks.length - 1] || '9999'
+      : range === 'all' ? '' : (Pages.rangeStart(range === '90d' ? '90d' : range) || new Date(0)).toISOString().slice(0, 10);
+    return all.filter(r => (!from || r.week >= from) && (!form || r.form === form));
+  }
+  // ใช้ในหน้าสถิติด้วย: คะแนนเฉลี่ยความพึงพอใจโดยรวม
+  function ratingSummary(range = 'all', form = '') {
+    const list = ratingsIn(range, form);
+    const v = avgOf(list, 'overall');
+    return { n: list.length, avg: v, level: v === null ? '' : RATE_LEVEL(v) };
+  }
+
+  function satisfaction(params) {
+    const state = { range: params.range || 'all', form: params.form || '', dim: 'cat', showAll: false };
+    const DIMS = { form: 'หมวดหลัก', cat: 'หมวดงาน', place: 'สถานที่ (แจ้งซ่อมทั่วไป)', dorm: 'หอพักนักเรียน' };
+    const keysOf = (r, dim) => dim === 'form' ? [Views.formName(r.form)] : dim === 'cat' ? r.cats || []
+      : dim === 'place' ? (r.form === 'general' ? r.places || [] : []) : (r.form === 'dorm' ? r.places || [] : []);
+    const bar = (v, tone) => `<span class="sf-bar"><i class="t-${tone}" style="width:${Math.max(0, v / 5 * 100)}%"></i></span>`;
+    // สลับลำดับข้อเสนอแนะทุกครั้งที่เปิดหน้า (ไม่เรียงตามเวลา) · ลำดับคงที่ระหว่างที่เปิดหน้าอยู่
+    const seed = Math.floor(Math.random() * 1e9);
+    const hash = s => { let h = seed; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 2654435761) >>> 0; return h; };
+    const shuffle = a => a.map(x => [x, hash(x)]).sort((p, q) => p[1] - q[1]).map(p => p[0]);
+    let lastCsv = null;
+    return {
+      title: 'ผลประเมินความพึงพอใจ', subtitle: 'ไม่ระบุตัวตนผู้ประเมิน · ผลพักไว้ 3 สัปดาห์แล้วนำเข้ารายงานทุกวันอาทิตย์',
+      actions: `<button class="btn btn-outline btn-sm" id="sfCsv">${icon('download')} ส่งออก CSV</button>`,
+      html: `
+        <div class="card filters">
+          ${icon('filter')}
+          <select class="select sm" id="sfRange" aria-label="ช่วงเวลา">${Object.entries(RATE_RANGES).map(([k, l]) => `<option value="${k}" ${k === state.range ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <select class="select sm" id="sfForm" aria-label="หมวดหลัก"><option value="">ทุกหมวดหลัก</option>${Store.FORM_KEYS.map(k => `<option value="${k}" ${k === state.form ? 'selected' : ''}>${esc(Views.formName(k))}</option>`).join('')}</select>
+          <span class="spacer"></span><span class="small faint" id="sfInfo"></span>
+        </div>
+        <div id="sfBody" class="stack" style="gap:22px"></div>`,
+      mount(root) {
+        const render = () => {
+          const list = ratingsIn(state.range, state.form);
+          const weeks = [...new Set(Store.ratings().map(r => r.week))].sort();
+          $('#sfInfo', root).textContent = weeks.length ? `ปล่อยผลล่าสุด ${UI.date(weeks[weeks.length - 1])} · ${list.length} ราย` : '';
+          // อัตราการตอบ: นับจากใบที่ปิดงานแล้ว (ใบงานมีแค่เครื่องหมายประเมินแล้ว/ไม่ประเมิน ไม่มีคะแนน)
+          const closed = Store.tickets().filter(t => t.status === 'done' && (!state.form || t.formType === state.form) && !t._board);
+          const groups = new Map();
+          closed.forEach(t => { const key = (t.batchIds?.length > 1 ? t.batchIds.slice().sort() : [t.id]).join('|'); if (!groups.has(key)) groups.set(key, t); });
+          const gs = [...groups.values()];
+          const rated = gs.filter(t => t.rating === 'done').length, skipped = gs.filter(t => t.rating === 'skip').length;
+          const expired = gs.filter(t => !t.rating && Date.now() - new Date(t.completion?.at || 0) > Store.RATE_DAYS * DAY).length;
+          const box = $('#sfBody', root);
+          if (!list.length) {
+            box.innerHTML = `
+              <div class="card empty">${icon('sparkle')}<strong>ยังไม่มีผลประเมินที่นำเข้ารายงานในช่วงนี้</strong>
+                <span>ผลประเมินจะพักไว้ 3 สัปดาห์ แล้วนำเข้ารายงานทุกวันอาทิตย์ (ต้องครบอย่างน้อย 3 รายต่อครั้ง เพื่อปกป้องผู้ประเมิน)</span>
+                <span class="small faint">ตอนนี้มีงานที่ประเมินแล้ว ${rated} ชุด · ไม่ประเมิน ${skipped} ชุด</span></div>`;
+            lastCsv = null;
+            return;
+          }
+          const overall = avgOf(list, 'overall');
+          const topics = Store.RATING_TOPICS.map(([k, t]) => [t, avgOf(list, k), k]);
+          const dist = [5, 4, 3, 2, 1, 0].map(v => [v, list.filter(r => r.s?.overall === v).length]);
+          const dmax = Math.max(1, ...dist.map(d => d[1]));
+          const trend = weeks.slice(-8).map(w => { const l = Store.ratings().filter(r => r.week === w && (!state.form || r.form === state.form)); return [w, avgOf(l, 'overall'), l.length]; }).filter(x => x[2]);
+          const byKey = new Map();
+          list.forEach(r => keysOf(r, state.dim).forEach(k => { if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(r); }));
+          const rows = [...byKey.entries()].map(([k, l]) => [k, l.length, avgOf(l, 'overall')]).sort((a, b) => b[1] - a[1]);
+          const reps = shuffle(list.map(r => r.rep).filter(Boolean)), webs = shuffle(list.map(r => r.web).filter(Boolean));
+          const sug = (arr, title) => `
+            <section class="card span-6"><div class="card-head"><h3>${icon('edit')}${title}</h3><span class="small faint">${arr.length} ข้อความ</span></div>
+              <div class="card-body">${arr.length ? `<ul class="sf-sug">${(state.showAll ? arr : arr.slice(0, 6)).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+                ${arr.length > 6 && !state.showAll ? `<button class="link small" data-more>ดูทั้งหมด ${arr.length} ข้อความ</button>` : ''}` : '<p class="small faint">ยังไม่มีข้อเสนอแนะ</p>'}
+                <p class="small faint" style="margin-top:10px">สลับลำดับทุกครั้งที่เปิด ไม่มีวันที่หรือเลขใบงาน</p></div></section>`;
+          box.innerHTML = `
+            <div class="kpi-row">
+              <div class="kpi dark"><div class="kpi-label">ความพึงพอใจโดยรวม (เต็ม 5)${icon('sparkle')}</div><div class="kpi-value">${overall.toFixed(2)}<small>${RATE_LEVEL(overall)}</small></div><div class="kpi-foot">${'★'.repeat(Math.round(overall))}${'☆'.repeat(5 - Math.round(overall))}</div></div>
+              <div class="kpi"><div class="kpi-label">ผู้ประเมิน${icon('users')}</div><div class="kpi-value">${list.length}<small>ราย</small></div><div class="kpi-foot">ผลที่นำเข้ารายงานแล้วในช่วงนี้</div></div>
+              <div class="kpi"><div class="kpi-label">อัตราการตอบ${icon('chart')}</div><div class="kpi-value">${gs.length ? Math.round(rated / gs.length * 100) : 0}<small>%</small></div><div class="kpi-foot">ประเมินแล้ว ${rated} จากงานซ่อมเสร็จ ${gs.length} ชุด</div></div>
+              <div class="kpi"><div class="kpi-label">ไม่ประเมิน / หมดเวลา${icon('clock')}</div><div class="kpi-value">${skipped + expired}<small>ชุด</small></div><div class="kpi-foot">กดไม่ประเมิน ${skipped} · เลย 14 วัน ${expired}</div></div>
+            </div>
+            <div class="chart-grid">
+              <section class="card span-7"><div class="card-head"><h3>${icon('list')}คะแนนเฉลี่ยรายหัวข้อ</h3></div><div class="card-body">
+                <ul class="sf-rows">${topics.map(([t, v, k]) => `<li class="${k === 'overall' ? 'is-overall' : ''}"><span>${esc(t)}</span>${bar(v, RATE_TONE(v))}<b>${v.toFixed(2)}</b><em class="t-${RATE_TONE(v)}">${RATE_LEVEL(v)}</em></li>`).join('')}</ul>
+                <p class="small faint" style="margin-top:12px">เกณฑ์แปลผล: 4.50–5.00 ดีมาก · 3.50–4.49 ดี · 2.50–3.49 ปานกลาง · 1.50–2.49 ควรปรับปรุง · 0.00–1.49 ควรปรับปรุงมาก</p>
+              </div></section>
+              <section class="card span-5"><div class="card-head"><h3>${icon('sparkle')}การกระจายดาว (โดยรวม)</h3></div><div class="card-body">
+                <ul class="sf-dist">${dist.map(([v, n]) => `<li><span>${v} ดาว</span><span class="sf-bar"><i class="t-star" style="width:${n / dmax * 100}%"></i></span><b>${n}</b></li>`).join('')}</ul>
+                ${trend.length > 1 ? `<div class="label" style="margin:18px 0 8px">แนวโน้มรายสัปดาห์ที่ปล่อยผล</div>
+                  <div class="sf-trend">${trend.map(([w, v, n], i) => `<div title="${UI.date(w)} · ${n} ราย"><b>${v.toFixed(1)}</b><i style="height:${Math.max(6, (v / 5) * 90)}px" class="${i === trend.length - 1 ? 'last' : ''}"></i><small>${UI.date(w).replace(/ \d{4}$/, '')}</small></div>`).join('')}</div>` : ''}
+              </div></section>
+              <section class="card span-12"><div class="card-head sf-dimhead"><h3>${icon('layers')}แยกผลตาม</h3>
+                <div class="seg" id="sfDim">${Object.entries(DIMS).map(([k, l]) => `<button type="button" data-dim="${k}" class="${state.dim === k ? 'is-active' : ''}">${l}</button>`).join('')}</div></div>
+                <div class="card-body table-wrap"><table class="table sf-table">
+                  <thead><tr><th>${DIMS[state.dim]}</th><th class="r">ผู้ประเมิน</th><th>ความพึงพอใจโดยรวม</th><th>ระดับ</th></tr></thead>
+                  <tbody>${rows.length ? rows.map(([k, n, v]) => `<tr><td>${esc(k)}</td><td class="r num">${n}</td>
+                    ${n >= MIN_GROUP ? `<td><span class="row" style="gap:10px;flex-wrap:nowrap">${bar(v, RATE_TONE(v))}<b>${v.toFixed(2)}</b></span></td><td class="t-${RATE_TONE(v)}" style="font-weight:600">${RATE_LEVEL(v)}</td>`
+                      : `<td colspan="2" class="small faint">ผู้ประเมินไม่ถึง ${MIN_GROUP} ราย · ซ่อนผลเพื่อปกป้องผู้ประเมิน</td>`}</tr>`).join('')
+                    : `<tr><td colspan="4" class="small faint">ไม่มีข้อมูลในมุมมองนี้</td></tr>`}</tbody></table></div></section>
+              ${sug(reps, 'ข้อเสนอแนะด้านการซ่อมบำรุง')}
+              ${sug(webs, 'ข้อเสนอแนะด้านเว็บไซต์')}
+            </div>
+            <div class="notice">${icon('shield')}<div><b>การปกป้องผู้ประเมิน</b> · ผลประเมินไม่มีชื่อ อีเมล หรือเลขใบงาน · ระบบพักผลไว้ 3 สัปดาห์แล้วสลับลำดับ ก่อนนำเข้ารายงานพร้อมกันทุกวันอาทิตย์ จึงเทียบเวลาไม่ได้ว่าใครประเมิน · กลุ่มที่มีผู้ประเมินไม่ถึง ${MIN_GROUP} รายจะไม่แสดงคะแนน · หน้านี้เห็นได้เฉพาะแอดมินและผู้บริหาร</div></div>`;
+          lastCsv = [['หัวข้อ', 'คะแนนเฉลี่ย', 'ระดับ'], ...topics.map(([t, v]) => [t, v.toFixed(2), RATE_LEVEL(v)]), [],
+            [DIMS[state.dim], 'ผู้ประเมิน', 'คะแนนเฉลี่ยโดยรวม'], ...rows.map(([k, n, v]) => [k, n, n >= MIN_GROUP ? v.toFixed(2) : 'ไม่ถึง 5 ราย (ซ่อน)']), [],
+            ['ข้อเสนอแนะด้านการซ่อมบำรุง'], ...reps.map(x => [x]), [], ['ข้อเสนอแนะด้านเว็บไซต์'], ...webs.map(x => [x])];
+        };
+        render();
+        root.addEventListener('change', e => {
+          if (e.target.id === 'sfRange') { state.range = e.target.value; render(); }
+          if (e.target.id === 'sfForm') { state.form = e.target.value; render(); }
+        });
+        root.addEventListener('click', e => {
+          const d = e.target.closest('[data-dim]'); if (d) { state.dim = d.dataset.dim; render(); return; }
+          if (e.target.closest('[data-more]')) { state.showAll = true; render(); }
+        });
+        $('#sfCsv').addEventListener('click', () => {
+          if (!lastCsv) return UI.toast('ยังไม่มีผลประเมินในช่วงนี้', 'info');
+          UI.download(`ผลประเมินความพึงพอใจ-${new Date().toISOString().slice(0, 10)}.csv`, UI.csv(lastCsv));
+        });
+        App.onCleanup(Store.subscribe(render));
+      }
+    };
+  }
+
+  return { overview, jobs, job, stats, categories, locations, users, staff, settings, satisfaction, ratingSummary, isStale, computeStats, statsRange, catKeys, SERIES };
 })();

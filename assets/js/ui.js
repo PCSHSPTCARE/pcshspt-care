@@ -86,7 +86,7 @@ const UI = (() => {
   }
 
   // ───────── หน้าต่างโมดัล ─────────
-  function modal({ title, subtitle = '', body = '', size = 'md', actions = [], onOpen }) {
+  function modal({ title, subtitle = '', body = '', size = 'md', actions = [], onOpen, onClose }) {
     const wrap = document.createElement('div');
     wrap.className = 'modal-backdrop';
     wrap.innerHTML = `
@@ -102,6 +102,7 @@ const UI = (() => {
     document.body.classList.add('modal-open');
     requestAnimationFrame(() => wrap.classList.add('show'));
     const close = () => {
+      onClose?.();
       wrap.classList.remove('show');
       document.removeEventListener('keydown', onKey);
       setTimeout(() => { wrap.remove(); if (!$('.modal-backdrop')) document.body.classList.remove('modal-open'); }, 200);
@@ -124,7 +125,8 @@ const UI = (() => {
     return api;
   }
   const confirm = (message, { title = 'ยืนยันการทำรายการ', okLabel = 'ยืนยัน', cancelLabel = 'ยกเลิก', danger = false } = {}) => new Promise(res => {
-    modal({ title, size: 'sm', body: `<p class="muted">${esc(message)}</p>`, actions: [
+    // ปิดหน้าต่างด้วยกากบาท / Esc / คลิกนอกกรอบ = ยกเลิก
+    modal({ title, size: 'sm', body: `<p class="muted">${esc(message)}</p>`, onClose: () => res(false), actions: [
       { label: cancelLabel, kind: 'btn-ghost-dark', onClick: () => res(false) },
       { label: okLabel, kind: danger ? 'btn-danger' : 'btn-primary', onClick: () => res(true) }
     ] });

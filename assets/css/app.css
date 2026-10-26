@@ -368,6 +368,82 @@ p { margin: 0; }
 .notif.is-reopen { background: #FEF2F2; box-shadow: inset 4px 0 0 #DC2626; }
 .notif.is-reopen .n-title { color: #B91C1C; font-weight: 600; }
 
+/* ───────── ประเมินความพึงพอใจ ───────── */
+.notif.is-rate { background: #FFFBEB; box-shadow: inset 4px 0 0 #F59E0B; }
+.notif.is-rate .n-title { color: #92400E; font-weight: 600; }
+.rate-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px 2px 8px; border-radius: 999px; background: #F59E0B; color: #fff; font: 600 .74rem/1.45 var(--font-display); white-space: nowrap; }
+.rate-badge .icon { font-size: 12px; }
+.rate-badge.done { background: #DCFCE7; color: #166534; }
+.rs-days { flex: none; display: inline-block; padding: 2px 10px; border-radius: 999px; background: #FEF3C7; color: #92400E; font: 600 .74rem/1.5 var(--font-display); white-space: nowrap; }
+.rs-days.soon { background: #FEE2E2; color: #991B1B; }
+.rate-sum { padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg); }
+.rate-sum + .rate-sum { margin-top: -6px; }
+.rs-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; font: 600 .9rem var(--font-display); color: var(--navy-800); }
+.rate-sum ul { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; font-size: .86rem; color: var(--ink-2); }
+.rate-sum li b { font-weight: 600; color: var(--ink); }
+.rs-st { display: inline-block; margin-left: 4px; font-size: .78rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.rs-st.ok { color: #15803D; } .rs-st.no { color: #B91C1C; }
+.rate-privacy { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: var(--navy-50); color: var(--navy-800); font-size: .86rem; line-height: 1.6; }
+.rate-privacy .icon { flex: none; font-size: 18px; margin-top: 2px; }
+.rate-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 18px; padding: 2px 14px; }
+.rt-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; padding: 12px 0; border-bottom: 1px solid var(--line-2); }
+.rt-row.is-overall .rt-q strong { color: var(--orange-700); }
+.rt-row.missing { background: #FEF2F2; margin: 0 -14px; padding: 12px 14px; border-radius: 12px; }
+.rt-q { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; }
+.rt-q strong { font: 600 .95rem var(--font-display); color: var(--navy-800); }
+.rt-q small { font-size: .8rem; color: var(--muted); }
+.rt-ans { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rt-stars { display: flex; }
+.rt-star { width: 44px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; display: grid; place-items: center; border-radius: 12px; }
+.rt-star svg { width: 30px; height: 30px; fill: #fff; stroke: #CBC3B8; stroke-width: 1.4; stroke-linejoin: round; transition: transform .12s, fill .12s; }
+.rt-star:hover svg { transform: scale(1.1); }
+.rt-star:focus-visible { outline: 2px solid var(--orange-400); outline-offset: -2px; }
+.rt-star.on svg { fill: #F59E0B; stroke: #D97706; }
+.rt-label { min-width: 118px; font-size: .82rem; font-weight: 600; color: var(--faint); }
+.rt-label.v5, .rt-label.v4 { color: #15803D; } .rt-label.v3 { color: #92400E; } .rt-label.v2, .rt-label.v1, .rt-label.v0 { color: #B91C1C; }
+.rt-hint { padding: 10px 0 12px; }
+.rt-progress { color: var(--muted); text-align: center; }
+.rt-progress.ok { color: #15803D; font-weight: 600; }
+.rate-card .card-head { gap: 8px; }
+@media (max-width: 640px) {
+  .rate-modal .modal-foot { flex-direction: column-reverse; align-items: stretch; }
+  .rate-modal .modal-foot .btn { width: 100%; }
+  .rt-row { flex-direction: column; align-items: stretch; }
+  .rt-q { flex: none; }
+  .rt-ans { justify-content: space-between; }
+  .rt-star { width: 42px; }
+  .rt-label { min-width: 0; text-align: right; }
+}
+/* หลังบ้าน: ผลประเมิน */
+.sf-bar { flex: 1; min-width: 80px; height: 10px; border-radius: 6px; background: var(--line-2); overflow: hidden; display: block; }
+.sf-bar i { display: block; height: 100%; border-radius: inherit; }
+.t-g { color: #15803D; } .sf-bar i.t-g { background: #16A34A; }
+.t-b { color: #1D4ED8; } .sf-bar i.t-b { background: #3B82F6; }
+.t-o { color: #B45309; } .sf-bar i.t-o { background: #F59E0B; }
+.t-r { color: #B91C1C; } .sf-bar i.t-r { background: #DC2626; }
+.sf-bar i.t-star { background: #F59E0B; }
+.sf-rows, .sf-dist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.sf-rows li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(80px, 180px) 48px 92px; gap: 12px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line-2); font-size: .9rem; }
+.sf-rows li.is-overall { font-weight: 600; }
+.sf-rows b { text-align: right; } .sf-rows em { font-style: normal; font-size: .8rem; font-weight: 600; }
+.sf-dist li { display: grid; grid-template-columns: 54px minmax(0, 1fr) 36px; gap: 12px; align-items: center; padding: 6px 0; font-size: .88rem; }
+.sf-dist li span:first-child { color: #92400E; font-weight: 600; } .sf-dist b { text-align: right; }
+.sf-trend { display: flex; align-items: flex-end; gap: 8px; height: 140px; }
+.sf-trend > div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; height: 100%; min-width: 0; }
+.sf-trend b { font-size: .78rem; } .sf-trend small { font-size: .7rem; color: var(--faint); white-space: nowrap; }
+.sf-trend i { width: 100%; max-width: 38px; border-radius: 8px 8px 3px 3px; background: #C7CBEA; }
+.sf-trend i.last { background: var(--orange-500); }
+.sf-sug { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sf-sug li { padding: 10px 12px; border-radius: 12px; background: var(--bg); font-size: .9rem; line-height: 1.55; overflow-wrap: anywhere; }
+#sfDim { max-width: 100%; }
+.sf-dimhead { flex-wrap: wrap; }
+.sf-dimhead h3 { white-space: nowrap; }
+.sf-table { min-width: 560px; }
+@media (max-width: 640px) {
+  .sf-rows li { grid-template-columns: minmax(0, 1fr) 44px 80px; }
+  .sf-rows li .sf-bar { grid-column: 1 / -1; grid-row: 2; }
+}
+
 /* ───────── ซ่อมแล้วไม่หาย (ใบแจ้งซ้ำ) ───────── */
 .reopen-badge { display: inline-flex; align-items: center; gap: 4px; margin: 3px 0; padding: 2px 9px 2px 7px; border-radius: 999px; background: #DC2626; color: #fff; font: 600 .74rem/1.4 var(--font-display); white-space: nowrap; vertical-align: middle; }
 .reopen-badge .icon { font-size: 12px; }

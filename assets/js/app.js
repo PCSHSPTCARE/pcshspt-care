@@ -78,7 +78,7 @@ const App = (() => {
         <div class="dropdown-panel notif-panel ${right ? 'right' : ''}">
           <div class="notif-head"><strong>การแจ้งเตือน</strong>${unread ? '<button class="link small" data-readall>อ่านทั้งหมด</button>' : ''}</div>
           ${list.slice(0, 15).map(n => `
-            <div class="notif ${n.read ? '' : 'unread'} ${n.kind === 'reopen' ? 'is-reopen' : ''}" data-notif="${n.id}" data-ticket="${esc(n.ticketId || '')}" role="button" tabindex="0">
+            <div class="notif ${n.read ? '' : 'unread'} ${n.kind === 'reopen' ? 'is-reopen' : ''} ${n.kind === 'rate' ? 'is-rate' : ''}" ${n.kind === 'rate' ? `data-rate="${esc(n.rateKey)}"` : ''} data-notif="${n.id}" data-ticket="${esc(n.ticketId || '')}" role="button" tabindex="0">
               <div><div class="n-title">${esc(n.title)}</div><div class="n-body">${esc(n.body)}</div><div class="n-time">${UI.ago(n.at)}</div></div>
             </div>`).join('') || '<div class="empty" style="padding:30px">ยังไม่มีการแจ้งเตือน</div>'}
         </div>
@@ -146,6 +146,7 @@ const App = (() => {
         ${admin ? link('/admin', 'dashboard', 'ภาพรวม') : ''}
         ${staff ? link('/admin/jobs', 'list', 'งานแจ้งซ่อม', pending) : ''}
         ${Store.can(me, 'stats') ? link('/admin/stats', 'chart', 'สถิติและรายงาน') : ''}
+        ${admin || Store.hasRole(me, 'executive') ? link('/admin/satisfaction', 'sparkle', 'ผลประเมินความพึงพอใจ') : ''}
         ${link('/board', 'activity', 'แดชบอร์ดเรียลไทม์')}
         ${!staff ? '' : admin ? `<div class="side-label">ตั้งค่า</div>
           ${link('/admin/categories', 'layers', 'หมวดงานซ่อม')}
@@ -218,6 +219,26 @@ const App = (() => {
     currentPath = path;
     try { view.mount?.($('#view')); } catch (e) { console.error(e); UI.toast('เกิดข้อผิดพลาดในการแสดงผลหน้า', 'error'); }
     onScroll();
+    maybePromptRating();
+  }
+
+  // เตือนประเมินความพึงพอใจ: เด้งครั้งเดียวต่อการเข้าเว็บ (ไม่บังคับ) · ไม่เด้งทับหน้าต่างอื่นหรือหน้าเอกสาร
+  let ratePrompted = false, rateTimer = null;
+  function maybePromptRating() {
+    clearTimeout(rateTimer);
+    rateTimer = setTimeout(() => {
+      const me = Store.me();
+      if (ratePrompted || !me || !Store.profileComplete(me) || $('.modal-backdrop')) return;
+      const path = (location.hash.slice(1) || '/').split('?')[0];
+      if (['/setup', '/login', '/print', '/print-report'].includes(path) || path.startsWith('/doc/')) return;
+      const key = `pcshs-rate-prompted:${me.email}`;
+      try { if (sessionStorage.getItem(key)) { ratePrompted = true; return; } } catch (e) { /* ignore */ }
+      const groups = Store.ratingGroups();
+      if (!groups.length) return;
+      ratePrompted = true;
+      try { sessionStorage.setItem(key, '1'); } catch (e) { /* ignore */ }
+      Pages.promptRatings(groups);
+    }, 900);
   }
 
   // อัปเดตกระดิ่งและตัวนับเมื่อข้อมูลเปลี่ยน (โดยไม่วาดหน้าใหม่ทั้งหมด)
@@ -233,6 +254,7 @@ const App = (() => {
     if ($('#navActions') && !$('#navActions .dropdown[data-open="true"]')) $('#navActions').innerHTML = navActionsHTML();
     if ($('#admBell') && !$('#admBell .dropdown[data-open="true"]')) $('#admBell').innerHTML = bellHTML();
     if ($('#side') && Store.me()) $('#side').innerHTML = sideHTML(path);
+    if (!ratePrompted) maybePromptRating();
   });
 
   // ───────── เหตุการณ์ร่วม ─────────
@@ -260,9 +282,10 @@ const App = (() => {
     }
     if (e.target.closest('[data-side-toggle]')) { const a = $('#adm'); a.dataset.sideOpen = a.dataset.sideOpen !== 'true'; return; }
     if ($('#adm')?.dataset.sideOpen === 'true' && !e.target.closest('.side')) $('#adm').dataset.sideOpen = 'false';
-    if (e.target.closest('[data-logout]')) { Store.logout(); UI.toast('ออกจากระบบแล้ว', 'info'); go('/'); render(); return; }
+    if (e.target.closest('[data-logout]')) { ratePrompted = false; Store.logout(); UI.toast('ออกจากระบบแล้ว', 'info'); go('/'); render(); return; }
     if (e.target.closest('[data-readall]')) { Store.markRead(); refreshBell(true); return; }
     const n = e.target.closest('[data-notif]');
+    if (n?.dataset.rate) { openOnes.forEach(d => { d.dataset.open = 'false'; }); Pages.openRating(n.dataset.rate); return; }
     if (n) {
       Store.markRead(n.dataset.notif);
       openOnes.forEach(d => { d.dataset.open = 'false'; });
@@ -302,6 +325,7 @@ App.route('/admin', Admin.overview, { roles: ['admin'], layout: 'admin' });
 App.route('/admin/jobs', Admin.jobs, { staff: true, layout: 'admin' });
 App.route('/admin/job/:id', Admin.job, { staff: true, layout: 'admin' });
 App.route('/admin/stats', Admin.stats, { roles: ['admin', 'executive'], layout: 'admin' });
+App.route('/admin/satisfaction', Admin.satisfaction, { roles: ['admin', 'executive'], layout: 'admin' });
 App.route('/admin/categories', Admin.categories, { roles: ['admin'], layout: 'admin' });
 App.route('/admin/locations', Admin.locations, { roles: ['admin'], layout: 'admin' });
 App.route('/admin/users', Admin.users, { roles: ['admin'], layout: 'admin' });

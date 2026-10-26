@@ -13,6 +13,14 @@ const Views = (() => {
   const reopenBadge = t => t.reopenOf
     ? `<span class="reopen-badge ${UI.OPEN.includes(t.status) ? 'is-live' : ''}" title="แจ้งซ้ำจากใบ ${esc(t.reopenOf)}">${icon('refresh')}ซ่อมแล้วไม่หาย${t.reopenCount > 1 ? ` · ครั้งที่ ${t.reopenCount}` : ''}</span>` : '';
 
+  // ป้ายการประเมินความพึงพอใจ (เฉพาะใบของผู้ใช้เอง): รอประเมิน / ประเมินแล้ว
+  const rateBadge = t => {
+    if (t._board || t.reporter?.email !== Store.me()?.email) return '';
+    const st = Store.ratingState(t);
+    return st === 'pending' ? `<span class="rate-badge">${icon('sparkle')}รอประเมิน</span>`
+      : st === 'done' ? '<span class="rate-badge done">ประเมินแล้ว</span>' : '';
+  };
+
   // กล่องสรุปการซ่อมครั้งก่อน (แสดงในใบที่แจ้งซ้ำ)
   function reopenBox(t) {
     if (!t.reopenOf) return '';
@@ -35,7 +43,7 @@ const Views = (() => {
       <a class="t-card" href="#${href || '/ticket/' + t.id}">
         <span class="t-ic">${icon(ticketIcon(t))}</span>
         <div class="t-main">
-          <div class="row" style="gap:10px"><span class="t-id">${esc(t.id)}</span>${formChip(t.formType)}${reopenBadge(t)}</div>
+          <div class="row" style="gap:10px"><span class="t-id">${esc(t.id)}</span>${formChip(t.formType)}${reopenBadge(t)}${rateBadge(t)}</div>
           <div class="t-title">${esc(itemsTitle(t))}</div>
           <div class="t-meta">
             <span>${icon('pin')}${esc(UI.locationText(t))}</span>

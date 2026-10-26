@@ -987,6 +987,7 @@ const Pages = (() => {
                     <button class="btn btn-outline btn-block" data-cancel>${icon('close')} ยกเลิกคำขอ</button>
                   </div>
                 </section>` : ''}
+                ${t.reporter.email === me.email ? rateCard(t) : ''}
                 ${Store.can(me, 'reopen', t) ? `<section class="card">
                   <div class="card-head"><h3>${icon('alert')}ซ่อมแล้วยังไม่หาย?</h3></div>
                   <div class="card-body stack">
@@ -1024,6 +1025,8 @@ const Pages = (() => {
               body: `<div class="field"><label for="why">เหตุผล (ถ้ามี)</label><input class="input" id="why" placeholder="เช่น แจ้งผิดห้อง / ใช้งานได้แล้ว"></div>`,
               actions: [{ label: 'ไม่ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'ยืนยันยกเลิก', kind: 'btn-danger', onClick: async api => { await Store.cancelTicket(params.id, $('#why', api.body).value.trim()); UI.toast('ยกเลิกคำขอแล้ว'); } }] });
           }
+          const rb = e.target.closest('[data-rate]');
+          if (rb) { openRating(rb.dataset.rate); return; }
           if (e.target.closest('[data-reopen]')) {
             const shots = [];
             const MAX = 3;
@@ -1410,6 +1413,130 @@ const Pages = (() => {
     };
   }
 
+  // ═══════════ ประเมินความพึงพอใจ (ไม่ระบุตัวตน) ═══════════
+  const RATE_PRIVACY = 'ระบบจะไม่ระบุชื่อผู้ประเมินและข้อมูลที่เกี่ยวข้องใด ๆ ทั้งสิ้น ทั้งนี้ผลการประเมินจะแสดงหลังจากการประเมินนี้ 3 สัปดาห์ เพื่อพัฒนาระบบการซ่อมแซมต่อไปครับ';
+  const RATE_LABEL = ['ไม่พอใจ', 'ควรปรับปรุงมาก', 'ควรปรับปรุง', 'ปานกลาง', 'ดี', 'ดีมาก'];
+  const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>';
+  const itemQty = i => `${i.name}${i.qty ? ` × ${i.qty}${i.unit ? ` ${String(i.unit).split('/')[0]}` : ''}` : ''}`;
+  // สรุปงานในชุด: แจ้งเมื่อ · จำนวนสถานที่/รายการ · แต่ละสถานที่พร้อมผลการซ่อม
+  function rateSummary(g, { compact = false } = {}) {
+    const n = g.tickets.reduce((a, t) => a + t.items.length, 0);
+    const list = compact ? g.tickets.slice(0, 2) : g.tickets;
+    const st = t => t.status === 'done' ? '<span class="rs-st ok">✓ เสร็จสิ้น</span>'
+      : t.status === 'cannot_fix' ? '<span class="rs-st no">✕ ซ่อมไม่ได้ (ไม่นำมาประเมิน)</span>' : '<span class="rs-st">ยกเลิก</span>';
+    return `
+      <div class="rate-sum">
+        <div class="rs-head">แจ้งเมื่อ ${UI.date(g.tickets[0].createdAt)} · ${g.tickets.length > 1 ? `${g.tickets.length} สถานที่ · ` : ''}${n} รายการ
+          <span class="rs-days ${g.daysLeft <= 5 ? 'soon' : ''}">ประเมินได้อีก ${g.daysLeft} วัน</span></div>
+        <ul>${list.map(t => `<li><b>${esc(UI.locationText(t))}</b> — ${esc(t.items.map(itemQty).join(', '))} ${st(t)}</li>`).join('')}
+          ${compact && g.tickets.length > 2 ? `<li class="faint">และอีก ${g.tickets.length - 2} สถานที่</li>` : ''}</ul>
+      </div>`;
+  }
+  // การ์ดในหน้ารายละเอียดใบงาน (เฉพาะผู้แจ้ง)
+  function rateCard(t) {
+    const st = Store.ratingState(t);
+    if (st === 'done') return `<div class="notice" style="background:#F0FDF4;color:#166534">${icon('checkCircle')}<div>ประเมินความพึงพอใจแล้ว ขอบคุณครับ</div></div>`;
+    if (st !== 'pending') return '';
+    const g = Store.ratingGroups().find(x => x.ids.includes(t.id));
+    if (!g) return '';
+    return `<section class="card rate-card">
+      <div class="card-head"><h3>${icon('sparkle')}ประเมินความพึงพอใจ</h3><span class="rs-days ${g.daysLeft <= 5 ? 'soon' : ''}">อีก ${g.daysLeft} วัน</span></div>
+      <div class="card-body stack">
+        <p class="small muted">งานซ่อมเสร็จแล้ว ช่วยประเมินสักนิดเพื่อพัฒนาการบริการ${g.ids.length > 1 ? ` (แจ้งพร้อมกัน ${g.ids.length} ใบ ประเมินครั้งเดียว)` : ''} · ไม่ระบุชื่อผู้ประเมิน</p>
+        <button class="btn btn-primary btn-block" data-rate="${esc(g.key)}">${icon('sparkle')} ประเมินความพึงพอใจ</button>
+      </div>
+    </section>`;
+  }
+  const privacyBox = () => `<div class="rate-privacy">${icon('shield')}<span>${RATE_PRIVACY}</span></div>`;
+
+  // หน้าต่างเด้งเมื่อเข้าเว็บ: ประเมินเลย / ไว้ทีหลัง / ไม่ประเมิน (งานที่แสดงอยู่จะไม่เตือนอีก)
+  function promptRatings(groups) {
+    const m = UI.modal({
+      title: `งานซ่อมของคุณเสร็จแล้ว ${groups.length > 1 ? `${groups.length} ชุด` : ''}`.trim(),
+      subtitle: 'ช่วยประเมินความพึงพอใจสักนิด ใช้เวลาไม่ถึง 1 นาที', size: 'md',
+      body: `${groups.map(g => rateSummary(g, { compact: true })).join('')}${privacyBox()}`,
+      actions: [
+        { label: 'ไม่ประเมิน', kind: 'btn-ghost-dark', onClick: async () => {
+          const ok = await UI.confirm('งานที่แสดงอยู่นี้จะไม่เด้งเตือนและไม่มีสัญลักษณ์เตือนการประเมินอีก (งานที่ซ่อมเสร็จครั้งต่อไปยังเตือนตามปกติ)', { title: 'ไม่ประเมินงานเหล่านี้?', okLabel: 'ไม่ประเมิน' });
+          if (!ok) return false;
+          await Store.skipRating(groups.map(g => g.key));
+          UI.toast('รับทราบ จะไม่เตือนประเมินงานเหล่านี้อีก');
+        } },
+        { label: 'ไว้ทีหลัง', kind: 'btn-outline' },
+        { label: 'ประเมินเลย', kind: 'btn-primary', icon: 'sparkle', onClick: () => { setTimeout(() => openRating(groups[0].key, { chain: true }), 220); } }
+      ]
+    });
+    m.el.classList.add('rate-modal');
+    // โฟกัสปุ่ม "ประเมินเลย" (ไม่ใช่ปุ่มแรก "ไม่ประเมิน" กัน Enter พลาด)
+    setTimeout(() => $$('[data-act]', m.el).pop()?.focus({ preventScroll: true }), 90);
+  }
+
+  // แบบประเมิน: 7 หัวข้อ ดาว 0–5 (แตะดาวดวงเดิมซ้ำ = 0) + ข้อเสนอแนะ 2 ช่อง (ไม่บังคับ)
+  function openRating(key, { chain = false } = {}) {
+    const g = Store.ratingGroup(key);
+    if (!g) return UI.toast('งานนี้ประเมินแล้ว หรือเลยกำหนดประเมินแล้ว', 'info');
+    const scores = {};
+    const topics = Store.RATING_TOPICS;
+    const m = UI.modal({
+      title: 'ประเมินความพึงพอใจ', subtitle: g.ids.length > 1 ? `${g.ids[0]} และอีก ${g.ids.length - 1} ใบ (แจ้งพร้อมกัน ประเมินครั้งเดียว)` : g.ids[0], size: 'md',
+      body: `
+        ${rateSummary(g)}
+        ${privacyBox()}
+        <div class="rate-list">${topics.map(([k, title, desc], i) => `
+          <div class="rt-row ${k === 'overall' ? 'is-overall' : ''}" data-k="${k}">
+            <div class="rt-q"><strong>${i + 1}. ${esc(title)}</strong><small>${esc(desc)}</small></div>
+            <div class="rt-ans">
+              <div class="rt-stars" role="group" aria-label="${esc(title)}">${[1, 2, 3, 4, 5].map(v => `<button type="button" class="rt-star" data-v="${v}" aria-label="${esc(title)} ${v} ดาว" aria-pressed="false">${STAR}</button>`).join('')}</div>
+              <span class="rt-label">ยังไม่ได้ให้คะแนน</span>
+            </div>
+          </div>`).join('')}
+          <p class="small faint rt-hint">แตะดาวดวงเดิมซ้ำอีกครั้ง = 0 ดาว (0 คะแนน)</p>
+        </div>
+        <div class="field"><label for="rtRep">ข้อเสนอแนะด้านการซ่อมบำรุง <span class="hint">(ไม่บังคับ)</span></label><textarea class="textarea" id="rtRep" maxlength="1000" placeholder="เช่น อยากให้แจ้งเวลาเข้าซ่อมล่วงหน้า"></textarea></div>
+        <div class="field"><label for="rtWeb">ข้อเสนอแนะด้านเว็บไซต์ <span class="hint">(ไม่บังคับ)</span></label><textarea class="textarea" id="rtWeb" maxlength="1000" placeholder="เช่น อยากให้ค้นหาสถานที่ได้ง่ายขึ้น"></textarea></div>
+        <p class="rt-progress small" id="rtProg">ให้คะแนนแล้ว 0 จาก ${topics.length} ข้อ</p>`,
+      onOpen: api => {
+        // เริ่มที่ดาวข้อแรก ไม่โฟกัสช่องพิมพ์ (มือถือจะเด้งคีย์บอร์ดและเลื่อนลงล่าง)
+        setTimeout(() => { $('.rt-star', api.body)?.focus({ preventScroll: true }); api.body.scrollTop = 0; }, 90);
+        api.body.addEventListener('click', e => {
+          const b = e.target.closest('.rt-star'); if (!b) return;
+          const row = b.closest('.rt-row'), k = row.dataset.k, v = +b.dataset.v;
+          scores[k] = scores[k] === v ? 0 : v;
+          row.classList.remove('missing');
+          $$('.rt-star', row).forEach(s => { const on = +s.dataset.v <= scores[k]; s.classList.toggle('on', on); s.setAttribute('aria-pressed', on); });
+          const lb = $('.rt-label', row);
+          lb.textContent = `${RATE_LABEL[scores[k]]} (${scores[k]})`;
+          lb.className = `rt-label v${scores[k]}`;
+          const done = Object.keys(scores).length;
+          $('#rtProg', api.body).textContent = done === topics.length ? `ให้คะแนนครบ ${topics.length} ข้อแล้ว กดส่งได้เลย` : `ให้คะแนนแล้ว ${done} จาก ${topics.length} ข้อ`;
+          $('#rtProg', api.body).classList.toggle('ok', done === topics.length);
+        });
+      },
+      actions: [
+        { label: 'ไม่ประเมินงานนี้', kind: 'btn-ghost-dark', onClick: async () => {
+          const ok = await UI.confirm('งานนี้จะไม่เด้งเตือนและไม่มีสัญลักษณ์เตือนการประเมินอีก', { title: 'ไม่ประเมินงานนี้?', okLabel: 'ไม่ประเมิน' });
+          if (!ok) return false;
+          await Store.skipRating([key]);
+          UI.toast('รับทราบ จะไม่เตือนประเมินงานนี้อีก');
+        } },
+        { label: 'ส่งแบบประเมิน', kind: 'btn-primary', icon: 'send', onClick: async api => {
+          const missing = topics.filter(([k]) => scores[k] === undefined);
+          if (missing.length) {
+            missing.forEach(([k]) => $(`.rt-row[data-k="${k}"]`, api.body).classList.add('missing'));
+            $(`.rt-row[data-k="${missing[0][0]}"]`, api.body).scrollIntoView({ behavior: 'smooth', block: 'center' });
+            throw new Error(`ยังให้คะแนนไม่ครบ ${missing.length} ข้อ`);
+          }
+          await Store.rate(key, { s: scores, rep: $('#rtRep', api.body).value, web: $('#rtWeb', api.body).value });
+          UI.toast('ขอบคุณที่ช่วยประเมินครับ ผลจะแสดงในรายงานหลังจาก 3 สัปดาห์');
+          // มีงานรอประเมินอีก (มาจากหน้าต่างเด้ง) → เปิดชุดถัดไปให้เลย
+          const next = chain && Store.ratingGroups()[0];
+          if (next) setTimeout(() => openRating(next.key, { chain: true }), 400);
+        } }
+      ]
+    });
+    m.el.classList.add('rate-modal');
+  }
+
   // ═══════════ ตั้งค่าบัญชีครั้งแรก (บังคับกรอกให้ครบก่อนใช้งาน) ═══════════
   function setup(params) {
     const me = Store.me();
@@ -1553,5 +1680,5 @@ const Pages = (() => {
     return { title: 'ไม่มีสิทธิ์', html: `${pageHero({ title: 'ไม่มีสิทธิ์เข้าถึง' })}<div class="page-body"><div class="container"><div class="card empty">${icon('shield')}<strong>${esc(msg || 'บัญชีของคุณไม่มีสิทธิ์ใช้งานหน้านี้')}</strong><a class="btn btn-primary" href="#/">กลับหน้าแรก</a></div></div></div>` };
   }
 
-  return { home, login, reportChooser, reportForm, success, myTickets, ticket, board, contact, profile, setup, notFound, forbidden, pageHero, summary, rangeStart, semesterStart, RANGE_LABEL, formTabs };
+  return { home, login, reportChooser, reportForm, success, myTickets, ticket, board, contact, profile, setup, promptRatings, openRating, notFound, forbidden, pageHero, summary, rangeStart, semesterStart, RANGE_LABEL, formTabs };
 })();
