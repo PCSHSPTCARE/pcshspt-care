@@ -322,7 +322,7 @@ const Pages = (() => {
           <div class="login-box rise">
             <img src="images/logo.png" alt="" style="height:76px;margin-bottom:18px">
             <h1>เข้าสู่ระบบ</h1>
-            <p class="muted" style="margin:6px 0 24px">ใช้อีเมลโรงเรียน ${Store.domains().map(d => `<strong class="nw">@${esc(d)}</strong>`).join(' หรือ ')} เท่านั้น ระบบจะรู้ชื่อผู้แจ้งจากบัญชีโดยอัตโนมัติ</p>
+            <p class="muted" style="margin:6px 0 24px">ใช้อีเมลโรงเรียน ${Store.domains().map(d => `<strong class="nw">@${esc(d)}</strong>`).join(' หรือ ')} หรือ Gmail ที่แอดมินเพิ่มไว้ ระบบจะรู้ชื่อผู้แจ้งจากบัญชีโดยอัตโนมัติ</p>
             <div id="loginErr"></div>
             ${Store.cloud ? `
             <button class="g-btn" type="button" id="gLogin">${icon('google')} เข้าสู่ระบบด้วย Google</button>

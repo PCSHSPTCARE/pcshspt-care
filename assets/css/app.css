@@ -1833,3 +1833,12 @@ p { text-wrap: pretty; }
   .nav, .footer, .no-print, #toasts { display: none !important; }
   body { background: #fff; }
 }
+
+/* นำเข้ารายชื่อผู้ใช้จาก Excel */
+.imp-steps { margin: 0 0 14px; padding-left: 22px; display: flex; flex-direction: column; gap: 14px; }
+.imp-steps li::marker { font-weight: 700; color: var(--orange-700); }
+.imp-paste { margin-bottom: 12px; }
+.imp-paste summary { cursor: pointer; color: var(--muted); }
+.imp-sum { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+#impPrev .notice { margin-bottom: 10px; }
+#impPrev .table th, #impPrev .table td { padding: 8px 10px; font-size: .86rem; }

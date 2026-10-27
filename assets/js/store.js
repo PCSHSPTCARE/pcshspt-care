@@ -650,8 +650,9 @@ const Store = (() => {
     async login(email) {
       if (CLOUD) return Cloud.login();
       email = String(email || '').trim().toLowerCase();
-      if (!isSchoolEmail(email, db.settings.domain)) throw new Error(`ใช้ได้เฉพาะอีเมลของโรงเรียน (${schoolDomains(db.settings.domain).map(x => '@' + x).join(' หรือ ')}) เท่านั้น`);
       const u = db.users.find(x => x.email.toLowerCase() === email);
+      // อีเมลอื่น (เช่น Gmail) ใช้ได้เฉพาะคนที่แอดมินเพิ่มไว้
+      if (!u && !isSchoolEmail(email, db.settings.domain)) throw new Error(`ใช้ได้เฉพาะอีเมลของโรงเรียน (${schoolDomains(db.settings.domain).map(x => '@' + x).join(' หรือ ')}) หรืออีเมลที่แอดมินเพิ่มไว้เท่านั้น`);
       if (!u || !u.active) throw new Error('บัญชีนี้ยังไม่มีสิทธิ์ใช้งานระบบ ระบบแจ้งซ่อมเปิดให้เฉพาะครูและบุคลากร หากเป็นครูกรุณาติดต่อฝ่ายบริหารงานทั่วไปเพื่อเพิ่มรายชื่อ');
       localStorage.setItem(SESSION_KEY, u.email);
       emit();
@@ -1135,9 +1136,15 @@ const Store = (() => {
       }
       return Promise.race([Promise.all(firsts), sleep(10000)]);
     }
-    async function startUser(u, email) {
+    async function startUser(u, email, school) {
       const ref = fs.collection('users').doc(email);
       let snap = await ref.get();
+      // อีเมลอื่น (เช่น Gmail) ใช้ได้เฉพาะคนที่แอดมินเพิ่มไว้ในหน้าผู้ใช้
+      if (!snap.exists && !school) {
+        loginError = `บัญชี ${email} ยังไม่ได้รับอนุญาตให้ใช้งาน · ใช้อีเมลโรงเรียน (${DOMAINS.map(d => '@' + d).join(' หรือ ')}) หรือติดต่อแอดมินเพื่อเพิ่มอีเมลนี้`;
+        await auth.signOut();
+        return;
+      }
       if (!snap.exists) {
         // ล็อกอินครั้งแรก: สร้างโปรไฟล์ครูให้อัตโนมัติ (แอดมินคนแรกได้สิทธิ์แอดมินด้วย)
         const [first, ...rest] = String(u.displayName || email.split('@')[0]).trim().split(/\s+/);
@@ -1175,11 +1182,11 @@ const Store = (() => {
       me = null;
       if (u) {
         const email = String(u.email || '').toLowerCase();
-        if (!DOMAINS.some(d => email.endsWith('@' + d)) || !u.emailVerified) {
-          loginError = `ใช้ได้เฉพาะบัญชีของโรงเรียน (${DOMAINS.map(d => '@' + d).join(' หรือ ')}) เท่านั้น · บัญชี ${email} ไม่มีสิทธิ์ใช้งาน`;
+        if (!u.emailVerified) {
+          loginError = `บัญชี ${email} ยังไม่ได้ยืนยันอีเมล จึงใช้งานไม่ได้`;
           await auth.signOut();
         } else {
-          try { await startUser(u, email); } catch (e) { console.error(e); loginError = friendly(e).message; me = null; }
+          try { await startUser(u, email, DOMAINS.some(d => email.endsWith('@' + d))); } catch (e) { console.error(e); loginError = friendly(e).message; me = null; }
         }
       }
       rebuild();

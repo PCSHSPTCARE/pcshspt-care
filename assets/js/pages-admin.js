@@ -828,10 +828,11 @@ const Admin = (() => {
     approver: { label: 'ผู้อนุมัติ', tone: 'green', desc: 'อัปเดตสถานะเฉพาะหมวดและสถานะที่ได้รับสิทธิ์ ไม่เห็นสถิติและการตั้งค่า' },
     admin: { label: 'แอดมิน', tone: 'indigo', desc: 'ดูแลทุกอย่าง เห็นทุกหมวด สถิติ และการตั้งค่า' }
   };
+  const EMAIL_RE = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
   function users() {
     const state = { q: '', role: '' };
     return {
-      title: 'ผู้ใช้และสิทธิ์', subtitle: 'กำหนดบทบาท หมวดที่มองเห็น และสถานะที่กดได้ของแต่ละคน (นักเรียนใช้โดเมนเดียวกัน จึงต้องมีชื่อในรายการนี้ก่อน)',
+      title: 'ผู้ใช้และสิทธิ์', subtitle: 'กำหนดบทบาท หมวดที่มองเห็น และสถานะที่กดได้ของแต่ละคน · คนที่ไม่มีอีเมลโรงเรียน (เช่น ครู จ.ภ. สุพรรณบุรี) เพิ่ม Gmail ที่นี่แล้วเข้าระบบได้ทันที',
       actions: `<button class="btn btn-outline btn-sm" id="imp">${icon('upload')} นำเข้ารายชื่อ</button><button class="btn btn-primary btn-sm" id="addU">${icon('plus')} เพิ่มผู้ใช้</button>`,
       html: `
         <div class="card">
@@ -853,7 +854,7 @@ const Admin = (() => {
           $('#rows', root).innerHTML = list.map(u => {
             const r = mainRole(u);
             return `
-            <tr style="${u.active ? '' : 'opacity:.55'}"><td><div class="row" style="gap:12px;flex-wrap:nowrap">${UI.avatar(Store.fullName(u), '', r !== 'teacher' ? 'navy' : '')}<div><strong style="font-weight:500">${esc(Store.fullName(u))}</strong><div class="sub">${esc(u.email)}</div>${signOf(u).length ? `<div class="sub" style="color:var(--orange-700)">ผู้ลงนาม: ${signOf(u).map(esc).join(', ')}</div>` : ''}</div></div></td>
+            <tr style="${u.active ? '' : 'opacity:.55'}"><td><div class="row" style="gap:12px;flex-wrap:nowrap">${UI.avatar(Store.fullName(u), '', r !== 'teacher' ? 'navy' : '')}<div><strong style="font-weight:500">${esc(Store.fullName(u))}</strong><div class="sub">${esc(u.email)}${Store.isSchoolEmail(u.email) ? '' : ' <span class="badge tone-slate" style="padding:1px 8px">Gmail · แอดมินเพิ่ม</span>'}</div>${signOf(u).length ? `<div class="sub" style="color:var(--orange-700)">ผู้ลงนาม: ${signOf(u).map(esc).join(', ')}</div>` : ''}</div></div></td>
               <td><span class="badge tone-${ROLE[r].tone}">${ROLE[r].label}</span>${!u.active ? ' <span class="badge tone-slate">ระงับ</span>' : ''}</td>
               <td>${r === 'teacher' || r === 'executive' ? '<span class="faint small">—</span>' : `<div class="role-tags">${Store.formsOf(u).map(f => Views.formChip(f)).join('') || '<span class="faint small">ไม่มี</span>'}</div>`}</td>
               <td>${r === 'teacher' || r === 'executive' ? '<span class="faint small">—</span>' : `<div class="role-tags">${Store.actionsOf(u).map(a => `<span class="badge tone-${UI.STATUS[a].tone}" style="padding:2px 9px">${UI.STATUS[a].label}</span>`).join('') || '<span class="faint small">ไม่มี</span>'}</div>`}</td>
@@ -867,7 +868,8 @@ const Admin = (() => {
           const r = mainRole(u);
           UI.modal({ title: isNew ? 'เพิ่มผู้ใช้' : 'แก้ไขผู้ใช้และสิทธิ์', size: 'lg',
             body: `<div class="grid-2">
-                <div class="field"><label for="em">อีเมลโรงเรียน <span class="req">*</span></label><input class="input" id="em" value="${esc(u.email)}" placeholder="name@${esc(s.domain)}"></div>
+                <div class="field"><label for="em">อีเมล <span class="req">*</span></label><input class="input" id="em" value="${esc(u.email)}" placeholder="name@${esc(s.domain)} หรือ name@gmail.com" autocomplete="off">
+                  <span class="hint">อีเมลโรงเรียน หรือ Gmail ของคนที่ไม่มีอีเมลโรงเรียน · Gmail เข้าระบบได้เฉพาะคนที่เพิ่มไว้ที่นี่</span></div>
                 <div class="field"><label for="ph">เบอร์โทร</label><input class="input" id="ph" value="${esc(u.phone || '')}"></div></div>
               <div class="grid-3">
                 <div class="field"><label for="pf">คำนำหน้า</label><select class="select" id="pf">${['นาย', 'นาง', 'นางสาว', 'ดร.', 'ว่าที่ร้อยตรี'].map(v => `<option ${v === u.prefix ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
@@ -890,7 +892,8 @@ const Admin = (() => {
             actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'บันทึก', kind: 'btn-primary', onClick: api => {
               const v = id => $('#' + id, api.body).value.trim();
               const email = v('em').toLowerCase();
-              if (!Store.isSchoolEmail(email)) throw new Error(`อีเมลต้องลงท้ายด้วย ${Store.domains().map(d => '@' + d).join(' หรือ ')}`);
+              if (!EMAIL_RE.test(email)) throw new Error('รูปแบบอีเมลไม่ถูกต้อง เช่น name@gmail.com');
+              if (isNew && Store.userByEmail(email)) throw new Error('มีผู้ใช้อีเมลนี้อยู่แล้ว');
               if (!v('fn') || !v('ln')) throw new Error('กรุณากรอกชื่อและนามสกุล');
               const role = $('input[name=role]:checked', api.body).value;
               const roles = [...new Set([...(role !== 'teacher' ? [role] : []), ...($('#tc', api.body).checked || role === 'teacher' ? ['teacher'] : [])])];
@@ -915,26 +918,134 @@ const Admin = (() => {
           }
         });
         $('#addU').addEventListener('click', () => edit(null));
-        $('#imp').addEventListener('click', () => {
-          const s = S();
-          UI.modal({ title: 'นำเข้ารายชื่อครู', size: 'lg',
-            body: `<p class="muted small">คัดลอกจาก Excel หรือ Google Sheets แล้ววางด้านล่าง หนึ่งบรรทัดต่อหนึ่งคน เรียงคอลัมน์: <strong>อีเมล, คำนำหน้า, ชื่อ, นามสกุล, ตำแหน่ง, ฝ่าย/กลุ่มสาระ, เบอร์โทร</strong> (คั่นด้วยจุลภาคหรือแท็บ) ผู้ใช้ใหม่จะได้บทบาท "ครู"</p>
-              <textarea class="textarea" id="csv" style="min-height:200px;font-family:monospace;font-size:.85rem" placeholder="malee.s@${esc(s.domain)}, นางสาว, มาลี, สวยงาม, ครู, กลุ่มสาระการเรียนรู้ศิลปะ, 081-111-2222"></textarea>`,
-            actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'นำเข้า', kind: 'btn-primary', icon: 'upload', onClick: api => {
-              const rows = [], bad = [];
-              $('#csv', api.body).value.split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach((line, i) => {
-                const [email, prefix, first, last, position, dept, phone] = line.split(/\t|,/).map(x => (x || '').trim());
-                if (!email || !Store.isSchoolEmail(email) || !first) bad.push(i + 1);
-                else rows.push({ email: email.toLowerCase(), prefix, first, last, position: position || 'ครู', dept, phone });
-              });
-              if (!rows.length) throw new Error('ไม่พบข้อมูลที่ถูกต้อง');
-              const r = Store.importUsers(rows);
-              UI.toast(`เพิ่มใหม่ ${r.added} คน · อัปเดต ${r.updated} คน${bad.length ? ` · ข้าม ${bad.length} บรรทัด` : ''}`);
-            } }] });
-        });
+        $('#imp').addEventListener('click', () => importDialog());
         App.onCleanup(Store.subscribe(render));
       }
     };
+  }
+
+  // ═══════════ นำเข้ารายชื่อผู้ใช้จาก Excel (หรือวางข้อความ) ═══════════
+  // คนใหม่ได้บทบาท "ครู" · คนที่มีอยู่แล้วอัปเดตชื่อ/ตำแหน่ง/ฝ่าย/เบอร์ แต่สิทธิ์เดิมไม่เปลี่ยน
+  const IMPORT_HEAD = ['อีเมล', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'ตำแหน่ง', 'ฝ่าย/กลุ่มสาระ', 'เบอร์โทร'];
+  const IMPORT_KEYS = ['email', 'prefix', 'first', 'last', 'position', 'dept', 'phone'];
+  // ตัวอ่าน/เขียน Excel โหลดเฉพาะตอนใช้ (ไม่ทำให้หน้าเว็บปกติช้าลง)
+  let xlsxLoading = null;
+  const loadXLSX = () => xlsxLoading || (xlsxLoading = new Promise((res, rej) => {
+    if (window.XLSX) return res(window.XLSX);
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    sc.onload = () => res(window.XLSX);
+    sc.onerror = () => { xlsxLoading = null; rej(new Error('โหลดตัวอ่าน Excel ไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองใหม่')); };
+    document.head.appendChild(sc);
+  }));
+
+  async function downloadTemplate() {
+    const XLSX = await loadXLSX(), s = S();
+    const wb = XLSX.utils.book_new();
+    const main = XLSX.utils.aoa_to_sheet([IMPORT_HEAD]);
+    main['!cols'] = [32, 12, 18, 18, 20, 40, 15].map(wch => ({ wch }));
+    XLSX.utils.book_append_sheet(wb, main, 'รายชื่อ');
+    const help = XLSX.utils.aoa_to_sheet([
+      ['วิธีกรอก'],
+      ['1. กรอกในแผ่นงาน "รายชื่อ" หนึ่งแถวต่อหนึ่งคน (ห้ามแก้หัวตาราง)'],
+      ['2. อีเมล: อีเมลโรงเรียน หรือ Gmail ของคนที่ไม่มีอีเมลโรงเรียน · ต้องตรงกับบัญชีที่ใช้เข้าสู่ระบบ'],
+      ['3. จำเป็นต้องกรอก: อีเมล และ ชื่อ · ช่องอื่นเว้นว่างได้ (ครูกรอกเองตอนเข้าระบบครั้งแรก)'],
+      ['4. คนใหม่ได้สิทธิ์ "ครู" (แจ้งซ่อมได้) · เปลี่ยนสิทธิ์ทีละคนได้ในหน้า ผู้ใช้และสิทธิ์'],
+      ['5. คนที่มีในระบบแล้ว จะอัปเดตชื่อ ตำแหน่ง ฝ่าย เบอร์ แต่สิทธิ์เดิมไม่เปลี่ยน'],
+      ['6. บันทึกไฟล์ แล้วอัปโหลดกลับในหน้า ผู้ใช้และสิทธิ์ → นำเข้ารายชื่อ'],
+      [],
+      ['ตัวอย่าง (ไม่ต้องคัดลอกไป)'],
+      IMPORT_HEAD,
+      [`somchai.j@${s.domain}`, 'นาย', 'สมชาย', 'ใจดี', 'ครู', s.departments[1] || '', '0812345678'],
+      ['malee.teacher@gmail.com', 'นางสาว', 'มาลี', 'สวยงาม', 'ครู', s.departments[0] || '', '0898765432']
+    ]);
+    help['!cols'] = [32, 12, 18, 18, 20, 40, 15].map(wch => ({ wch }));
+    XLSX.utils.book_append_sheet(wb, help, 'วิธีกรอก');
+    const n = Math.max(s.positions.length, s.departments.length);
+    const opts = XLSX.utils.aoa_to_sheet([['ตำแหน่ง', 'ฝ่าย/กลุ่มสาระ'], ...Array.from({ length: n }, (_, i) => [s.positions[i] || '', s.departments[i] || ''])]);
+    opts['!cols'] = [{ wch: 22 }, { wch: 46 }];
+    XLSX.utils.book_append_sheet(wb, opts, 'ตัวเลือก');
+    XLSX.writeFile(wb, 'แบบฟอร์มนำเข้ารายชื่อผู้ใช้.xlsx');
+  }
+
+  // ตาราง (แถว × คอลัมน์) → รายชื่อที่ถูกต้อง + แถวที่ข้าม พร้อมเหตุผล · หาหัวตารางจากชื่อคอลัมน์ (สลับลำดับได้)
+  function parseImport(aoa) {
+    const cell = v => String(v ?? '').trim();
+    const hi = aoa.findIndex(r => r.some(c => cell(c) === 'อีเมล'));
+    const head = hi >= 0 ? aoa[hi].map(cell) : IMPORT_HEAD;
+    const col = IMPORT_HEAD.map(h => head.indexOf(h));
+    const rows = [], bad = [], seen = new Set();
+    aoa.slice(hi + 1).forEach((r, i) => {
+      const line = hi + i + 2;
+      if (!r.some(c => cell(c))) return;
+      const o = Object.fromEntries(IMPORT_KEYS.map((k, j) => [k, col[j] >= 0 ? cell(r[col[j]]) : '']));
+      o.email = o.email.toLowerCase();
+      // Excel ตัดเลข 0 หน้าเบอร์โทร (เช่น 812345678) → เติมกลับ
+      if (/^[1-9]\d{8}$/.test(o.phone)) o.phone = '0' + o.phone;
+      if (!EMAIL_RE.test(o.email)) return bad.push(`แถว ${line}: อีเมลไม่ถูกต้อง${o.email ? ` (${o.email})` : ''}`);
+      if (!o.first) return bad.push(`แถว ${line}: ไม่มีชื่อ (${o.email})`);
+      if (seen.has(o.email)) return bad.push(`แถว ${line}: อีเมลซ้ำในไฟล์ (${o.email})`);
+      seen.add(o.email);
+      rows.push({ ...o, position: o.position || 'ครู' });
+    });
+    return { rows, bad };
+  }
+
+  function importDialog() {
+    const s = S();
+    let parsed = null;
+    UI.modal({ title: 'นำเข้ารายชื่อผู้ใช้', size: 'lg',
+      body: `
+        <ol class="imp-steps">
+          <li><strong>ดาวน์โหลดแบบฟอร์ม Excel</strong> แล้วกรอกรายชื่อ หนึ่งแถวต่อหนึ่งคน (อีเมลโรงเรียน หรือ Gmail)
+            <div style="margin-top:8px"><button type="button" class="btn btn-outline btn-sm" id="tpl">${icon('download')} ดาวน์โหลดแบบฟอร์ม (.xlsx)</button></div></li>
+          <li><strong>อัปโหลดไฟล์ที่กรอกแล้ว</strong> ระบบจะแสดงรายชื่อให้ตรวจก่อนนำเข้า
+            <div style="margin-top:8px"><label class="btn btn-primary btn-sm">${icon('upload')} เลือกไฟล์ Excel<input type="file" id="xf" accept=".xlsx,.xls,.csv" hidden></label> <span class="small faint" id="xfName"></span></div></li>
+        </ol>
+        <details class="imp-paste"><summary class="small">หรือวางข้อความที่คัดลอกจาก Excel / Google Sheets</summary>
+          <p class="muted small" style="margin:8px 0">เรียงคอลัมน์: <strong>${IMPORT_HEAD.join(', ')}</strong> (คั่นด้วยแท็บหรือจุลภาค)</p>
+          <textarea class="textarea" id="csv" style="min-height:140px;font-family:monospace;font-size:.85rem" placeholder="malee.s@${esc(s.domain)}, นางสาว, มาลี, สวยงาม, ครู, กลุ่มสาระการเรียนรู้ศิลปะ, 0811112222"></textarea>
+        </details>
+        <div id="impPrev"></div>
+        <p class="small faint" style="margin:10px 0 0">คนใหม่ได้สิทธิ์ "ครู" · เปลี่ยนสิทธิ์ทีละคนได้ภายหลัง · คนที่มีอยู่แล้วอัปเดตข้อมูล แต่สิทธิ์เดิมไม่เปลี่ยน</p>`,
+      onOpen: api => {
+        const prev = $('#impPrev', api.body);
+        const show = p => {
+          parsed = p;
+          const isNew = r => !Store.userByEmail(r.email);
+          const nNew = p.rows.filter(isNew).length;
+          prev.innerHTML = !p.rows.length && !p.bad.length ? '' : `
+            <div class="imp-sum">
+              <span class="badge tone-green">ใหม่ ${nNew} คน</span><span class="badge tone-indigo">อัปเดต ${p.rows.length - nNew} คน</span>${p.bad.length ? `<span class="badge tone-red">ข้าม ${p.bad.length} แถว</span>` : ''}
+            </div>
+            ${p.bad.length ? `<div class="notice orange small">${icon('alert')}<div>${p.bad.slice(0, 8).map(esc).join('<br>')}${p.bad.length > 8 ? `<br>… และอีก ${p.bad.length - 8} แถว` : ''}</div></div>` : ''}
+            ${p.rows.length ? `<div class="table-wrap" style="max-height:260px"><table class="table sm"><thead><tr><th>อีเมล</th><th>ชื่อ - นามสกุล</th><th>ตำแหน่ง / ฝ่าย</th><th></th></tr></thead><tbody>
+              ${p.rows.map(r => `<tr><td>${esc(r.email)}${Store.isSchoolEmail(r.email) ? '' : ' <span class="badge tone-slate" style="padding:1px 7px">Gmail</span>'}</td><td>${esc(`${r.prefix}${r.first} ${r.last}`)}</td><td class="small">${esc(r.position)}${r.dept ? ` · ${esc(r.dept)}` : ''}</td><td>${isNew(r) ? '<span class="badge tone-green">ใหม่</span>' : '<span class="badge tone-indigo">อัปเดต</span>'}</td></tr>`).join('')}
+            </tbody></table></div>` : ''}`;
+        };
+        $('#tpl', api.body).addEventListener('click', async e => {
+          const b = e.currentTarget; b.disabled = true;
+          try { await downloadTemplate(); } catch (err) { UI.toast(err.message, 'error'); }
+          b.disabled = false;
+        });
+        $('#xf', api.body).addEventListener('change', async e => {
+          const f = e.target.files[0]; if (!f) return;
+          $('#xfName', api.body).textContent = f.name;
+          try {
+            const XLSX = await loadXLSX();
+            const wb = XLSX.read(await f.arrayBuffer());
+            const ws = wb.Sheets['รายชื่อ'] || wb.Sheets[wb.SheetNames[0]];
+            show(parseImport(XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })));
+          } catch (err) { UI.toast(err.message.startsWith('โหลด') ? err.message : 'อ่านไฟล์ไม่ได้ กรุณาใช้แบบฟอร์ม .xlsx ของระบบ', 'error'); }
+          e.target.value = '';
+        });
+        $('#csv', api.body).addEventListener('input', e => show(parseImport(e.target.value.split(/\r?\n/).map(l => l.split(/\t|,/)))));
+      },
+      actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'นำเข้า', kind: 'btn-primary', icon: 'upload', onClick: () => {
+        if (!parsed?.rows.length) throw new Error('ยังไม่มีรายชื่อที่นำเข้าได้ · เลือกไฟล์ Excel หรือวางข้อความก่อน');
+        const r = Store.importUsers(parsed.rows);
+        UI.toast(`นำเข้าแล้ว: เพิ่มใหม่ ${r.added} คน · อัปเดต ${r.updated} คน${parsed.bad.length ? ` · ข้าม ${parsed.bad.length} แถว` : ''}`);
+      } }] });
   }
 
   // ═══════════ ตั้งค่า: บุคลากร (หน้าติดต่อเรา) ═══════════
