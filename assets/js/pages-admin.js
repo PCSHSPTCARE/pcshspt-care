@@ -879,6 +879,8 @@ const Admin = (() => {
     admin: { label: 'แอดมิน', tone: 'indigo', desc: 'ดูแลทุกอย่าง เห็นทุกหมวด สถิติ และการตั้งค่า' }
   };
   const EMAIL_RE = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
+  // แยกหลายอีเมลที่คั่นด้วยขึ้นบรรทัด / เว้นวรรค / จุลภาค / อัฒภาค
+  const splitEmails = text => String(text || '').toLowerCase().split(/[\s,;]+/).filter(Boolean);
   function users() {
     const state = { q: '', role: '' };
     return {
@@ -904,7 +906,7 @@ const Admin = (() => {
           $('#rows', root).innerHTML = list.map(u => {
             const r = mainRole(u);
             return `
-            <tr style="${u.active ? '' : 'opacity:.55'}"><td><div class="row" style="gap:12px;flex-wrap:nowrap">${UI.avatar(Store.fullName(u), '', r !== 'teacher' ? 'navy' : '')}<div><strong style="font-weight:500">${esc(Store.fullName(u))}</strong><div class="sub">${esc(u.email)}${Store.isSchoolEmail(u.email) ? '' : ' <span class="badge tone-slate" style="padding:1px 8px">Gmail · แอดมินเพิ่ม</span>'}</div>${signOf(u).length ? `<div class="sub" style="color:var(--orange-700)">ผู้ลงนาม: ${signOf(u).map(esc).join(', ')}</div>` : ''}</div></div></td>
+            <tr style="${u.active ? '' : 'opacity:.55'}"><td><div class="row" style="gap:12px;flex-wrap:nowrap">${UI.avatar(Store.fullName(u) || u.email, '', r !== 'teacher' ? 'navy' : '')}<div><strong style="font-weight:500">${u.first ? esc(Store.fullName(u)) : `<span class="faint">${esc(u.email.split('@')[0])}</span> <span class="badge tone-orange" style="padding:1px 8px">รอเข้าใช้ครั้งแรก</span>`}</strong><div class="sub">${esc(u.email)}${Store.isSchoolEmail(u.email) ? '' : ' <span class="badge tone-slate" style="padding:1px 8px">Gmail · แอดมินเพิ่ม</span>'}</div>${signOf(u).length ? `<div class="sub" style="color:var(--orange-700)">ผู้ลงนาม: ${signOf(u).map(esc).join(', ')}</div>` : ''}</div></div></td>
               <td><span class="badge tone-${ROLE[r].tone}">${ROLE[r].label}</span>${!u.active ? ' <span class="badge tone-slate">ระงับ</span>' : ''}</td>
               <td>${r === 'teacher' || r === 'executive' ? '<span class="faint small">—</span>' : `<div class="role-tags">${Store.formsOf(u).map(f => Views.formChip(f)).join('') || '<span class="faint small">ไม่มี</span>'}</div>`}</td>
               <td>${r === 'teacher' || r === 'executive' ? '<span class="faint small">—</span>' : `<div class="role-tags">${Store.actionsOf(u).map(a => `<span class="badge tone-${UI.STATUS[a].tone}" style="padding:2px 9px">${UI.STATUS[a].label}</span>`).join('') || '<span class="faint small">ไม่มี</span>'}</div>`}</td>
@@ -914,17 +916,22 @@ const Admin = (() => {
         };
         const edit = u => {
           const isNew = !u;
-          u = u || { email: '', prefix: 'นาย', first: '', last: '', position: 'ครู', dept: '', phone: '', roles: ['teacher'], forms: [...Store.FORM_KEYS], actions: ['done', 'cannot_fix'], active: true };
+          u = u || { email: '', prefix: '', first: '', last: '', position: 'ครู', dept: '', phone: '', roles: ['teacher'], forms: [...Store.FORM_KEYS], actions: ['done', 'cannot_fix'], active: true };
           const r = mainRole(u);
           UI.modal({ title: isNew ? 'เพิ่มผู้ใช้' : 'แก้ไขผู้ใช้และสิทธิ์', size: 'lg',
-            body: `<div class="grid-2">
-                <div class="field"><label for="em">อีเมล <span class="req">*</span></label><input class="input" id="em" value="${esc(u.email)}" placeholder="name@${esc(s.domain)} หรือ name@gmail.com" autocomplete="off">
-                  <span class="hint">อีเมลโรงเรียน หรือ Gmail ของคนที่ไม่มีอีเมลโรงเรียน · Gmail เข้าระบบได้เฉพาะคนที่เพิ่มไว้ที่นี่</span></div>
-                <div class="field"><label for="ph">เบอร์โทร</label><input class="input" id="ph" value="${esc(u.phone || '')}"></div></div>
+            body: `${isNew ? `
+              <div class="field"><label for="em">อีเมล <span class="req">*</span> <span class="faint">(ใส่ได้หลายอีเมล · บรรทัดละ 1 อีเมล หรือคั่นด้วยเว้นวรรค / จุลภาค)</span></label>
+                <textarea class="textarea" id="em" rows="3" style="min-height:84px" placeholder="teacher1@gmail.com&#10;teacher2@gmail.com&#10;name@${esc(s.domain)}" autocomplete="off"></textarea>
+                <span class="hint" id="emHint">อีเมลโรงเรียน หรือ Gmail ของคนที่ไม่มีอีเมลโรงเรียน · Gmail เข้าระบบได้เฉพาะคนที่เพิ่มไว้ที่นี่ · ชื่อและรายละเอียดอื่นไม่ต้องกรอก ครูกรอกเองตอนเข้าเว็บครั้งแรก</span></div>` : `
+              <div class="field"><label for="em">อีเมล <span class="req">*</span></label><input class="input" id="em" value="${esc(u.email)}" autocomplete="off"></div>`}
+              <div id="oneOnly" class="stack" style="gap:0">
+              <div class="grid-2">
+                <div class="field"><label for="ph">เบอร์โทร <span class="faint">(ไม่บังคับ)</span></label><input class="input" id="ph" value="${esc(u.phone || '')}"></div></div>
               <div class="grid-3">
-                <div class="field"><label for="pf">คำนำหน้า</label><select class="select" id="pf">${['นาย', 'นาง', 'นางสาว', 'ดร.', 'ว่าที่ร้อยตรี'].map(v => `<option ${v === u.prefix ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
-                <div class="field"><label for="fn">ชื่อ <span class="req">*</span></label><input class="input" id="fn" value="${esc(u.first)}"></div>
-                <div class="field"><label for="ln">นามสกุล <span class="req">*</span></label><input class="input" id="ln" value="${esc(u.last)}"></div></div>
+                <div class="field"><label for="pf">คำนำหน้า</label><select class="select" id="pf"><option value="">-</option>${['นาย', 'นาง', 'นางสาว', 'ดร.', 'ว่าที่ร้อยตรี'].map(v => `<option ${v === u.prefix ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+                <div class="field"><label for="fn">ชื่อ <span class="faint">(ไม่บังคับ)</span></label><input class="input" id="fn" value="${esc(u.first)}"></div>
+                <div class="field"><label for="ln">นามสกุล <span class="faint">(ไม่บังคับ)</span></label><input class="input" id="ln" value="${esc(u.last)}"></div></div>
+              </div>
               <div class="grid-2">
                 <div class="field"><label for="po">ตำแหน่ง</label><input class="input" id="po" list="posList" value="${esc(u.position)}"><datalist id="posList">${s.positions.map(p => `<option value="${esc(p)}">`).join('')}</datalist></div>
                 <div class="field"><label for="dp">ฝ่าย / กลุ่มสาระ</label><select class="select" id="dp"><option value="">-</option>${[...new Set([u.dept, ...s.departments])].filter(Boolean).map(d => `<option ${d === u.dept ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></div></div>
@@ -938,13 +945,26 @@ const Admin = (() => {
               </div>
               <label class="checkbox"><input type="checkbox" id="tc" ${u.roles.includes('teacher') ? 'checked' : ''}>แจ้งซ่อมได้ด้วย (เป็นครู/บุคลากร)</label>
               <label class="checkbox"><input type="checkbox" id="ac" ${u.active ? 'checked' : ''}>เปิดใช้งานบัญชี</label>`,
-            onOpen: api => api.body.addEventListener('change', e => { if (e.target.name === 'role') { $('#permBox', api.body).hidden = e.target.value !== 'approver'; if (e.target.value === 'teacher') $('#tc', api.body).checked = true; } }),
+            onOpen: api => {
+              api.body.addEventListener('change', e => { if (e.target.name === 'role') { $('#permBox', api.body).hidden = e.target.value !== 'approver'; if (e.target.value === 'teacher') $('#tc', api.body).checked = true; } });
+              // หลายอีเมล → ซ่อนชื่อ/เบอร์ (ใช้ได้เฉพาะคนเดียว) · บอกจำนวนอีเมลที่จะเพิ่ม
+              if (isNew) $('#em', api.body).addEventListener('input', () => {
+                const list = splitEmails($('#em', api.body).value);
+                $('#oneOnly', api.body).hidden = list.length > 1;
+                $('#emHint', api.body).innerHTML = list.length > 1
+                  ? `<b>${list.length} อีเมล</b>${list.filter(x => !EMAIL_RE.test(x)).length ? ` · <span style="color:#B91C1C">รูปแบบไม่ถูกต้อง ${list.filter(x => !EMAIL_RE.test(x)).length} อีเมล</span>` : ''}${list.filter(x => Store.userByEmail(x)).length ? ` · มีในระบบแล้ว ${list.filter(x => Store.userByEmail(x)).length} (จะข้าม)` : ''} · ทุกคนได้สิทธิ์ตามที่เลือกด้านล่าง ชื่อให้ครูกรอกเองตอนเข้าเว็บครั้งแรก`
+                  : 'อีเมลโรงเรียน หรือ Gmail ของคนที่ไม่มีอีเมลโรงเรียน · Gmail เข้าระบบได้เฉพาะคนที่เพิ่มไว้ที่นี่ · ชื่อและรายละเอียดอื่นไม่ต้องกรอก ครูกรอกเองตอนเข้าเว็บครั้งแรก';
+              });
+            },
             actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'บันทึก', kind: 'btn-primary', onClick: api => {
               const v = id => $('#' + id, api.body).value.trim();
-              const email = v('em').toLowerCase();
-              if (!EMAIL_RE.test(email)) throw new Error('รูปแบบอีเมลไม่ถูกต้อง เช่น name@gmail.com');
-              if (isNew && Store.userByEmail(email)) throw new Error('มีผู้ใช้อีเมลนี้อยู่แล้ว');
-              if (!v('fn') || !v('ln')) throw new Error('กรุณากรอกชื่อและนามสกุล');
+              const emails = [...new Set(splitEmails(v('em')))];
+              if (!emails.length) throw new Error('กรุณาใส่อีเมล');
+              const badEm = emails.filter(x => !EMAIL_RE.test(x));
+              if (badEm.length) throw new Error(`รูปแบบอีเมลไม่ถูกต้อง: ${badEm.slice(0, 3).join(', ')}${badEm.length > 3 ? ' …' : ''}`);
+              if (!isNew && emails.length > 1) throw new Error('แก้ไขได้ทีละ 1 อีเมล');
+              const email = emails[0];
+              if (isNew && emails.length === 1 && Store.userByEmail(email)) throw new Error('มีผู้ใช้อีเมลนี้อยู่แล้ว');
               const role = $('input[name=role]:checked', api.body).value;
               const roles = [...new Set([...(role !== 'teacher' ? [role] : []), ...($('#tc', api.body).checked || role === 'teacher' ? ['teacher'] : [])])];
               const forms = $$('input[name=forms]:checked', api.body).map(x => x.value);
@@ -952,7 +972,15 @@ const Admin = (() => {
               if (role === 'approver' && !forms.length) throw new Error('กรุณาเลือกหมวดที่ผู้อนุมัติมองเห็นอย่างน้อย 1 หมวด');
               if (role === 'approver' && !actions.length) throw new Error('กรุณาเลือกสถานะที่กดได้อย่างน้อย 1 สถานะ');
               if (!isNew && u.email === Store.me().email && role !== 'admin' && mainRole(u) === 'admin') throw new Error('ไม่สามารถลดสิทธิ์แอดมินของตัวเองได้');
-              Store.saveUser({ email, prefix: v('pf'), first: v('fn'), last: v('ln'), position: v('po'), dept: v('dp'), phone: v('ph'), roles, forms, actions, active: $('#ac', api.body).checked }, isNew ? null : u.email);
+              const perms = { position: v('po') || 'ครู', dept: v('dp'), roles, forms, actions, active: $('#ac', api.body).checked };
+              if (emails.length > 1) {
+                const fresh = emails.filter(x => !Store.userByEmail(x));
+                if (!fresh.length) throw new Error('ทุกอีเมลมีในระบบแล้ว');
+                const n = Store.addUsers(fresh.map(x => ({ email: x, ...perms })));
+                UI.toast(`เพิ่มผู้ใช้ ${n} คน${emails.length - fresh.length ? ` · ข้าม ${emails.length - fresh.length} อีเมลที่มีอยู่แล้ว` : ''}`);
+                return;
+              }
+              Store.saveUser({ email, prefix: v('fn') ? v('pf') : '', first: v('fn'), last: v('ln'), phone: v('ph'), ...perms }, isNew ? null : u.email);
               UI.toast('บันทึกผู้ใช้แล้ว');
             } }] });
         };
@@ -999,7 +1027,7 @@ const Admin = (() => {
       ['วิธีกรอก'],
       ['1. กรอกในแผ่นงาน "รายชื่อ" หนึ่งแถวต่อหนึ่งคน (ห้ามแก้หัวตาราง)'],
       ['2. อีเมล: อีเมลโรงเรียน หรือ Gmail ของคนที่ไม่มีอีเมลโรงเรียน · ต้องตรงกับบัญชีที่ใช้เข้าสู่ระบบ'],
-      ['3. จำเป็นต้องกรอก: อีเมล และ ชื่อ · ช่องอื่นเว้นว่างได้ (ครูกรอกเองตอนเข้าระบบครั้งแรก)'],
+      ['3. จำเป็นต้องกรอกแค่ อีเมล · ช่องอื่นเว้นว่างได้ทั้งหมด (ครูกรอกชื่อ เบอร์ ลายเซ็น เองตอนเข้าระบบครั้งแรก)'],
       ['4. คนใหม่ได้สิทธิ์ "ครู" (แจ้งซ่อมได้) · เปลี่ยนสิทธิ์ทีละคนได้ในหน้า ผู้ใช้และสิทธิ์'],
       ['5. คนที่มีในระบบแล้ว จะอัปเดตชื่อ ตำแหน่ง ฝ่าย เบอร์ แต่สิทธิ์เดิมไม่เปลี่ยน'],
       ['6. บันทึกไฟล์ แล้วอัปโหลดกลับในหน้า ผู้ใช้และสิทธิ์ → นำเข้ารายชื่อ'],
@@ -1007,7 +1035,9 @@ const Admin = (() => {
       ['ตัวอย่าง (ไม่ต้องคัดลอกไป)'],
       IMPORT_HEAD,
       [`somchai.j@${s.domain}`, 'นาย', 'สมชาย', 'ใจดี', 'ครู', s.departments[1] || '', '0812345678'],
-      ['malee.teacher@gmail.com', 'นางสาว', 'มาลี', 'สวยงาม', 'ครู', s.departments[0] || '', '0898765432']
+      ['malee.teacher@gmail.com', 'นางสาว', 'มาลี', 'สวยงาม', 'ครู', s.departments[0] || '', '0898765432'],
+      ['suphan.teacher@gmail.com'],
+      ['(แถวสุดท้าย: ใส่แค่อีเมลก็ได้)']
     ]);
     help['!cols'] = [32, 12, 18, 18, 20, 40, 15].map(wch => ({ wch }));
     XLSX.utils.book_append_sheet(wb, help, 'วิธีกรอก');
@@ -1033,10 +1063,9 @@ const Admin = (() => {
       // Excel ตัดเลข 0 หน้าเบอร์โทร (เช่น 812345678) → เติมกลับ
       if (/^[1-9]\d{8}$/.test(o.phone)) o.phone = '0' + o.phone;
       if (!EMAIL_RE.test(o.email)) return bad.push(`แถว ${line}: อีเมลไม่ถูกต้อง${o.email ? ` (${o.email})` : ''}`);
-      if (!o.first) return bad.push(`แถว ${line}: ไม่มีชื่อ (${o.email})`);
       if (seen.has(o.email)) return bad.push(`แถว ${line}: อีเมลซ้ำในไฟล์ (${o.email})`);
       seen.add(o.email);
-      rows.push({ ...o, position: o.position || 'ครู' });
+      rows.push(o); // ช่องอื่นว่างได้ทั้งหมด ครูกรอกเองตอนเข้าเว็บครั้งแรก
     });
     return { rows, bad };
   }
@@ -1053,8 +1082,8 @@ const Admin = (() => {
             <div style="margin-top:8px"><label class="btn btn-primary btn-sm">${icon('upload')} เลือกไฟล์ Excel<input type="file" id="xf" accept=".xlsx,.xls,.csv" hidden></label> <span class="small faint" id="xfName"></span></div></li>
         </ol>
         <details class="imp-paste"><summary class="small">หรือวางข้อความที่คัดลอกจาก Excel / Google Sheets</summary>
-          <p class="muted small" style="margin:8px 0">เรียงคอลัมน์: <strong>${IMPORT_HEAD.join(', ')}</strong> (คั่นด้วยแท็บหรือจุลภาค)</p>
-          <textarea class="textarea" id="csv" style="min-height:140px;font-family:monospace;font-size:.85rem" placeholder="malee.s@${esc(s.domain)}, นางสาว, มาลี, สวยงาม, ครู, กลุ่มสาระการเรียนรู้ศิลปะ, 0811112222"></textarea>
+          <p class="muted small" style="margin:8px 0">วาง<strong>แค่อีเมล</strong> บรรทัดละคน ก็ได้ · หรือเรียงคอลัมน์: <strong>${IMPORT_HEAD.join(', ')}</strong> (คั่นด้วยแท็บหรือจุลภาค)</p>
+          <textarea class="textarea" id="csv" style="min-height:140px;font-family:monospace;font-size:.85rem" placeholder="teacher1@gmail.com&#10;teacher2@gmail.com&#10;malee.s@${esc(s.domain)}, นางสาว, มาลี, สวยงาม, ครู, กลุ่มสาระการเรียนรู้ศิลปะ, 0811112222"></textarea>
         </details>
         <div id="impPrev"></div>
         <p class="small faint" style="margin:10px 0 0">คนใหม่ได้สิทธิ์ "ครู" · เปลี่ยนสิทธิ์ทีละคนได้ภายหลัง · คนที่มีอยู่แล้วอัปเดตข้อมูล แต่สิทธิ์เดิมไม่เปลี่ยน</p>`,
@@ -1070,7 +1099,7 @@ const Admin = (() => {
             </div>
             ${p.bad.length ? `<div class="notice orange small">${icon('alert')}<div>${p.bad.slice(0, 8).map(esc).join('<br>')}${p.bad.length > 8 ? `<br>… และอีก ${p.bad.length - 8} แถว` : ''}</div></div>` : ''}
             ${p.rows.length ? `<div class="table-wrap" style="max-height:260px"><table class="table sm"><thead><tr><th>อีเมล</th><th>ชื่อ - นามสกุล</th><th>ตำแหน่ง / ฝ่าย</th><th></th></tr></thead><tbody>
-              ${p.rows.map(r => `<tr><td>${esc(r.email)}${Store.isSchoolEmail(r.email) ? '' : ' <span class="badge tone-slate" style="padding:1px 7px">Gmail</span>'}</td><td>${esc(`${r.prefix}${r.first} ${r.last}`)}</td><td class="small">${esc(r.position)}${r.dept ? ` · ${esc(r.dept)}` : ''}</td><td>${isNew(r) ? '<span class="badge tone-green">ใหม่</span>' : '<span class="badge tone-indigo">อัปเดต</span>'}</td></tr>`).join('')}
+              ${p.rows.map(r => `<tr><td>${esc(r.email)}${Store.isSchoolEmail(r.email) ? '' : ' <span class="badge tone-slate" style="padding:1px 7px">Gmail</span>'}</td><td>${r.first ? esc(`${r.prefix}${r.first} ${r.last}`) : '<span class="faint small">ครูกรอกเองตอนเข้าเว็บ</span>'}</td><td class="small">${esc(r.position || '')}${r.dept ? ` · ${esc(r.dept)}` : ''}</td><td>${isNew(r) ? '<span class="badge tone-green">ใหม่</span>' : '<span class="badge tone-indigo">อัปเดต</span>'}</td></tr>`).join('')}
             </tbody></table></div>` : ''}`;
         };
         $('#tpl', api.body).addEventListener('click', async e => {
@@ -1089,7 +1118,11 @@ const Admin = (() => {
           } catch (err) { UI.toast(err.message.startsWith('โหลด') ? err.message : 'อ่านไฟล์ไม่ได้ กรุณาใช้แบบฟอร์ม .xlsx ของระบบ', 'error'); }
           e.target.value = '';
         });
-        $('#csv', api.body).addEventListener('input', e => show(parseImport(e.target.value.split(/\r?\n/).map(l => l.split(/\t|,/)))));
+        // วางข้อความ: บรรทัดที่มีแต่อีเมล (หลายอีเมลคั่นด้วยเว้นวรรค/จุลภาค) → แยกเป็นคนละแถว
+        $('#csv', api.body).addEventListener('input', e => show(parseImport(e.target.value.split(/\r?\n/).flatMap(l => {
+          const emails = splitEmails(l);
+          return emails.length && emails.every(x => EMAIL_RE.test(x)) ? emails.map(x => [x]) : [l.split(/\t|,/)];
+        }))));
       },
       actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'นำเข้า', kind: 'btn-primary', icon: 'upload', onClick: () => {
         if (!parsed?.rows.length) throw new Error('ยังไม่มีรายชื่อที่นำเข้าได้ · เลือกไฟล์ Excel หรือวางข้อความก่อน');

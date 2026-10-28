@@ -744,15 +744,29 @@ const Store = (() => {
       });
     },
     deleteUser(email) { return commit(d => { d.users = d.users.filter(u => u.email !== email); }); },
+    // นำเข้ารายชื่อ: คนใหม่เป็น "ครู" · คนเดิมอัปเดตเฉพาะช่องที่กรอกมา (ช่องว่างไม่ลบข้อมูลเดิม) และสิทธิ์เดิมไม่เปลี่ยน
     importUsers(rows) {
       return commit(d => {
         let added = 0, updated = 0;
         for (const r of rows) {
+          const filled = Object.fromEntries(Object.entries(r).filter(([, v]) => v !== '' && v != null));
           const i = d.users.findIndex(u => u.email === r.email);
-          if (i >= 0) { d.users[i] = { ...d.users[i], ...r, roles: d.users[i].roles }; updated++; }
-          else { d.users.push({ active: true, roles: ['teacher'], forms: [...FORM_KEYS], actions: ['done', 'cannot_fix'], ...r }); added++; }
+          if (i >= 0) { d.users[i] = { ...d.users[i], ...filled, roles: d.users[i].roles }; updated++; }
+          else { d.users.push({ prefix: '', first: '', last: '', position: 'ครู', dept: '', phone: '', active: true, roles: ['teacher'], forms: [...FORM_KEYS], actions: ['done', 'cannot_fix'], signature: '', ...filled }); added++; }
         }
         return { added, updated };
+      });
+    },
+    // เพิ่มหลายอีเมลพร้อมกัน (สิทธิ์เดียวกันทุกคน) · ข้ามอีเมลที่มีอยู่แล้ว · ชื่อเว้นว่างให้ครูกรอกเองตอนเข้าเว็บครั้งแรก
+    addUsers(list) {
+      return commit(d => {
+        let added = 0;
+        list.forEach(u => {
+          if (d.users.some(x => x.email === u.email)) return;
+          d.users.push({ prefix: '', first: '', last: '', position: 'ครู', dept: '', phone: '', active: true, roles: ['teacher'], forms: [...FORM_KEYS], actions: ['done', 'cannot_fix'], signature: '', ...u });
+          added++;
+        });
+        return added;
       });
     },
     // ข้อมูลโปรไฟล์ที่ยังขาด/ไม่ถูกต้อง (ว่าง = ครบ ใช้งานได้) · ทุกคนต้องกรอกครบก่อนใช้ระบบ
