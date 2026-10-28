@@ -1842,3 +1842,37 @@ p { text-wrap: pretty; }
 .imp-sum { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
 #impPrev .notice { margin-bottom: 10px; }
 #impPrev .table th, #impPrev .table td { padding: 8px 10px; font-size: .86rem; }
+
+/* ผังห้องน้ำหอพัก: ผังภาพของล็อค/ชั้น และผังในห้อง */
+.dplan { padding: 12px; border-radius: 18px; border: 2px solid #CBD5E1; background: repeating-linear-gradient(0deg, #F8FAFC 0 23px, #F1F5F9 23px 24px), #F8FAFC; }
+.dp-rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.dp-tile { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 66px; padding: 8px 6px; border-radius: 12px;
+  border: 1.5px solid var(--line); background: #fff; color: var(--navy-800); font: inherit; font-size: .9rem; font-weight: 500; line-height: 1.25; text-align: center; cursor: pointer; transition: border-color .15s, background .15s, transform .1s; }
+.dp-tile .icon { font-size: 20px; color: var(--muted); }
+.dp-tile:hover:not(:disabled) { border-color: var(--orange-300, #FDBA74); }
+.dp-tile:active:not(:disabled) { transform: scale(.97); }
+.dp-tile.is-on { border-color: var(--orange-500, #F7893B); background: var(--orange-50); color: var(--orange-800, #9A3412); box-shadow: 0 0 0 3px rgba(247, 137, 59, .18); }
+.dp-tile.is-on .icon { color: var(--orange-600, #EA580C); }
+.dp-tile:disabled { opacity: .4; cursor: not-allowed; }
+.dp-mini { position: absolute; top: 5px; right: 6px; display: flex; gap: 1px; font-style: normal; }
+.dp-mini .icon { font-size: 11px; color: #3B82F6; }
+.dp-tile.bath { background: #EFF6FF; border-color: #BFDBFE; color: #1E3A8A; }
+.dp-tile.bath .icon { color: #2563EB; font-size: 22px; }
+.dp-tile.bath.is-on { background: #2563EB; border-color: #1D4ED8; color: #fff; box-shadow: 0 0 0 3px rgba(37, 99, 235, .22); }
+.dp-tile.bath.is-on .icon { color: #fff; }
+.dp-bath { margin-top: 10px; padding-top: 10px; border-top: 2px dashed #CBD5E1; }
+.dp-bath-label { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: .82rem; font-weight: 600; color: #1D4ED8; }
+.dp-bath-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.dp-room { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 8px; padding: 10px; border-radius: 16px; border: 2px solid #CBD5E1; background: #F8FAFC; }
+.dp-room .dp-tile.big { min-height: 140px; }
+.dp-room .dp-tile.big .icon { font-size: 30px; }
+.dp-room-bath { display: grid; gap: 8px; }
+@media (max-width: 640px) {
+  .dp-rooms { grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 6px; }
+  .dplan { padding: 10px; }
+}
+/* ตั้งค่าห้องน้ำของแต่ละล็อค/ชั้น (หลังบ้าน → อาคารและสถานที่ → แก้ไขหอพัก) */
+.bath-cfg { padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--line); background: #FAFBFD; display: flex; flex-direction: column; gap: 10px; }
+.bc-head { display: flex; align-items: baseline; gap: 8px; }
+.bc-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: #EFF6FF; }
+.bc-sub > .small { min-width: 44px; }

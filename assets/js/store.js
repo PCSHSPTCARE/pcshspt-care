@@ -17,7 +17,28 @@ const Store = (() => {
   const STEP2_KEY = 'deputy_general';
   // สถานะที่กดเปลี่ยนได้ (รออนุมัติเป็นสถานะเริ่มต้นเท่านั้น)
   const ACTIONS = ['in_progress', 'review', 'done', 'cannot_fix'];
-  const CONFIG_VERSION = 6;
+  const CONFIG_VERSION = 7;
+  // ห้องน้ำหอพัก (ตั้งที่แต่ละล็อค/ชั้น: zone.bath)
+  //   { mode: 'shared', areas } = ห้องน้ำรวมของล็อค/ชั้นนั้น
+  //   { mode: 'rooms', areas, rooms? } = ห้องน้ำในตัวของแต่ละห้อง (rooms = เฉพาะบางห้อง · ไม่ระบุ = ทุกห้อง)
+  const BATH_AREAS = ['ห้องอาบน้ำ', 'ห้องสุขา'];
+  function defaultBath(l, z) {
+    if (/ห้องพักครู/.test(z.name)) return { mode: 'rooms', areas: [...BATH_AREAS] };
+    if (/^ล็อค/.test(z.name)) return { mode: 'shared', areas: [...BATH_AREAS] };
+    if (z.name === 'ส่วนกลาง') {
+      const g = (z.rooms || []).filter(r => /^G\d+$/i.test(r)); // ห้อง G01–G03 มีห้องสุขาในตัว (ไม่มีห้องอาบน้ำ)
+      return g.length ? { mode: 'rooms', areas: ['ห้องสุขา'], rooms: g } : null;
+    }
+    if (/ชั้น/.test(z.name)) return /บัวอุบล/.test(l.name) ? { mode: 'rooms', areas: [...BATH_AREAS] } : { mode: 'shared', areas: [...BATH_AREAS] };
+    return null;
+  }
+  function applyBathDefaults(l) {
+    (l.zones || []).forEach(z => {
+      if (/^ล็อค/.test(z.name)) z.rooms = z.rooms.filter(r => r !== 'ห้องน้ำ'); // เดิมเพิ่ม "ห้องน้ำ" เป็นห้องเอง → ใช้ผังห้องน้ำแทน
+      if (z.bath === undefined) { const b = defaultBath(l, z); if (b) z.bath = b; }
+    });
+    return l;
+  }
   // ห้องเรียนที่มีแอร์ 2 ตัว (ติดกระดาน / ไม่ติดกระดาน) → ตอนแจ้งซ่อมแอร์ต้องเลือกตัว
   const AC_UNIT_GROUPS = ['ห้องเรียน ม.1 – ม.6', 'ห้องเรียน จ.ภ. สุพรรณบุรี'];
   // โดเมนอีเมลที่เข้าสู่ระบบได้: โดเมนหลักในค่าตั้งระบบ + domains ใน config.js (เช่น ครู จ.ภ. สุพรรณบุรี)
@@ -117,11 +138,11 @@ const Store = (() => {
       L('dorm', 'หอพักนักเรียนชาย', 'หอ D4 นิลกมล (ช)', [
         { name: 'ม.6 ชั้น 1', rooms: nums(101, 107) }, { name: 'ม.6 ชั้น 2', rooms: nums(201, 207) },
         { name: 'ม.6 ชั้น 3', rooms: nums(301, 307) }, { name: 'ม.6 ห้องพักครู', rooms: ['ชั้น 2', 'ชั้น 3'] },
-        { name: 'ม.3 ชั้น 1', rooms: [...nums(101, 103), 'Study 1'] }, { name: 'ม.3 ชั้น 2', rooms: [...nums(201, 203), 'Study 2'] },
-        { name: 'ม.3 ชั้น 3', rooms: [...nums(301, 307), 'Study 3'] }, { name: 'ม.3 ห้องพักครู', rooms: ['ชั้น 2', 'ชั้น 3'] }]),
+        { name: 'จ.ภ. สุพรรณบุรี ชั้น 1', rooms: [...nums(101, 103), 'Study 1'] }, { name: 'จ.ภ. สุพรรณบุรี ชั้น 2', rooms: [...nums(201, 203), 'Study 2'] },
+        { name: 'จ.ภ. สุพรรณบุรี ชั้น 3', rooms: [...nums(301, 307), 'Study 3'] }, { name: 'จ.ภ. สุพรรณบุรี ห้องพักครู', rooms: ['ชั้น 2', 'ชั้น 3'] }]),
       ...['หอ D5 โกเมน (ช)', 'หอ D6 นิลปัทม์ (ช)'].map(n => L('dorm', 'หอพักนักเรียนชาย', n, [
         { name: 'ส่วนกลาง', rooms: [...COMMON, 'ห้องพัก'] }, ...lockZones(), teacher([2, 3, 4])]))
-    ];
+    ].map(l => l.type === 'dorm' ? applyBathDefaults(l) : l);
   }
 
   function seedUsers(domain) {
@@ -228,6 +249,7 @@ const Store = (() => {
   // v4: หน่วยนับของรายการที่จับต้องได้ (ใส่เฉพาะรายการที่ยังไม่มีหน่วย ไม่ทับที่แอดมินตั้งเอง)
   // v5: แจ้ง "ซ่อมแล้วไม่หาย" ได้ภายใน 7 วัน (เปลี่ยนเฉพาะที่ยังเป็นค่าเดิม 14 วัน)
   // v6: ห้องเรียน ม.1–ม.6 และ จ.ภ. สุพรรณบุรี มีแอร์ 2 ตัว (acUnits) ให้ผู้แจ้งเลือกตัว
+  // v7: ห้องน้ำหอพัก — ห้องน้ำรวมประจำล็อค/ชั้น · บัวอุบล ห้องพักครู และ G01–G03 มีห้องน้ำในตัว
   function upgradeConfig(d) {
     const v = d.settings.configVersion || 1;
     if (v >= CONFIG_VERSION) return false;
@@ -239,6 +261,7 @@ const Store = (() => {
     }
     if (v < 5 && (!d.settings.reopenDays || d.settings.reopenDays === 14)) d.settings.reopenDays = 7;
     if (v < 6) d.locations.forEach(l => { if (l.type === 'building' && AC_UNIT_GROUPS.includes(l.group) && l.acUnits === undefined) l.acUnits = true; });
+    if (v < 7) d.locations.forEach(l => { if (l.type === 'dorm') applyBathDefaults(l); });
     d.settings.configVersion = CONFIG_VERSION;
     return true;
   }
@@ -697,7 +720,10 @@ const Store = (() => {
     },
     locations(type) { return db.locations.filter(l => l.active !== false && (!type || l.type === type)); },
     allLocations: () => db.locations,
+    BATH_AREAS,
+    defaultBath: (l, z) => defaultBath(l, z),
     saveLocation(loc) {
+      if (loc.type === 'dorm') loc = applyBathDefaults(JSON.parse(JSON.stringify(loc)));
       return commit(d => {
         const i = d.locations.findIndex(l => l.id === loc.id);
         if (i >= 0) d.locations[i] = loc; else d.locations.push({ ...loc, id: uid('loc'), active: true });

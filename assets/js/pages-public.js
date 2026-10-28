@@ -404,15 +404,25 @@ const Pages = (() => {
     const dorm = type === 'dorm';
     const MAX_PHOTOS = 3;
     const UNIT = dorm ? 'ล็อค/ห้อง' : 'สถานที่';
-    const locKey = l => `${l.locationId || l.locationName}|${l.zone || ''}|${l.room || ''}`;
+    const locKey = l => `${l.locationId || l.locationName}|${l.zone || ''}|${l.room || ''}|${(l.areas || []).join('+')}`;
     const placeById = id => places.find(p => p.id === id);
     const firstCat = (cats.find(c => c.id === params.cat) || cats[0])?.id;
     let seq = 0;
-    const newBlock = () => ({ key: `b${seq++}`, placeId: '', other: '', zone: '', room: '', point: '', items: new Map(), active: firstCat, open: true });
+    // areas = จุดที่ซ่อม: ห้องน้ำรวมของล็อค/ชั้น หรือจุดในห้องที่มีห้องน้ำในตัว (ห้องนอน / ห้องอาบน้ำ / ห้องสุขา)
+    const newBlock = () => ({ key: `b${seq++}`, placeId: '', other: '', zone: '', room: '', areas: [], point: '', items: new Map(), active: firstCat, open: true });
     const state = { dorm: '', blocks: [] };
+    // ───── ห้องน้ำหอพัก (ตั้งที่ล็อค/ชั้น: zone.bath) ─────
+    const AREA_ICON = { 'ห้องอาบน้ำ': 'shower', 'ห้องสุขา': 'toilet' };
+    const BATH_LABELS = Object.keys(AREA_ICON);
+    const bedOf = room => /^\d|\//.test(room) ? 'ห้องนอน' : 'ตัวห้อง';
+    const sharedBath = z => z?.bath?.mode === 'shared' ? z.bath.areas : [];
+    const roomBath = (z, room) => z?.bath?.mode === 'rooms' && room && (!z.bath.rooms || z.bath.rooms.includes(room)) ? z.bath.areas : [];
+    const areaOrder = (room, list) => [bedOf(room), 'ห้องอาบน้ำ', 'ห้องสุขา'].filter(a => list.includes(a));
     if (editing) {
       const l = editing.location;
       const b = { ...newBlock(), placeId: l.locationId || '__other', other: l.locationId ? '' : l.locationName, zone: l.zone || l.lock || '', room: l.room || '', point: l.point || '' };
+      const z = placeById(l.locationId)?.zones?.find(x => x.name === b.zone);
+      b.areas = l.areas?.length ? [...l.areas] : roomBath(z, b.room).length ? [bedOf(b.room)] : [];
       editing.items.forEach(i => b.items.set(i.custom ? `custom:${i.catId}:${seq++}` : i.itemId, { ...i, photos: [...(i.photos || [])] }));
       if (dorm) state.dorm = l.locationId || '';
       state.blocks.push(b);
@@ -429,15 +439,19 @@ const Pages = (() => {
       const r = p.zones?.length && roomMode(p) ? p.zones[0].rooms : [];
       return r.length > 1 && r.every(x => /^\d+$/.test(x)) ? `ห้อง ${r[0]} – ${r.at(-1)}` : p.group || '';
     };
+    const zoneOf = b => placeOf(b)?.zones?.find(z => z.name === b.zone);
+    // เก็บจุดในห้องเฉพาะเมื่อไม่ใช่ "ห้องนอนอย่างเดียว" (= แจ้งที่ห้องตามปกติ)
+    const areasOf = b => b.areas.length && !(b.room && b.areas.length === 1 && b.areas[0] === bedOf(b.room)) ? areaOrder(b.room, b.areas) : [];
     const locOf = b => {
       const p = placeOf(b);
-      if (p) return { locationId: p.id, locationName: p.name, zone: b.zone, room: b.room, point: b.point.trim() };
+      if (p) return { locationId: p.id, locationName: p.name, zone: b.zone, room: b.room, point: b.point.trim(), ...(areasOf(b).length ? { areas: areasOf(b) } : {}) };
       return !dorm && b.placeId === '__other' && b.other.trim() ? { locationId: '', locationName: b.other.trim(), zone: '', room: '', point: b.point.trim() } : null;
     };
     const issueOf = b => {
       const p = placeOf(b);
       if (!locOf(b)) return dorm ? 'ยังไม่ได้เลือกหอพัก' : 'ยังไม่ได้เลือกสถานที่';
       if (p?.zones?.length && (roomMode(p) ? !b.room : !b.zone)) return roomMode(p) ? 'ยังไม่ได้เลือกห้อง' : 'ยังไม่ได้เลือกล็อค/โซน';
+      if (roomBath(zoneOf(b), b.room).length && !b.areas.length) return `ยังไม่ได้เลือกจุดในห้อง ${b.room}`;
       if (!b.items.size) return 'ยังไม่ได้เลือกรายการ';
       if ([...b.items.values()].some(v => !String(v.detail || '').trim())) return 'ยังระบุอาการไม่ครบ';
       // รายการที่มีหน่วยนับ (ของจับต้องได้) ต้องระบุจำนวน · รายการที่พิมพ์เองไม่บังคับ
@@ -453,7 +467,9 @@ const Pages = (() => {
       return t || `${UNIT}ที่ ${i + 1}`;
     };
     // ห้อง/ล็อคที่การ์ดอื่นเลือกไปแล้ว
-    const usedBy = (b, zone, room) => state.blocks.findIndex(x => x !== b && locOf(x) && locOf(b) && locOf(x).locationName === locOf(b).locationName && x.zone === zone && x.room === room);
+    const usedBy = (b, zone, room) => state.blocks.findIndex(x => x !== b && locOf(x) && locOf(b) && locOf(x).locationName === locOf(b).locationName && x.zone === zone && x.room === room && !(!room && x.areas.length));
+    // ห้องน้ำรวมที่การ์ดอื่นเลือกไปแล้ว (แจ้งในการ์ดเดียวกันได้หลายจุด)
+    const areaUsed = (b, area) => state.blocks.some(x => x !== b && locOf(x) && locOf(b) && locOf(x).locationName === locOf(b).locationName && x.zone === b.zone && !x.room && x.areas.includes(area));
 
     const opt = (list, selected) => list.map(v => `<option ${v === selected ? 'selected' : ''}>${esc(v)}</option>`).join('');
     const reporter = editing ? editing.reporter : { position: me.position, dept: me.dept, phone: me.phone };
@@ -523,8 +539,37 @@ const Pages = (() => {
           const z = p.zones.find(x => x.name === b.zone);
           return `<div class="field"><label>${dorm ? 'ล็อคนอน / โซน' : 'โซน'} <span class="req">*</span></label>
               <div class="pick-grid">${p.zones.map(x => chip('data-zone', x.name, x.name, b.zone === x.name, b.zone !== x.name && usedBy(b, x.name, '') >= 0 && !x.rooms.length)).join('')}</div></div>
-            ${z?.rooms.length ? `<div class="field"><label>ห้อง <span class="faint">(ไม่บังคับ)</span></label>
+            ${z?.bath ? bathPlan(b, z)
+              : z?.rooms.length ? `<div class="field"><label>ห้อง <span class="faint">(ไม่บังคับ)</span></label>
               <div class="pick-grid">${z.rooms.map(r => chip('data-room', r, r, b.room === r, usedBy(b, z.name, r) >= 0)).join('')}</div></div>` : ''}`;
+        }
+        // ───── ห้องน้ำหอพัก ─────
+        const tile = (attr, val, ic, label, on, off, cls = '', extra = '') =>
+          `<button type="button" class="dp-tile ${cls} ${on ? 'is-on' : ''}" ${attr}="${esc(val)}" ${off ? 'disabled' : ''} aria-pressed="${on}">${icon(ic)}<span>${esc(label)}</span>${extra}</button>`;
+        const roomTiles = (b, z, list) => list.map(r => tile('data-room', r, bedOf(r) === 'ห้องนอน' ? 'bed' : 'home', r, b.room === r, usedBy(b, z.name, r) >= 0,
+          roomBath(z, r).length ? 'has-bath' : '', roomBath(z, r).length ? `<i class="dp-mini">${roomBath(z, r).map(a => icon(AREA_ICON[a])).join('')}</i>` : '')).join('');
+        // จุดในห้องที่มีห้องน้ำในตัว: ห้องนอน + ห้องอาบน้ำ/ห้องสุขา (เลือกได้หลายจุด)
+        function roomPlan(b, z) {
+          const ar = roomBath(z, b.room);
+          if (!ar.length) return '';
+          const bed = bedOf(b.room);
+          return `<div class="field"><label>จุดในห้อง ${esc(b.room)} <span class="req">*</span> <span class="faint">(เลือกได้หลายจุด)</span></label>
+            <div class="dp-room">
+              ${tile('data-area', bed, bed === 'ห้องนอน' ? 'bed' : 'home', bed, b.areas.includes(bed), false, 'big')}
+              <div class="dp-room-bath">${ar.map(a => tile('data-area', a, AREA_ICON[a], a, b.areas.includes(a), false, 'bath')).join('')}</div>
+            </div></div>`;
+        }
+        // ผังภาพของล็อค/ชั้น — ห้องนอนแถวบน ห้องน้ำรวมแถวล่าง · ห้องที่มีห้องน้ำในตัวกดแล้วแสดงผังห้อง
+        function bathPlan(b, z) {
+          const sh = sharedBath(z);
+          const whole = /^ล็อค/.test(z.name) ? 'ทั้งล็อค' : 'ทั้งชั้น';
+          return `<div class="field"><label>ผัง ${esc(z.name)} <span class="faint">(แตะจุดที่ชำรุด${sh.length ? ` · ไม่เลือก = ${whole}` : ''})</span></label>
+            <div class="dplan">
+              <div class="dp-rooms">${roomTiles(b, z, z.rooms)}</div>
+              ${sh.length ? `<div class="dp-bath"><div class="dp-bath-label">${icon('droplet')} ห้องน้ำรวม ${esc(z.name)}</div>
+                <div class="dp-bath-row">${sh.map(a => tile('data-area', a, AREA_ICON[a], a, !b.room && b.areas.includes(a), areaUsed(b, a), 'bath')).join('')}</div></div>` : ''}
+            </div></div>
+            ${roomPlan(b, z)}`;
         }
         // ───── ค้นหาสถานที่ (แจ้งซ่อมทั่วไป): พิมพ์ชื่อหรือเลขห้อง · ว่าง = สถานที่ที่เคยแจ้งล่าสุด + รายการทั้งหมด ─────
         const norm = s => String(s || '').toLowerCase().replace(/[\s.\-–()]/g, '');
@@ -683,7 +728,7 @@ const Pages = (() => {
               localStorage.setItem(DRAFT_KEY, JSON.stringify({
                 at: new Date().toISOString(), dorm: state.dorm,
                 fields: Object.fromEntries(fieldIds.map(id => [id, $('#' + id, root).value])),
-                blocks: state.blocks.map(b => ({ placeId: b.placeId, other: b.other, zone: b.zone, room: b.room, point: b.point, active: b.active,
+                blocks: state.blocks.map(b => ({ placeId: b.placeId, other: b.other, zone: b.zone, room: b.room, areas: b.areas, point: b.point, active: b.active,
                   items: [...b.items.entries()].map(([k, v]) => [k, { ...v, photos: [] }]) }))
               }));
             } catch (e) { /* โหมดส่วนตัวหรือพื้นที่เต็ม ข้ามการบันทึกร่าง */ }
@@ -693,7 +738,7 @@ const Pages = (() => {
         const restoreDraft = d => {
           state.dorm = places.some(p => p.id === d.dorm) ? d.dorm : '';
           state.blocks = d.blocks.map(x => {
-            const b = { ...newBlock(), placeId: x.placeId, other: x.other || '', zone: x.zone || '', room: x.room || '', point: x.point || '', active: x.active || firstCat, open: false };
+            const b = { ...newBlock(), placeId: x.placeId, other: x.other || '', zone: x.zone || '', room: x.room || '', areas: x.areas || [], point: x.point || '', active: x.active || firstCat, open: false };
             x.items.forEach(([k, v]) => b.items.set(v.custom ? `custom:${v.catId}:${seq++}` : k, v));
             return b;
           });
@@ -767,11 +812,25 @@ const Pages = (() => {
             return;
           }
           const zn = e.target.closest('[data-zone]');
-          if (zn) { b.zone = b.zone === zn.dataset.zone ? '' : zn.dataset.zone; b.room = ''; renderBlock(b); return; }
+          if (zn) { b.zone = b.zone === zn.dataset.zone ? '' : zn.dataset.zone; b.room = ''; b.areas = []; renderBlock(b); return; }
           const acu = e.target.closest('[data-acu]');
           if (acu) { const v = b.items.get(acu.closest('[data-key]').dataset.key); v.acUnit = v.acUnit === acu.dataset.acu ? '' : acu.dataset.acu; renderBlock(b); return; }
           const rm0 = e.target.closest('[data-room]');
-          if (rm0) { b.room = b.room === rm0.dataset.room ? '' : rm0.dataset.room; renderBlock(b); return; }
+          if (rm0) {
+            b.room = b.room === rm0.dataset.room ? '' : rm0.dataset.room;
+            // ห้องที่มีห้องน้ำในตัว: เริ่มที่ "ห้องนอน" แล้วแตะเพิ่มห้องอาบน้ำ/ห้องสุขาได้
+            b.areas = b.room && roomBath(zoneOf(b), b.room).length ? [bedOf(b.room)] : [];
+            renderBlock(b); return;
+          }
+          const ar = e.target.closest('[data-area]');
+          if (ar) {
+            const a = ar.dataset.area;
+            if (!roomBath(zoneOf(b), b.room).length) b.room = ''; // ห้องน้ำรวม: ไม่ผูกกับห้องนอน
+            b.areas = b.areas.includes(a) ? b.areas.filter(x => x !== a) : [...b.areas, a];
+            // เลือกห้องน้ำแล้วยังไม่มีรายการ → เปิดแท็บงานประปาให้เลย (โถชักโครก ฝักบัว ก๊อก)
+            if (BATH_LABELS.includes(a) && b.areas.includes(a) && !b.items.size && cats.some(c => c.id === 'plumb')) b.active = 'plumb';
+            renderBlock(b); return;
+          }
           if (e.target.closest('[data-copyprev]')) {
             const prev = state.blocks[state.blocks.indexOf(b) - 1];
             prev.items.forEach((v, k) => b.items.set(v.custom ? `custom:${v.catId}:${seq++}` : k, { ...v, photos: [] }));
@@ -830,7 +889,7 @@ const Pages = (() => {
             const used = state.blocks.some(b => b.zone || b.room);
             if (used && !await UI.confirm('เปลี่ยนหอพักแล้วล็อค/ห้องที่เลือกไว้จะถูกล้าง (รายการซ่อมยังอยู่)', { title: 'เปลี่ยนหอพัก', okLabel: 'เปลี่ยน' })) { e.target.value = state.dorm; return; }
             state.dorm = e.target.value;
-            state.blocks.forEach(b => { b.zone = ''; b.room = ''; });
+            state.blocks.forEach(b => { b.zone = ''; b.room = ''; b.areas = []; });
             renderBlocks(); return;
           }
           const b = blockOf(e.target);

@@ -745,6 +745,15 @@ const Admin = (() => {
   }
   const zonesText = zones => (zones || []).map(z => `${z.name ? z.name + ': ' : ''}${z.rooms.join(', ')}`).join('\n');
 
+  // ห้องน้ำหอพัก: zone.bath → ตัวเลือกในหน้าแก้ไข
+  const BATH_MODES = [['none', 'ไม่มีห้องน้ำ'], ['shared', 'ห้องน้ำรวมของกลุ่มนี้'], ['rooms', 'ในตัวทุกห้อง'], ['some', 'ในตัวบางห้อง']];
+  const bathMode = b => !b ? 'none' : b.mode === 'shared' ? 'shared' : b.rooms ? 'some' : 'rooms';
+  const bathSummary = l => {
+    const zs = (l.zones || []).filter(z => z.bath);
+    const sh = zs.filter(z => z.bath.mode === 'shared').length, inr = zs.length - sh;
+    return zs.length ? ` · ${icon('shower')} ${[sh ? `ห้องน้ำรวม ${sh} กลุ่ม` : '', inr ? `ในตัว ${inr} กลุ่ม` : ''].filter(Boolean).join(' · ')}` : '';
+  };
+
   function locations() {
     const state = { type: 'building' };
     return {
@@ -766,7 +775,7 @@ const Admin = (() => {
                   const rooms = (l.zones || []).reduce((a, z) => a + z.rooms.length, 0);
                   return `<div class="loc-row" style="${l.active === false ? 'opacity:.55' : ''}">
                     <div style="flex:1;min-width:0"><strong>${esc(l.name)}</strong>
-                      <div class="small faint">${rooms ? `${(l.zones || []).filter(z => z.name).length ? `${l.zones.length} กลุ่ม · ` : ''}${rooms} ห้อง` : 'ไม่มีห้องย่อย'} · แจ้งซ่อม ${n(l.id)} ครั้ง${l.acUnits ? ` · ${icon('aircon')} แอร์ 2 ตัว` : ''}</div>
+                      <div class="small faint">${rooms ? `${(l.zones || []).filter(z => z.name).length ? `${l.zones.length} กลุ่ม · ` : ''}${rooms} ห้อง` : 'ไม่มีห้องย่อย'} · แจ้งซ่อม ${n(l.id)} ครั้ง${l.acUnits ? ` · ${icon('aircon')} แอร์ 2 ตัว` : ''}${l.type === 'dorm' ? bathSummary(l) : ''}</div>
                       ${l.zones?.length ? `<div class="zone-preview">${l.zones.slice(0, 4).map(z => `<span class="chip">${esc(z.name || 'ห้อง')} ${z.rooms.length > 3 ? `${esc(z.rooms[0])}–${esc(z.rooms.at(-1))}` : esc(z.rooms.join(', '))}</span>`).join('')}${l.zones.length > 4 ? `<span class="chip">+${l.zones.length - 4} กลุ่ม</span>` : ''}</div>` : ''}
                     </div>
                     <label class="checkbox small"><input type="checkbox" data-toggle="${l.id}" ${l.active !== false ? 'checked' : ''}>ใช้งาน</label>
@@ -781,6 +790,7 @@ const Admin = (() => {
           const isNew = !l;
           l = l ? JSON.parse(JSON.stringify(l)) : { name: '', type: state.type, group: '', zones: [], active: true };
           const groups = [...new Set(Store.allLocations().filter(x => x.type === l.type).map(x => x.group).filter(Boolean))];
+          const baths = new Map((l.zones || []).filter(z => z.bath !== undefined).map(z => [z.name, z.bath && JSON.parse(JSON.stringify(z.bath))]));
           UI.modal({ title: isNew ? 'เพิ่มสถานที่' : `แก้ไข ${l.name}`, size: 'lg',
             body: `
               <div class="grid-2">
@@ -791,18 +801,58 @@ const Admin = (() => {
                 <textarea class="textarea" id="lz" style="min-height:190px;font-size:.92rem" placeholder="${l.type === 'dorm' ? 'ส่วนกลาง: ห้อง Study, ห้องประชุม\nล็อค 1: 1/1-1/3\nชั้น 2: 201-211\nห้องพักครู: ชั้น 2, ชั้น 3' : '101-104'}">${esc(zonesText(l.zones))}</textarea>
                 <span class="hint">รูปแบบ <strong>ชื่อกลุ่ม: ห้อง, ห้อง</strong> · พิมพ์ช่วงได้ เช่น 201-211 หรือ 1/1-1/3 · ไม่ต้องมีชื่อกลุ่มก็ได้ เช่น 101-104</span></div>
               ${l.type === 'building' ? `<label class="checkbox"><input type="checkbox" id="lac" ${l.acUnits ? 'checked' : ''}>มีแอร์ 2 ตัว — ตอนแจ้งซ่อมแอร์ให้ผู้แจ้งเลือก ตัวที่ 1 (ติดกระดาน) / ตัวที่ 2 (ไม่ติดกระดาน) / ทั้ง 2 ตัว</label>` : ''}
+              ${l.type === 'dorm' ? `<div class="field"><span class="label">${icon('shower')} ห้องน้ำของแต่ละล็อค / ชั้น</span>
+                <span class="hint" style="margin:0 0 8px">ครูจะเห็นเป็นผังให้แตะเลือก ห้องอาบน้ำ / ห้องสุขา ตอนแจ้งซ่อม</span><div id="bathCfg" class="stack" style="gap:10px"></div></div>` : ''}
               <div id="lzPreview"></div>`,
             onOpen: api => {
               const prev = () => {
                 const z = parseZones($('#lz', api.body).value);
                 $('#lzPreview', api.body).innerHTML = z.length ? `<div class="label" style="margin-bottom:6px">ตัวอย่างที่ครูจะเห็น (${z.reduce((a, x) => a + x.rooms.length, 0)} ห้อง)</div>${z.map(x => `<div class="zone"><div class="zone-head"><strong>${esc(x.name || 'ห้อง')}</strong></div><div class="pick-grid">${x.rooms.slice(0, 20).map(r => `<span class="pick pick-sm"><span class="box"></span>${esc(r)}</span>`).join('')}${x.rooms.length > 20 ? `<span class="faint small">+${x.rooms.length - 20}</span>` : ''}</div></div>`).join('')}` : '';
+                if (l.type === 'dorm') renderBath();
               };
+              // ห้องน้ำ: จำค่าตามชื่อล็อค/ชั้น · ล็อค/ชั้นที่พิมพ์เพิ่มใหม่ได้ค่าเริ่มต้นจากระบบ
+              const renderBath = () => {
+                const zs = parseZones($('#lz', api.body).value).filter(z => z.name);
+                zs.forEach(z => { if (!baths.has(z.name)) baths.set(z.name, Store.defaultBath({ name: $('#ln', api.body).value }, z) || null); });
+                const chipB = (attr, val, label, on) => `<button type="button" class="pick pick-sm ${on ? 'is-on' : ''}" ${attr}="${esc(val)}"><span class="box">${icon('check')}</span>${esc(label)}</button>`;
+                $('#bathCfg', api.body).innerHTML = zs.map(z => {
+                  const b = baths.get(z.name), mode = bathMode(b);
+                  return `<div class="bath-cfg" data-bz="${esc(z.name)}">
+                    <div class="bc-head"><strong>${esc(z.name)}</strong><span class="faint small">${z.rooms.length} ห้อง</span></div>
+                    <div class="pick-grid">${BATH_MODES.map(([k, label]) => chipB('data-bmode', k, label, mode === k)).join('')}</div>
+                    ${b ? `<div class="bc-sub"><span class="small faint">มี</span>${Store.BATH_AREAS.map(a => chipB('data-barea', a, a, b.areas.includes(a))).join('')}</div>` : ''}
+                    ${mode === 'some' ? `<div class="bc-sub"><span class="small faint">ห้องที่มีห้องน้ำในตัว</span><div class="pick-grid">${z.rooms.map(r => chipB('data-broom', r, r, b.rooms.includes(r))).join('')}</div></div>` : ''}
+                  </div>`;
+                }).join('') || '<span class="small faint">พิมพ์ชื่อล็อค / ชั้น ในช่องด้านบนก่อน (เช่น ล็อค 1: 1/1-1/3)</span>';
+              };
+              if (l.type === 'dorm') {
+                $('#bathCfg', api.body).addEventListener('click', e => {
+                  const row = e.target.closest('[data-bz]'), btn = e.target.closest('button');
+                  if (!row || !btn) return;
+                  const zn = row.dataset.bz, b = baths.get(zn);
+                  if (btn.dataset.bmode) {
+                    const m = btn.dataset.bmode, areas = b?.areas?.length ? b.areas : [...Store.BATH_AREAS];
+                    baths.set(zn, m === 'none' ? null : m === 'shared' ? { mode: 'shared', areas } : m === 'rooms' ? { mode: 'rooms', areas } : { mode: 'rooms', areas, rooms: b?.rooms || [] });
+                  }
+                  if (btn.dataset.barea) { const a = btn.dataset.barea; b.areas = b.areas.includes(a) ? b.areas.filter(x => x !== a) : Store.BATH_AREAS.filter(x => x === a || b.areas.includes(x)); }
+                  if (btn.dataset.broom) { const r = btn.dataset.broom; b.rooms = b.rooms.includes(r) ? b.rooms.filter(x => x !== r) : [...b.rooms, r]; }
+                  renderBath();
+                });
+              }
               $('#lz', api.body).addEventListener('input', prev); prev();
             },
             actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'บันทึก', kind: 'btn-primary', onClick: api => {
               const name = $('#ln', api.body).value.trim();
               if (!name) throw new Error('กรุณาระบุชื่อ');
-              Store.saveLocation({ ...l, name, group: $('#lg', api.body).value.trim(), zones: parseZones($('#lz', api.body).value),
+              const zones = parseZones($('#lz', api.body).value).map(z => {
+                if (l.type !== 'dorm' || !z.name) return z;
+                const b = baths.get(z.name) ?? null;
+                if (b && !b.areas.length) throw new Error(`${z.name}: เลือกห้องอาบน้ำ หรือห้องสุขา อย่างน้อย 1 อย่าง`);
+                const rooms = b?.rooms?.filter(r => z.rooms.includes(r));
+                if (b?.rooms && !rooms.length) throw new Error(`${z.name}: เลือกห้องที่มีห้องน้ำในตัวอย่างน้อย 1 ห้อง`);
+                return { ...z, bath: b && (rooms ? { ...b, rooms } : b) };
+              });
+              Store.saveLocation({ ...l, name, group: $('#lg', api.body).value.trim(), zones,
                 ...(l.type === 'building' ? { acUnits: $('#lac', api.body).checked } : {}) });
               UI.toast('บันทึกสถานที่แล้ว');
             } }] });
