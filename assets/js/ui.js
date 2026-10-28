@@ -324,12 +324,15 @@ const UI = (() => {
     const l = t.location || t || {};
     const room = l.room && (/^\d|\//.test(l.room) ? `ห้อง ${l.room}` : l.room);
     // จุดในห้อง/ห้องน้ำ: ห้องน้ำในตัว → "ห้อง 203 · ห้องสุขา" · ห้องน้ำรวม → "ล็อค 1 · ห้องน้ำรวม (ห้องอาบน้ำ + ห้องสุขา)"
-    const areas = l.areas?.length ? (l.room ? l.areas.join(' + ') : `ห้องน้ำรวม (${l.areas.join(' + ')})`) : '';
+    // จุดที่แจ้ง (หอพัก): "ล็อค 1 · ห้อง 1/2, ห้องอาบน้ำ, ห้องสุขา" · ใบรุ่นก่อนเก็บใน areas
+    const areas = l.spots?.length ? l.spots.join(', ')
+      : l.areas?.length ? (l.room ? l.areas.join(' + ') : `ห้องน้ำรวม (${l.areas.join(' + ')})`) : '';
     return [l.locationName, l.zone || l.lock, room, areas, l.point].filter(Boolean).join(' · ');
   }
   // ห้องที่มีแอร์ 2 ตัว (ตั้งที่สถานที่ acUnits): ผู้แจ้งต้องเลือกว่าเป็นแอร์ตัวไหน
   const AC_UNITS = ['ตัวที่ 1 (ติดกระดาน)', 'ตัวที่ 2 (ไม่ติดกระดาน)', 'ทั้ง 2 ตัว'];
-  const itemName = i => `${i.name}${i.acUnit ? ` – แอร์${i.acUnit}` : ''}`;
+  // [จุด] ชื่อรายการ – แอร์ตัวไหน เช่น "[ห้องอาบน้ำ] ฝักบัว"
+  const itemName = i => `${i.spot ? `[${i.spot}] ` : ''}${i.name}${i.acUnit ? ` – แอร์${i.acUnit}` : ''}`;
   function itemsText(t) {
     return t.items.map(i => `${itemName(i)}${i.qty ? ` ×${i.qty}` : ''}${i.detail ? ` (${i.detail})` : ''}`).join(', ') || '-';
   }

@@ -404,26 +404,43 @@ const Pages = (() => {
     const dorm = type === 'dorm';
     const MAX_PHOTOS = 3;
     const UNIT = dorm ? 'ล็อค/ห้อง' : 'สถานที่';
-    const locKey = l => `${l.locationId || l.locationName}|${l.zone || ''}|${l.room || ''}|${(l.areas || []).join('+')}`;
+    const locKey = l => `${l.locationId || l.locationName}|${l.zone || ''}|${l.room || ''}`;
     const placeById = id => places.find(p => p.id === id);
     const firstCat = (cats.find(c => c.id === params.cat) || cats[0])?.id;
+    const MAX_BLOCKS = 15;
     let seq = 0;
-    // areas = จุดที่ซ่อม: ห้องน้ำรวมของล็อค/ชั้น หรือจุดในห้องที่มีห้องน้ำในตัว (ห้องนอน / ห้องอาบน้ำ / ห้องสุขา)
-    const newBlock = () => ({ key: `b${seq++}`, placeId: '', other: '', zone: '', room: '', areas: [], point: '', items: new Map(), active: firstCat, open: true });
+    // การ์ด 1 ใบ = ใบแจ้งซ่อม 1 ใบ · หอพัก: แตะเลือกได้หลายจุด (spots) แต่ละจุดมีรายการซ่อมของตัวเอง (item.spot)
+    //   ล็อค/ชั้น/ส่วนกลาง → 1 ใบต่อล็อค/ชั้น จุด = ห้องนอนแต่ละห้อง + ห้องน้ำรวม
+    //   ห้องที่มีห้องน้ำในตัว (บัวอุบล ห้องพักครู G01–G03) → 1 ใบต่อห้อง (room) จุด = ห้องนอน/ตัวห้อง + ห้องอาบน้ำ/ห้องสุขา
+    const newBlock = () => ({ key: `b${seq++}`, placeId: '', other: '', zone: '', room: '', spots: [], point: '', items: new Map(), tabs: {}, closed: [], open: true });
+    const itemKey = (spot, id) => spot ? `${spot}§${id}` : id;
     const state = { dorm: '', blocks: [] };
     // ───── ห้องน้ำหอพัก (ตั้งที่ล็อค/ชั้น: zone.bath) ─────
     const AREA_ICON = { 'ห้องอาบน้ำ': 'shower', 'ห้องสุขา': 'toilet' };
     const BATH_LABELS = Object.keys(AREA_ICON);
     const bedOf = room => /^\d|\//.test(room) ? 'ห้องนอน' : 'ตัวห้อง';
+    const roomLabel = r => /^\d|\//.test(r) ? `ห้อง ${r}` : r;
     const sharedBath = z => z?.bath?.mode === 'shared' ? z.bath.areas : [];
-    const roomBath = (z, room) => z?.bath?.mode === 'rooms' && room && (!z.bath.rooms || z.bath.rooms.includes(room)) ? z.bath.areas : [];
-    const areaOrder = (room, list) => [bedOf(room), 'ห้องอาบน้ำ', 'ห้องสุขา'].filter(a => list.includes(a));
+    // ห้องน้ำในตัวของห้องนี้: กำหนดทีละห้อง (perRoom) · เฉพาะบางห้อง (rooms) · หรือทุกห้อง
+    const roomBath = (z, room) => {
+      const bt = z?.bath;
+      if (bt?.mode !== 'rooms' || !room) return [];
+      if (bt.perRoom) return bt.perRoom[room] || [];
+      return !bt.rooms || bt.rooms.includes(room) ? bt.areas : [];
+    };
     if (editing) {
       const l = editing.location;
       const b = { ...newBlock(), placeId: l.locationId || '__other', other: l.locationId ? '' : l.locationName, zone: l.zone || l.lock || '', room: l.room || '', point: l.point || '' };
       const z = placeById(l.locationId)?.zones?.find(x => x.name === b.zone);
-      b.areas = l.areas?.length ? [...l.areas] : roomBath(z, b.room).length ? [bedOf(b.room)] : [];
-      editing.items.forEach(i => b.items.set(i.custom ? `custom:${i.catId}:${seq++}` : i.itemId, { ...i, photos: [...(i.photos || [])] }));
+      if (dorm) {
+        // ใบเดิม: จุดจาก spots (ใหม่) หรือ areas (รุ่นก่อน) · ห้องปกติในล็อค (รุ่นก่อนเก็บใน room) → เป็นจุดของล็อค
+        if (b.room && !roomBath(z, b.room).length) { b.spots = [roomLabel(b.room)]; b.room = ''; }
+        else b.spots = l.spots?.length ? [...l.spots] : l.areas?.length ? [...l.areas] : b.room ? [bedOf(b.room)] : [];
+      }
+      editing.items.forEach(i => {
+        const spot = dorm ? (i.spot && b.spots.includes(i.spot) ? i.spot : b.spots[0] || '') : '';
+        b.items.set(i.custom ? `custom:${spot}:${i.catId}:${seq++}` : itemKey(spot, i.itemId), { ...i, spot, photos: [...(i.photos || [])] });
+      });
       if (dorm) state.dorm = l.locationId || '';
       state.blocks.push(b);
     } else state.blocks.push(newBlock());
@@ -440,36 +457,50 @@ const Pages = (() => {
       return r.length > 1 && r.every(x => /^\d+$/.test(x)) ? `ห้อง ${r[0]} – ${r.at(-1)}` : p.group || '';
     };
     const zoneOf = b => placeOf(b)?.zones?.find(z => z.name === b.zone);
-    // เก็บจุดในห้องเฉพาะเมื่อไม่ใช่ "ห้องนอนอย่างเดียว" (= แจ้งที่ห้องตามปกติ)
-    const areasOf = b => b.areas.length && !(b.room && b.areas.length === 1 && b.areas[0] === bedOf(b.room)) ? areaOrder(b.room, b.areas) : [];
+    // จุดทั้งหมดที่เลือกได้ของการ์ด (เรียงตามผัง) · ห้องที่มีห้องน้ำในตัว = จุดภายในห้อง · ล็อค/ชั้น = ห้องนอน + ห้องน้ำรวม
+    const spotOptions = b => {
+      const z = zoneOf(b);
+      if (!dorm || !z) return [];
+      if (b.room) return [bedOf(b.room), ...roomBath(z, b.room)];
+      return [...z.rooms.filter(r => !roomBath(z, r).length).map(roomLabel), ...sharedBath(z)];
+    };
+    const orderedSpots = b => { const all = spotOptions(b); return [...b.spots].sort((x, y) => all.indexOf(x) - all.indexOf(y)); };
+    // หอพักที่มีห้อง/ห้องน้ำให้แตะ → ต้องเลือกอย่างน้อย 1 จุด · อย่างอื่น (แจ้งซ่อมทั่วไป) ใช้รายการชุดเดียว
+    const usesSpots = b => dorm && !!zoneOf(b) && (zoneOf(b).rooms.length > 0 || sharedBath(zoneOf(b)).length > 0);
+    const sectionsOf = b => usesSpots(b) ? orderedSpots(b) : [''];
+    const itemsIn = (b, spot) => [...b.items.entries()].filter(([, v]) => (v.spot || '') === spot);
     const locOf = b => {
       const p = placeOf(b);
-      if (p) return { locationId: p.id, locationName: p.name, zone: b.zone, room: b.room, point: b.point.trim(), ...(areasOf(b).length ? { areas: areasOf(b) } : {}) };
+      if (p) return { locationId: p.id, locationName: p.name, zone: b.zone, room: b.room, point: b.point.trim(), ...(usesSpots(b) && b.spots.length ? { spots: orderedSpots(b) } : {}) };
       return !dorm && b.placeId === '__other' && b.other.trim() ? { locationId: '', locationName: b.other.trim(), zone: '', room: '', point: b.point.trim() } : null;
+    };
+    // ปัญหาของแต่ละจุด (ว่าง = พร้อม)
+    const spotIssue = (b, spot) => {
+      const list = itemsIn(b, spot).map(([, v]) => v);
+      if (!list.length) return 'ยังไม่ได้เลือกรายการ';
+      if (list.some(v => !String(v.detail || '').trim())) return 'ยังระบุอาการไม่ครบ';
+      // รายการที่มีหน่วยนับ (ของจับต้องได้) ต้องระบุจำนวน · รายการที่พิมพ์เองไม่บังคับ
+      const noQty = list.find(v => !v.custom && v.unit && !(v.qty >= 1));
+      if (noQty) return `ยังไม่ได้ระบุจำนวน${noQty.name}`;
+      const noAc = list.find(v => needAc(b, v) && !v.acUnit);
+      if (noAc) return `ยังไม่ได้เลือกแอร์ตัวไหน (${noAc.name})`;
+      return '';
     };
     const issueOf = b => {
       const p = placeOf(b);
       if (!locOf(b)) return dorm ? 'ยังไม่ได้เลือกหอพัก' : 'ยังไม่ได้เลือกสถานที่';
       if (p?.zones?.length && (roomMode(p) ? !b.room : !b.zone)) return roomMode(p) ? 'ยังไม่ได้เลือกห้อง' : 'ยังไม่ได้เลือกล็อค/โซน';
-      if (roomBath(zoneOf(b), b.room).length && !b.areas.length) return `ยังไม่ได้เลือกจุดในห้อง ${b.room}`;
-      if (!b.items.size) return 'ยังไม่ได้เลือกรายการ';
-      if ([...b.items.values()].some(v => !String(v.detail || '').trim())) return 'ยังระบุอาการไม่ครบ';
-      // รายการที่มีหน่วยนับ (ของจับต้องได้) ต้องระบุจำนวน · รายการที่พิมพ์เองไม่บังคับ
-      const noQty = [...b.items.values()].find(v => !v.custom && v.unit && !(v.qty >= 1));
-      if (noQty) return `ยังไม่ได้ระบุจำนวน${noQty.name}`;
-      const noAc = [...b.items.values()].find(v => needAc(b, v) && !v.acUnit);
-      if (noAc) return `ยังไม่ได้เลือกแอร์ตัวไหน (${noAc.name})`;
+      if (usesSpots(b) && !b.spots.length) return 'ยังไม่ได้แตะเลือกจุดที่ชำรุด';
+      for (const spot of sectionsOf(b)) { const m = spotIssue(b, spot); if (m) return spot ? `${spot}: ${m}` : m; }
       return '';
     };
     const titleOf = (b, i) => {
       const l = locOf(b);
-      const t = l && (dorm ? UI.locationText({ ...l, locationName: '', point: '' }) : UI.locationText({ ...l, point: '' }));
+      const t = l && (dorm ? UI.locationText({ ...l, locationName: '', point: '', spots: [] }) : UI.locationText({ ...l, point: '' }));
       return t || `${UNIT}ที่ ${i + 1}`;
     };
-    // ห้อง/ล็อคที่การ์ดอื่นเลือกไปแล้ว
-    const usedBy = (b, zone, room) => state.blocks.findIndex(x => x !== b && locOf(x) && locOf(b) && locOf(x).locationName === locOf(b).locationName && x.zone === zone && x.room === room && !(!room && x.areas.length));
-    // ห้องน้ำรวมที่การ์ดอื่นเลือกไปแล้ว (แจ้งในการ์ดเดียวกันได้หลายจุด)
-    const areaUsed = (b, area) => state.blocks.some(x => x !== b && locOf(x) && locOf(b) && locOf(x).locationName === locOf(b).locationName && x.zone === b.zone && !x.room && x.areas.includes(area));
+    // ห้อง (แจ้งซ่อมทั่วไป / ห้องที่มีห้องน้ำในตัว) ที่การ์ดอื่นเลือกไปแล้ว
+    const usedBy = (b, zone, room) => state.blocks.findIndex(x => x !== b && locOf(x) && locOf(b) && locOf(x).locationName === locOf(b).locationName && x.zone === zone && x.room === room);
 
     const opt = (list, selected) => list.map(v => `<option ${v === selected ? 'selected' : ''}>${esc(v)}</option>`).join('');
     const reporter = editing ? editing.reporter : { position: me.position, dept: me.dept, phone: me.phone };
@@ -506,9 +537,9 @@ const Pages = (() => {
 
             <section class="form-section">
               <div class="fs-head"><span class="fs-num">${n0}</span><div><h3>${dorm ? 'ล็อคนอน / ห้อง และรายการซ่อม' : 'สถานที่และรายการซ่อม'}</h3>
-                <p>${editing ? 'แก้ไขสถานที่ รายการ และรูปของคำขอนี้' : `แจ้งทีละ${UNIT} เลือกรายการและแนบรูปของที่นั้น แล้วกด "เพิ่ม${UNIT}" เพื่อแจ้งที่ถัดไป · ระบบแยกใบแจ้งซ่อมให้ทีละ${UNIT}`}</p></div></div>
+                <p>${editing ? 'แก้ไขสถานที่ รายการ และรูปของคำขอนี้' : dorm ? 'เลือกล็อค/ชั้น แล้วแตะจุดที่ชำรุดในผัง (หลายจุดได้) แต่ละจุดเลือกรายการแยกกัน · 1 การ์ด = ใบแจ้งซ่อม 1 ใบ · มีล็อค/ห้องอื่นอีกกดปุ่มสีส้มด้านล่าง' : `แจ้งทีละ${UNIT} เลือกรายการและแนบรูปของที่นั้น · มี${UNIT}อื่นอีกกดปุ่มสีส้มด้านล่าง · ระบบแยกใบแจ้งซ่อมให้ทีละ${UNIT}`}</p></div></div>
               <div class="loc-blocks" id="blocks"></div>
-              ${editing ? '' : `<button type="button" class="add-block" data-addblock>${icon('plus')} เพิ่ม${UNIT}</button>`}
+              ${editing ? '' : `<button type="button" class="add-block" data-addblock><span class="ab-ic">${icon('plus')}</span><span><b>แจ้ง${UNIT}อื่นเพิ่ม</b><small>${dorm ? 'เช่น ล็อค 2, ล็อค 3 · ' : ''}แยกเป็นอีกใบ · ได้สูงสุด ${MAX_BLOCKS} ใบต่อครั้ง</small></span></button>`}
             </section>
 
             <section class="form-section">
@@ -539,37 +570,39 @@ const Pages = (() => {
           const z = p.zones.find(x => x.name === b.zone);
           return `<div class="field"><label>${dorm ? 'ล็อคนอน / โซน' : 'โซน'} <span class="req">*</span></label>
               <div class="pick-grid">${p.zones.map(x => chip('data-zone', x.name, x.name, b.zone === x.name, b.zone !== x.name && usedBy(b, x.name, '') >= 0 && !x.rooms.length)).join('')}</div></div>
-            ${z?.bath ? bathPlan(b, z)
-              : z?.rooms.length ? `<div class="field"><label>ห้อง <span class="faint">(ไม่บังคับ)</span></label>
+            ${dorm && z && usesSpots(b) ? planHTML(b, z)
+              : !dorm && z?.rooms.length ? `<div class="field"><label>ห้อง <span class="faint">(ไม่บังคับ)</span></label>
               <div class="pick-grid">${z.rooms.map(r => chip('data-room', r, r, b.room === r, usedBy(b, z.name, r) >= 0)).join('')}</div></div>` : ''}`;
         }
-        // ───── ห้องน้ำหอพัก ─────
+        // ───── ผังหอพัก: แตะจุดที่ชำรุด (เลือกได้หลายจุด แต่ละจุดมีรายการของตัวเอง) ─────
         const tile = (attr, val, ic, label, on, off, cls = '', extra = '') =>
           `<button type="button" class="dp-tile ${cls} ${on ? 'is-on' : ''}" ${attr}="${esc(val)}" ${off ? 'disabled' : ''} aria-pressed="${on}">${icon(ic)}<span>${esc(label)}</span>${extra}</button>`;
-        const roomTiles = (b, z, list) => list.map(r => tile('data-room', r, bedOf(r) === 'ห้องนอน' ? 'bed' : 'home', r, b.room === r, usedBy(b, z.name, r) >= 0,
-          roomBath(z, r).length ? 'has-bath' : '', roomBath(z, r).length ? `<i class="dp-mini">${roomBath(z, r).map(a => icon(AREA_ICON[a])).join('')}</i>` : '')).join('');
-        // จุดในห้องที่มีห้องน้ำในตัว: ห้องนอน + ห้องอาบน้ำ/ห้องสุขา (เลือกได้หลายจุด)
+        function planHTML(b, z) {
+          const sh = sharedBath(z);
+          const self = r => roomBath(z, r);
+          const mixed = z.rooms.some(r => self(r).length) && z.rooms.some(r => !self(r).length);
+          const roomTile = r => tile('data-room', r, bedOf(r) === 'ห้องนอน' ? 'bed' : 'home', r,
+            self(r).length ? b.room === r : !b.room && b.spots.includes(roomLabel(r)),
+            self(r).length && usedBy(b, z.name, r) >= 0,
+            self(r).length ? 'has-bath' : '', self(r).length ? `<i class="dp-mini">${self(r).map(a => icon(AREA_ICON[a])).join('')}</i>` : '');
+          return `<div class="field"><label>ผัง ${esc(z.name)} <span class="req">*</span></label>
+            <span class="hint dp-hint">แตะจุดที่ชำรุด · เลือกได้หลายจุด แต่ละจุดเลือกรายการซ่อมแยกกัน</span>
+            <div class="dplan">
+              ${z.rooms.length ? `<div class="dp-rooms">${z.rooms.map(roomTile).join('')}</div>` : ''}
+              ${sh.length ? `<div class="dp-bath ${z.rooms.length ? '' : 'solo'}"><div class="dp-bath-label">${icon('droplet')} ห้องน้ำรวม ${esc(z.name)}</div>
+                <div class="dp-bath-row">${sh.map(a => tile('data-spot-pick', a, AREA_ICON[a], a, !b.room && b.spots.includes(a), false, 'bath')).join('')}</div></div>` : ''}
+            </div>
+            ${mixed ? `<span class="hint">ห้องที่มีไอคอนห้องน้ำมุมขวาบน = มีห้องน้ำในตัว แจ้งได้ครั้งละ 1 ห้องต่อการ์ด</span>` : ''}</div>
+            ${b.room ? roomPlan(b, z) : ''}`;
+        }
+        // ห้องที่มีห้องน้ำในตัว: ห้องนอน/ตัวห้อง + ห้องอาบน้ำ/ห้องสุขา (เลือกได้หลายจุด)
         function roomPlan(b, z) {
-          const ar = roomBath(z, b.room);
-          if (!ar.length) return '';
-          const bed = bedOf(b.room);
+          const ar = roomBath(z, b.room), bed = bedOf(b.room);
           return `<div class="field"><label>จุดในห้อง ${esc(b.room)} <span class="req">*</span> <span class="faint">(เลือกได้หลายจุด)</span></label>
             <div class="dp-room">
-              ${tile('data-area', bed, bed === 'ห้องนอน' ? 'bed' : 'home', bed, b.areas.includes(bed), false, 'big')}
-              <div class="dp-room-bath">${ar.map(a => tile('data-area', a, AREA_ICON[a], a, b.areas.includes(a), false, 'bath')).join('')}</div>
+              ${tile('data-spot-pick', bed, bed === 'ห้องนอน' ? 'bed' : 'home', bed, b.spots.includes(bed), false, 'big')}
+              <div class="dp-room-bath">${ar.map(a => tile('data-spot-pick', a, AREA_ICON[a], a, b.spots.includes(a), false, 'bath')).join('')}</div>
             </div></div>`;
-        }
-        // ผังภาพของล็อค/ชั้น — ห้องนอนแถวบน ห้องน้ำรวมแถวล่าง · ห้องที่มีห้องน้ำในตัวกดแล้วแสดงผังห้อง
-        function bathPlan(b, z) {
-          const sh = sharedBath(z);
-          const whole = /^ล็อค/.test(z.name) ? 'ทั้งล็อค' : 'ทั้งชั้น';
-          return `<div class="field"><label>ผัง ${esc(z.name)} <span class="faint">(แตะจุดที่ชำรุด${sh.length ? ` · ไม่เลือก = ${whole}` : ''})</span></label>
-            <div class="dplan">
-              <div class="dp-rooms">${roomTiles(b, z, z.rooms)}</div>
-              ${sh.length ? `<div class="dp-bath"><div class="dp-bath-label">${icon('droplet')} ห้องน้ำรวม ${esc(z.name)}</div>
-                <div class="dp-bath-row">${sh.map(a => tile('data-area', a, AREA_ICON[a], a, !b.room && b.areas.includes(a), areaUsed(b, a), 'bath')).join('')}</div></div>` : ''}
-            </div></div>
-            ${roomPlan(b, z)}`;
         }
         // ───── ค้นหาสถานที่ (แจ้งซ่อมทั่วไป): พิมพ์ชื่อหรือเลขห้อง · ว่าง = สถานที่ที่เคยแจ้งล่าสุด + รายการทั้งหมด ─────
         const norm = s => String(s || '').toLowerCase().replace(/[\s.\-–()]/g, '');
@@ -615,18 +648,19 @@ const Pages = (() => {
               <div class="pp-results" data-ppres role="listbox">${ppResults(b.q || '')}</div></div>`;
         }
 
-        const countIn = (b, catId) => [...b.items.values()].filter(v => v.catId === catId).length;
-        const tabsHTML = b => cats.map(c => `
-          <button type="button" class="cat-tab ${c.id === b.active ? 'is-active' : ''}" data-tab="${c.id}">${icon(c.icon)}${esc(c.name)}${countIn(b, c.id) ? `<span class="cnt">${countIn(b, c.id)}</span>` : ''}</button>`).join('');
-        function panelHTML(b) {
-          const c = cats.find(x => x.id === b.active);
+        const activeTab = (b, spot) => b.tabs[spot] || firstCat;
+        const countIn = (b, spot, catId) => itemsIn(b, spot).filter(([, v]) => v.catId === catId).length;
+        const tabsHTML = (b, spot) => cats.map(c => `
+          <button type="button" class="cat-tab ${c.id === activeTab(b, spot) ? 'is-active' : ''}" data-tab="${c.id}">${icon(c.icon)}${esc(c.name)}${countIn(b, spot, c.id) ? `<span class="cnt">${countIn(b, spot, c.id)}</span>` : ''}</button>`).join('');
+        function panelHTML(b, spot) {
+          const c = cats.find(x => x.id === activeTab(b, spot));
           if (!c) return '<p class="muted">ยังไม่มีหมวดงานสำหรับแบบฟอร์มนี้</p>';
           const items = Store.itemsFor(c, type);
-          const customs = [...b.items.entries()].filter(([, v]) => v.custom && v.catId === c.id);
+          const customs = itemsIn(b, spot).filter(([, v]) => v.custom && v.catId === c.id);
           return `
             <div class="cat-panel-title">${icon(c.icon)}${esc(c.name)}</div>
             ${items.length ? `<div class="pick-grid">${items.map(it => {
-              const on = b.items.has(it.id);
+              const on = b.items.has(itemKey(spot, it.id));
               return `<button type="button" class="pick ${on ? 'is-on' : ''}" data-item="${it.id}" data-cat="${c.id}" aria-pressed="${on}"><span class="box">${icon('check')}</span>${esc(it.name)}</button>`;
             }).join('')}</div>` : ''}
             ${customs.length ? `<div class="pick-grid" style="margin-top:10px">${customs.map(([k, v]) => `<button type="button" class="pick is-on" data-remove="${esc(k)}" title="กดเพื่อนำออก"><span class="box">${icon('check')}</span>${esc(v.name)}<span class="unit">ระบุเอง</span></button>`).join('')}</div>` : ''}
@@ -634,8 +668,8 @@ const Pages = (() => {
               <div class="row" style="flex-wrap:nowrap"><input class="input" data-other="${c.id}" aria-label="${c.freeOnly ? 'ระบุรายการที่ต้องการซ่อม' : 'รายการอื่น'}" placeholder="${c.freeOnly ? 'เช่น ราวบันได ฝ้าเพดาน' : 'รายการอื่นที่ไม่มีในตัวเลือก'}"><button type="button" class="btn btn-soft" data-addother="${c.id}">${icon('plus')} เพิ่ม</button></div></div>`;
         }
         const thumbs = v => (v.photos || []).map((p, i) => `<figure class="thumb sm"><img ${Store.img(p)} alt="รูปที่ ${i + 1}" data-zoom><button type="button" class="thumb-x" data-rmphoto="${i}" aria-label="ลบรูปที่ ${i + 1}">${icon('close')}</button></figure>`).join('');
-        function detailsHTML(b) {
-          const list = [...b.items.entries()];
+        function detailsHTML(b, spot) {
+          const list = itemsIn(b, spot);
           if (!list.length) return '';
           return `<div class="lb-sec">${icon('edit')} อาการและรูปของแต่ละรายการ</div><ol class="detail-list">${list.map(([k, v], n) => {
             const c = Store.allCategories().find(x => x.id === v.catId);
@@ -655,13 +689,31 @@ const Pages = (() => {
             </li>`;
           }).join('')}</ol>`;
         }
+        // ส่วนรายการซ่อมของแต่ละจุด (ย่อเก็บได้ · บอกสถานะ พร้อม/ยังขาด)
+        function sectionHTML(b, spot, n, list) {
+          const body = `<div class="cat-tabs">${tabsHTML(b, spot)}</div><div class="cat-panel">${panelHTML(b, spot)}</div>${detailsHTML(b, spot)}`;
+          if (!spot) return `<div class="spot-sec plain" data-spot="">${body}</div>`;
+          const issue = spotIssue(b, spot), closed = b.closed.includes(spot), cnt = itemsIn(b, spot).length;
+          const prevSpot = list[n - 1];
+          return `
+            <div class="spot-sec ${closed ? '' : 'is-open'} ${issue ? '' : 'is-ready'}" data-spot="${esc(spot)}">
+              <button type="button" class="ss-head" data-spottoggle aria-expanded="${!closed}">
+                <span class="ss-no">${n + 1}</span>
+                <span class="ss-ic ${AREA_ICON[spot] ? 'bath' : ''}">${icon(AREA_ICON[spot] || (spot === 'ตัวห้อง' ? 'home' : 'bed'))}</span>
+                <span class="ss-title"><strong>${esc(spot)}</strong><span>${cnt ? `${cnt} รายการ` : 'ยังไม่มีรายการ'} · ${issue ? `<em>${esc(issue)}</em>` : `<b>${icon('check')} พร้อม</b>`}</span></span>
+                <span class="ss-chev" aria-hidden="true">${icon('chev')}</span></button>
+              ${closed ? '' : `<div class="ss-body">
+                ${prevSpot && !cnt && itemsIn(b, prevSpot).length ? `<button type="button" class="link small" data-copyspot="${esc(prevSpot)}">${icon('layers')} ใช้รายการเดียวกับ ${esc(prevSpot)}</button>` : ''}
+                ${body}</div>`}
+            </div>`;
+        }
         function headHTML(b, i) {
           const issue = issueOf(b);
           const many = state.blocks.length > 1;
           return `
             <span class="lb-num">${i + 1}</span>
             <div class="lb-title"><strong>${esc(titleOf(b, i))}</strong>
-              <span>${b.items.size ? `${b.items.size} รายการ` : 'ยังไม่มีรายการ'} · ${issue ? `<em>${issue}</em>` : `<b>${icon('check')} พร้อมส่ง</b>`}</span></div>
+              <span>${usesSpots(b) && b.spots.length ? `${b.spots.length} จุด · ` : ''}${b.items.size ? `${b.items.size} รายการ` : 'ยังไม่มีรายการ'} · ${issue ? `<em>${esc(issue)}</em>` : `<b>${icon('check')} พร้อมส่ง</b>`}</span></div>
             ${many && !editing ? `<button type="button" class="icon-btn sm" data-rmblock aria-label="ลบ${UNIT}ที่ ${i + 1}">${icon('trash')}</button>` : ''}
             ${many ? `<span class="lb-chev" aria-hidden="true">${icon('chev')}</span>` : ''}`;
         }
@@ -676,10 +728,10 @@ const Pages = (() => {
                 ${placePicker(b)}`}
               ${zonePicker(b, p)}
               ${locOf(b) ? `<div class="field"><label>ตำแหน่ง / จุดที่ชำรุดเพิ่มเติม <span class="faint">(ถ้ามี)</span></label><input class="input" data-point value="${esc(b.point)}" placeholder="เช่น หน้าห้อง ฝั่งหน้าต่าง ห้องน้ำชาย"></div>` : ''}
-              <div class="lb-sec">${icon('list')} เลือกรายการที่ต้องซ่อม
-                ${prev?.items.size && !b.items.size ? `<button type="button" class="link small" data-copyprev>${icon('layers')} ใช้รายการเดียวกับ${UNIT}ที่ ${i}</button>` : ''}</div>
-              <div class="cat-tabs">${tabsHTML(b)}</div><div class="cat-panel">${panelHTML(b)}</div>
-              ${detailsHTML(b)}
+              <div class="lb-sec">${icon('list')} ${usesSpots(b) ? 'รายการซ่อมของแต่ละจุด' : 'เลือกรายการที่ต้องซ่อม'}
+                ${prev?.items.size && !b.items.size && (!usesSpots(b) || b.spots.length) ? `<button type="button" class="link small" data-copyprev>${icon('layers')} ใช้รายการเดียวกับ${UNIT}ที่ ${i}</button>` : ''}</div>
+              ${usesSpots(b) && !b.spots.length ? `<div class="detail-empty">${icon('pin')}<span>แตะเลือกจุดที่ชำรุดในผังด้านบนก่อน แต่ละจุดเลือกรายการซ่อมแยกกัน</span></div>`
+                : `<div class="spot-list">${sectionsOf(b).map((sp, n, list) => sectionHTML(b, sp, n, list)).join('')}</div>`}
             </div>` : ''}
           </div>`;
         }
@@ -728,7 +780,7 @@ const Pages = (() => {
               localStorage.setItem(DRAFT_KEY, JSON.stringify({
                 at: new Date().toISOString(), dorm: state.dorm,
                 fields: Object.fromEntries(fieldIds.map(id => [id, $('#' + id, root).value])),
-                blocks: state.blocks.map(b => ({ placeId: b.placeId, other: b.other, zone: b.zone, room: b.room, areas: b.areas, point: b.point, active: b.active,
+                blocks: state.blocks.map(b => ({ placeId: b.placeId, other: b.other, zone: b.zone, room: b.room, spots: b.spots, point: b.point, tabs: b.tabs,
                   items: [...b.items.entries()].map(([k, v]) => [k, { ...v, photos: [] }]) }))
               }));
             } catch (e) { /* โหมดส่วนตัวหรือพื้นที่เต็ม ข้ามการบันทึกร่าง */ }
@@ -738,8 +790,8 @@ const Pages = (() => {
         const restoreDraft = d => {
           state.dorm = places.some(p => p.id === d.dorm) ? d.dorm : '';
           state.blocks = d.blocks.map(x => {
-            const b = { ...newBlock(), placeId: x.placeId, other: x.other || '', zone: x.zone || '', room: x.room || '', areas: x.areas || [], point: x.point || '', active: x.active || firstCat, open: false };
-            x.items.forEach(([k, v]) => b.items.set(v.custom ? `custom:${v.catId}:${seq++}` : k, v));
+            const b = { ...newBlock(), placeId: x.placeId, other: x.other || '', zone: x.zone || '', room: x.room || '', spots: x.spots || [], point: x.point || '', tabs: x.tabs || {}, open: false };
+            x.items.forEach(([k, v]) => b.items.set(v.custom ? `custom:${v.spot || ''}:${v.catId}:${seq++}` : k, v));
             return b;
           });
           if (!state.blocks.length) state.blocks.push(newBlock());
@@ -763,18 +815,33 @@ const Pages = (() => {
           root.addEventListener('click', saveDraft);
         }
 
-        const addCustom = (b, catId) => {
-          const inp = $(`[data-block="${b.key}"] [data-other="${catId}"]`, root);
+        const secSel = (b, spot) => `[data-block="${b.key}"] .spot-sec[data-spot="${CSS.escape(spot)}"]`;
+        const addCustom = (b, catId, spot) => {
+          const inp = $(`${secSel(b, spot)} [data-other="${catId}"]`, root);
           const name = inp.value.trim();
           if (!name) return inp.focus();
           const c = Store.allCategories().find(x => x.id === catId);
-          b.items.set(`custom:${catId}:${seq++}`, { catId, catName: c.name, itemId: '', name, unit: '', qty: 0, detail: '', custom: true, photos: [] });
+          b.items.set(`custom:${spot}:${catId}:${seq++}`, { catId, catName: c.name, itemId: '', name, unit: '', qty: 0, detail: '', custom: true, spot, photos: [] });
           renderBlock(b);
-          $(`[data-block="${b.key}"] .detail-row:last-child [data-detail]`, root)?.focus();
+          $(`${secSel(b, spot)} .detail-row:last-child [data-detail]`, root)?.focus();
+        };
+        // ถอดจุด/เปลี่ยนห้อง: ถ้ามีรายการอยู่แล้วให้ยืนยันก่อน แล้วลบรายการของจุดนั้น
+        const dropSpots = async (b, spots, why) => {
+          const n = [...b.items.values()].filter(v => spots.includes(v.spot || '')).length;
+          if (n && !await UI.confirm(`${why} รายการซ่อมที่เลือกไว้ ${n} รายการจะถูกลบ`, { title: 'ยืนยันการเปลี่ยนจุด', okLabel: 'ตกลง' })) return false;
+          [...b.items.entries()].forEach(([k, v]) => { if (spots.includes(v.spot || '')) b.items.delete(k); });
+          b.spots = b.spots.filter(x => !spots.includes(x));
+          b.closed = b.closed.filter(x => !spots.includes(x));
+          return true;
+        };
+        const addSpot = (b, spot) => {
+          b.spots = [...b.spots, spot];
+          // ห้องน้ำ → เปิดแท็บงานประปาให้เลย (โถชักโครก ฝักบัว ก๊อก)
+          if (BATH_LABELS.includes(spot) && cats.some(c => c.id === 'plumb')) b.tabs[spot] = 'plumb';
         };
         const addBlock = () => {
           if (dorm && !state.dorm) { UI.toast('กรุณาเลือกหอพักก่อน', 'error'); $('#dormSel', root).focus(); return; }
-          if (state.blocks.length >= 8) { UI.toast(`แจ้งได้ครั้งละไม่เกิน 8 ${UNIT} ส่งชุดนี้ก่อนแล้วแจ้งชุดถัดไปได้เลย`, 'error'); return; }
+          if (state.blocks.length >= MAX_BLOCKS) { UI.toast(`แจ้งได้ครั้งละไม่เกิน ${MAX_BLOCKS} ใบ ส่งชุดนี้ก่อนแล้วแจ้งชุดถัดไปได้เลย`, 'error'); return; }
           state.blocks.forEach(x => { x.open = false; });
           const b = newBlock();
           if (!dorm) b.placeId = state.blocks.at(-1)?.placeId === '__other' ? '' : state.blocks.at(-1)?.placeId || ''; // เริ่มจากสถานที่เดิม เลือกห้องถัดไปได้ทันที
@@ -812,35 +879,57 @@ const Pages = (() => {
             return;
           }
           const zn = e.target.closest('[data-zone]');
-          if (zn) { b.zone = b.zone === zn.dataset.zone ? '' : zn.dataset.zone; b.room = ''; b.areas = []; renderBlock(b); return; }
+          if (zn && !dorm) { b.zone = b.zone === zn.dataset.zone ? '' : zn.dataset.zone; b.room = ''; renderBlock(b); return; }
+          if (zn) {
+            if (b.zone !== zn.dataset.zone && b.items.size && !await UI.confirm(`เปลี่ยนเป็น ${zn.dataset.zone} แล้วจุดและรายการซ่อมที่เลือกไว้ในการ์ดนี้จะถูกล้าง`, { title: 'เปลี่ยนล็อค / โซน', okLabel: 'เปลี่ยน' })) return;
+            if (b.zone !== zn.dataset.zone || !b.items.size) { b.zone = b.zone === zn.dataset.zone ? '' : zn.dataset.zone; b.room = ''; b.spots = []; b.items.clear(); b.closed = []; }
+            renderBlock(b); return;
+          }
           const acu = e.target.closest('[data-acu]');
           if (acu) { const v = b.items.get(acu.closest('[data-key]').dataset.key); v.acUnit = v.acUnit === acu.dataset.acu ? '' : acu.dataset.acu; renderBlock(b); return; }
           const rm0 = e.target.closest('[data-room]');
           if (rm0) {
-            b.room = b.room === rm0.dataset.room ? '' : rm0.dataset.room;
-            // ห้องที่มีห้องน้ำในตัว: เริ่มที่ "ห้องนอน" แล้วแตะเพิ่มห้องอาบน้ำ/ห้องสุขาได้
-            b.areas = b.room && roomBath(zoneOf(b), b.room).length ? [bedOf(b.room)] : [];
+            const r = rm0.dataset.room, z = zoneOf(b);
+            if (!dorm || !usesSpots(b)) { b.room = b.room === r ? '' : r; renderBlock(b); return; }
+            if (roomBath(z, r).length) {
+              // ห้องที่มีห้องน้ำในตัว = 1 ใบต่อห้อง: เลือกห้องนี้แทนจุดเดิมทั้งหมด (เริ่มที่ห้องนอน แตะเพิ่มห้องอาบน้ำ/สุขาได้)
+              if (b.room === r) { if (!await dropSpots(b, [...b.spots], `ยกเลิกห้อง ${r}?`)) return; b.room = ''; }
+              else {
+                if (b.spots.length && !await dropSpots(b, [...b.spots], `เปลี่ยนเป็นห้อง ${r} (ห้องน้ำในตัว แจ้ง 1 ใบต่อห้อง)?`)) return;
+                b.room = r; b.spots = []; addSpot(b, bedOf(r));
+              }
+            } else {
+              const sp = roomLabel(r);
+              if (b.room) { if (!await dropSpots(b, [...b.spots], `เปลี่ยนจากห้อง ${b.room} เป็น ${sp}?`)) return; b.room = ''; }
+              if (b.spots.includes(sp)) { if (!await dropSpots(b, [sp], `ยกเลิก ${sp}?`)) return; }
+              else addSpot(b, sp);
+            }
             renderBlock(b); return;
           }
-          const ar = e.target.closest('[data-area]');
-          if (ar) {
-            const a = ar.dataset.area;
-            if (!roomBath(zoneOf(b), b.room).length) b.room = ''; // ห้องน้ำรวม: ไม่ผูกกับห้องนอน
-            b.areas = b.areas.includes(a) ? b.areas.filter(x => x !== a) : [...b.areas, a];
-            // เลือกห้องน้ำแล้วยังไม่มีรายการ → เปิดแท็บงานประปาให้เลย (โถชักโครก ฝักบัว ก๊อก)
-            if (BATH_LABELS.includes(a) && b.areas.includes(a) && !b.items.size && cats.some(c => c.id === 'plumb')) b.active = 'plumb';
+          const sp = e.target.closest('[data-spot-pick]');
+          if (sp) {
+            const a = sp.dataset.spotPick;
+            if (b.spots.includes(a)) { if (!await dropSpots(b, [a], `ยกเลิก ${a}?`)) return; }
+            else addSpot(b, a);
             renderBlock(b); return;
           }
+          const st = e.target.closest('[data-spottoggle]');
+          if (st) { const s0 = st.closest('[data-spot]').dataset.spot; b.closed = b.closed.includes(s0) ? b.closed.filter(x => x !== s0) : [...b.closed, s0]; renderBlock(b); return; }
+          const spotOf = el => el.closest('[data-spot]')?.dataset.spot ?? '';
+          // คัดลอกรายการจากจุดก่อนหน้า / การ์ดก่อนหน้า (ไม่รวมรูป)
+          const copyInto = (from, spot) => from.forEach(([k, v]) => b.items.set(v.custom ? `custom:${spot}:${v.catId}:${seq++}` : itemKey(spot, v.itemId), { ...v, spot, photos: [] }));
+          const cs = e.target.closest('[data-copyspot]');
+          if (cs) { copyInto(itemsIn(b, cs.dataset.copyspot), spotOf(cs)); renderBlock(b); UI.toast('คัดลอกรายการแล้ว · ตรวจอาการและแนบรูปของจุดนี้ได้เลย'); return; }
           if (e.target.closest('[data-copyprev]')) {
             const prev = state.blocks[state.blocks.indexOf(b) - 1];
-            prev.items.forEach((v, k) => b.items.set(v.custom ? `custom:${v.catId}:${seq++}` : k, { ...v, photos: [] }));
+            copyInto([...prev.items.entries()], sectionsOf(b)[0]);
             renderBlock(b);
             UI.toast('คัดลอกรายการแล้ว · ตรวจอาการและแนบรูปของที่นี้ได้เลย');
             return;
           }
           const tab = e.target.closest('[data-tab]');
-          if (tab) { b.active = tab.dataset.tab; renderBlock(b); return; }
-          const add = e.target.closest('[data-addother]'); if (add) { addCustom(b, add.dataset.addother); return; }
+          if (tab) { b.tabs[spotOf(tab)] = tab.dataset.tab; renderBlock(b); return; }
+          const add = e.target.closest('[data-addother]'); if (add) { addCustom(b, add.dataset.addother, spotOf(add)); return; }
           const rp = e.target.closest('[data-rmphoto]');
           if (rp) { b.items.get(rp.closest('[data-key]').dataset.key).photos.splice(+rp.dataset.rmphoto, 1); renderBlock(b); return; }
           const rm = e.target.closest('[data-remove]');
@@ -853,12 +942,12 @@ const Pages = (() => {
           }
           const pick = e.target.closest('[data-item]');
           if (pick) {
-            const id = pick.dataset.item;
-            if (b.items.has(id)) b.items.delete(id);
+            const id = pick.dataset.item, spot = spotOf(pick), key = itemKey(spot, id);
+            if (b.items.has(key)) b.items.delete(key);
             else {
               const c = Store.allCategories().find(x => x.id === pick.dataset.cat);
               const it = c.items.find(x => x.id === id);
-              b.items.set(id, { catId: c.id, catName: c.name, itemId: id, name: it.name, unit: it.unit || '', qty: it.unit ? 1 : 0, detail: '', photos: [] });
+              b.items.set(key, { catId: c.id, catName: c.name, itemId: id, name: it.name, unit: it.unit || '', qty: it.unit ? 1 : 0, detail: '', spot, photos: [] });
             }
             renderBlock(b);
           }
@@ -867,7 +956,7 @@ const Pages = (() => {
           // Enter ในช่องค้นหาสถานที่ = เลือกผลลัพธ์แรก
           if (e.key === 'Enter' && e.target.matches('[data-ppq]')) { e.preventDefault(); e.target.closest('.field').querySelector('.pp-opt')?.click(); return; }
           if (e.key !== 'Enter' || !e.target.dataset.other) return;
-          e.preventDefault(); addCustom(blockOf(e.target), e.target.dataset.other);
+          e.preventDefault(); addCustom(blockOf(e.target), e.target.dataset.other, e.target.closest('[data-spot]')?.dataset.spot ?? '');
         });
         root.addEventListener('input', e => {
           const b = blockOf(e.target);
@@ -886,10 +975,10 @@ const Pages = (() => {
         });
         root.addEventListener('change', async e => {
           if (e.target.id === 'dormSel') {
-            const used = state.blocks.some(b => b.zone || b.room);
-            if (used && !await UI.confirm('เปลี่ยนหอพักแล้วล็อค/ห้องที่เลือกไว้จะถูกล้าง (รายการซ่อมยังอยู่)', { title: 'เปลี่ยนหอพัก', okLabel: 'เปลี่ยน' })) { e.target.value = state.dorm; return; }
+            const used = state.blocks.some(b => b.zone || b.room || b.items.size);
+            if (used && !await UI.confirm('เปลี่ยนหอพักแล้วล็อค/ห้อง จุด และรายการซ่อมที่เลือกไว้จะถูกล้าง', { title: 'เปลี่ยนหอพัก', okLabel: 'เปลี่ยน' })) { e.target.value = state.dorm; return; }
             state.dorm = e.target.value;
-            state.blocks.forEach(b => { b.zone = ''; b.room = ''; b.areas = []; });
+            state.blocks.forEach(b => { b.zone = ''; b.room = ''; b.spots = []; b.items.clear(); b.closed = []; });
             renderBlocks(); return;
           }
           const b = blockOf(e.target);
@@ -903,6 +992,35 @@ const Pages = (() => {
             renderBlock(b);
           }
         });
+
+        // ───── หน้าสรุปก่อนยืนยัน: ผู้แจ้ง · ทุกใบ ทุกจุด ทุกรายการ พร้อมรูป · งานที่อาจแจ้งซ้ำ ─────
+        function reviewBeforeSend(entries, input, dups) {
+          const nItems = entries.reduce((a, x) => a + x.items.length, 0);
+          const nPhotos = entries.reduce((a, x) => a + x.items.reduce((b2, i) => b2 + (i.photos?.length || 0), 0), 0);
+          const bySpot = items => items.reduce((m, i) => { const k = i.spot || ''; (m.get(k) || m.set(k, []).get(k)).push(i); return m; }, new Map());
+          const itemRow = i => `
+            <li><div class="rv-line"><b>${esc(i.name)}</b>${i.acUnit ? ` <span class="rv-tag">แอร์${esc(i.acUnit)}</span>` : ''}${i.qty ? ` <span class="rv-qty">× ${i.qty}${i.unit ? ` ${esc(String(i.unit).split('/')[0])}` : ''}</span>` : ''}<span class="rv-cat">${esc(i.catName)}</span></div>
+              <div class="rv-detail">${esc(i.detail)}</div>
+              ${i.photos?.length ? `<div class="rv-ph">${i.photos.map(p => `<img ${Store.img(p)} alt="">`).join('')}</div>` : ''}</li>`;
+          const body = `<div class="review">
+            <div class="rv-who">${UI.avatar(Store.fullName(me))}<div><b>${esc(Store.fullName(me))}</b><span>${esc([input.position, input.dept].filter(Boolean).join(' · '))}</span><span>${icon('phone')} ${esc(input.phone)}</span></div></div>
+            <div class="rv-stats"><span><b>${entries.length}</b> ใบแจ้งซ่อม</span><span><b>${nItems}</b> รายการ</span><span><b>${nPhotos}</b> รูป</span></div>
+            ${dups.length ? `<div class="notice orange">${icon('alert')}<div><b>พบงานเดิมที่ยังไม่ปิด ${dups.length} ใบ ในที่และรายการเดียวกัน</b> ตรวจสอบก่อนเพื่อไม่ให้แจ้งซ้ำ
+              <div class="rv-dups">${dups.map(t => `<a href="#/ticket/${t.id}" target="_blank">${esc(t.id)} · ${esc(Views.itemsTitle(t))} · ${esc(UI.locationText(t))} ${UI.statusBadge(t.status)}</a>`).join('')}</div></div></div>` : ''}
+            ${entries.map((x, n) => `
+              <section class="rv-ticket">
+                <div class="rv-head"><span class="rv-no">${entries.length > 1 ? `ใบที่ ${n + 1}` : 'สถานที่'}</span><strong>${esc(UI.locationText({ ...x.location, spots: [] }))}</strong></div>
+                ${[...bySpot(x.items)].map(([spot, list]) => `${spot ? `<div class="rv-spot">${icon(AREA_ICON[spot] || (spot === 'ตัวห้อง' ? 'home' : 'bed'))} ${esc(spot)}</div>` : ''}<ul class="rv-items">${list.map(itemRow).join('')}</ul>`).join('')}
+              </section>`).join('')}
+            ${input.note ? `<div class="rv-note">${icon('edit')}<span><b>หมายเหตุ</b> ${esc(input.note)}</span></div>` : ''}
+          </div>`;
+          return new Promise(res => UI.modal({
+            title: editing ? 'ตรวจสอบก่อนบันทึกการแก้ไข' : 'ตรวจสอบก่อนส่งแจ้งซ่อม', subtitle: 'ตรวจสถานที่ รายการ และอาการให้ถูกต้อง แล้วกดยืนยัน', size: 'lg', body,
+            onClose: () => res(false),
+            actions: [{ label: 'กลับไปแก้ไข', kind: 'btn-ghost-dark', icon: 'back', onClick: () => res(false) },
+              { label: editing ? 'ยืนยันบันทึกการแก้ไข' : `ยืนยันส่งแจ้งซ่อม${entries.length > 1 ? ` ${entries.length} ใบ` : ''}`, kind: 'btn-primary', icon: editing ? 'check' : 'send', onClick: () => res(true) }]
+          }));
+        }
 
         $('#repForm', root).addEventListener('submit', async e => {
           e.preventDefault();
@@ -921,25 +1039,21 @@ const Pages = (() => {
             $$('.ac-unit.is-missing', el).forEach(f => f.classList.add('invalid'));
             return fail(`${titleOf(b, bad)}: ${issueOf(b)}`, $('.field.invalid', el) || el);
           }
-          // แอร์ตัวไหน: เก็บเฉพาะรายการแอร์ของห้องที่มีแอร์ 2 ตัว (เปลี่ยนไปห้องอื่นแล้วค่าที่เคยเลือกไม่ติดไป)
-          const entries = state.blocks.map(b => ({ location: locOf(b), items: [...b.items.values()].map(({ acUnit, ...v }) =>
-            ({ ...v, detail: String(v.detail || '').trim(), ...(needAc(b, v) && acUnit ? { acUnit } : {}) })) }));
+          // แอร์ตัวไหน: เก็บเฉพาะรายการแอร์ของห้องที่มีแอร์ 2 ตัว · จุด (spot) เก็บเฉพาะการ์ดหอพักที่แตะเลือกจุด
+          const entries = state.blocks.map(b => {
+            const order = sectionsOf(b);
+            return { location: locOf(b), items: [...b.items.values()]
+              .sort((x, y) => order.indexOf(x.spot || '') - order.indexOf(y.spot || ''))
+              .map(({ acUnit, spot, ...v }) => ({ ...v, detail: String(v.detail || '').trim(), ...(needAc(b, v) && acUnit ? { acUnit } : {}), ...(usesSpots(b) && spot ? { spot } : {}) })) };
+          });
           const keys = entries.map(x => locKey(x.location));
           const twin = keys.findIndex((k, i) => keys.indexOf(k) !== i);
-          if (twin >= 0) return fail(`${UNIT}ที่ ${keys.indexOf(keys[twin]) + 1} และ ${twin + 1} เป็นที่เดียวกัน กรุณารวมรายการไว้ในการ์ดเดียว`, $(`[data-block="${state.blocks[twin].key}"]`, root));
+          if (twin >= 0) return fail(`${UNIT}ที่ ${keys.indexOf(keys[twin]) + 1} และ ${twin + 1} เป็นที่เดียวกัน กรุณารวมจุดและรายการไว้ในการ์ดเดียว`, $(`[data-block="${state.blocks[twin].key}"]`, root));
           const input = { formType: type, phone: $('#phone', root).value.trim(), position: $('#position', root).value, dept: $('#dept', root).value,
             note: $('#note', root).value.trim(), photos: editing?.photos || [] };
-          const nItems = entries.reduce((a, x) => a + x.items.length, 0);
-          // เตือนเมื่อมีงานเดียวกันที่ยังไม่ปิดอยู่แล้ว
+          // เตือนเมื่อมีงานเดียวกันที่ยังไม่ปิดอยู่แล้ว (แสดงในหน้าสรุป)
           const dups = [...new Map(entries.flatMap(x => Store.duplicates({ ...input, ...x }, editing?.id)).map(t => [t.id, t])).values()];
-          const where = entries.length > 1 ? `${entries.length} ${UNIT} (แยกเป็น ${entries.length} ใบ)` : UI.locationText(entries[0].location);
-          const proceed = dups.length
-            ? await new Promise(res => UI.modal({ title: 'มีการแจ้งซ่อมรายการนี้อยู่แล้ว', subtitle: where,
-              body: `<div class="notice orange">${icon('alert')}<div>พบคำขอที่ยังไม่ปิดงาน ${dups.length} รายการ ในสถานที่และรายการเดียวกัน กรุณาตรวจสอบก่อนเพื่อไม่ให้แจ้งซ้ำ</div></div>
-                <div class="ticket-list">${dups.map(t => `<a class="t-card" href="#/ticket/${t.id}" target="_blank"><span class="t-ic">${icon(Views.ticketIcon(t))}</span><div class="t-main"><div class="t-id">${esc(t.id)}</div><div class="t-title">${esc(Views.itemsTitle(t))}</div><div class="t-meta"><span>${icon('pin')}${esc(UI.locationText(t))}</span><span>${icon('user')}${esc(t.reporter.name)}</span></div></div><div class="t-side">${UI.statusBadge(t.status)}</div></a>`).join('')}</div>`,
-              actions: [{ label: 'ไม่ส่ง กลับไปแก้ไข', kind: 'btn-ghost-dark', onClick: () => res(false) }, { label: 'เป็นปัญหาใหม่ ส่งต่อ', kind: 'btn-primary', icon: 'send', onClick: () => res(true) }] }))
-            : await UI.confirm(`${editing ? 'บันทึกการแก้ไข' : 'ยืนยันส่งแจ้งซ่อม'} ${nItems} รายการ ที่ ${where}`, { title: editing ? 'ยืนยันการแก้ไข' : 'ยืนยันการแจ้งซ่อม', okLabel: editing ? 'บันทึก' : 'ส่งแจ้งซ่อม' });
-          if (!proceed) return;
+          if (!await reviewBeforeSend(entries, input, dups)) return;
           const btn = $('#submitBtn', root); btn.disabled = true; btn.innerHTML = `${icon('refresh')} กำลังบันทึก...`;
           // นาฬิกาทรายพร้อมขั้นตอนจริง ระหว่างรอ 3–5 วินาที
           const bz = UI.busy(editing ? { title: 'กำลังบันทึกการแก้ไข', steps: ['อัปโหลดรูปภาพ', 'บันทึกการแก้ไข'] }

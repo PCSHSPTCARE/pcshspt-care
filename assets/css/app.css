@@ -1530,8 +1530,13 @@ a.eb-call:hover { background: #FEF2F2; }
 .pp-selected strong { font-family: var(--font-display); font-weight: 600; color: var(--navy-800); }
 .pp-selected small { color: var(--muted); font-size: .8rem; }
 .pp-selected .link { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
-.add-block { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 14px; padding: 15px; border: 1.5px dashed var(--orange-400); border-radius: 20px; background: transparent; color: var(--orange-700); font: 600 1rem var(--font-display); cursor: pointer; transition: background-color .15s, border-color .15s; }
-.add-block:hover { background: var(--orange-50); border-color: var(--orange-500); }
+/* ปุ่มแจ้งล็อค/ห้อง/สถานที่อื่นเพิ่ม: เด่นชัด สีส้มเต็มความกว้าง */
+.add-block { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; margin-top: 16px; padding: 14px 18px; border: 0; border-radius: 18px; background: linear-gradient(135deg, var(--orange-500, #F7893B), var(--orange-600, #EA580C)); color: #fff; font: inherit; text-align: left; cursor: pointer; box-shadow: 0 8px 22px -10px rgba(234, 88, 12, .7); transition: transform .12s, box-shadow .15s, filter .15s; }
+.add-block .ab-ic { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: rgba(255, 255, 255, .22); font-size: 20px; flex: none; }
+.add-block b { display: block; font: 600 1.05rem var(--font-display); }
+.add-block small { display: block; font-size: .8rem; opacity: .9; }
+.add-block:hover { filter: brightness(1.05); box-shadow: 0 10px 26px -10px rgba(234, 88, 12, .8); }
+.add-block:active { transform: scale(.99); }
 .zone-preview { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .zone-preview .chip { font-size: .74rem; padding: 2px 9px; }
 
@@ -1876,3 +1881,66 @@ p { text-wrap: pretty; }
 .bc-head { display: flex; align-items: baseline; gap: 8px; }
 .bc-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: #EFF6FF; }
 .bc-sub > .small { min-width: 44px; }
+
+/* รายการซ่อมแยกตามจุด (หอพัก) */
+.spot-list { display: flex; flex-direction: column; gap: 10px; }
+.spot-sec:not(.plain) { border-radius: 16px; border: 1.5px solid var(--line); background: #fff; overflow: hidden; }
+.spot-sec.is-ready:not(.plain) { border-color: #86EFAC; }
+.ss-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 14px; border: 0; background: #F8FAFC; font: inherit; text-align: left; cursor: pointer; }
+.spot-sec.is-open .ss-head { border-bottom: 1px solid var(--line); }
+.ss-no { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: var(--navy-800); color: #fff; font-size: .78rem; font-weight: 600; flex: none; }
+.ss-ic { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--orange-50); color: var(--orange-700); font-size: 18px; flex: none; }
+.ss-ic.bath { background: #EFF6FF; color: #2563EB; }
+.ss-title { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+.ss-title strong { font-family: var(--font-display); font-weight: 600; }
+.ss-title span { font-size: .8rem; color: var(--faint); }
+.ss-title em { font-style: normal; color: #B45309; }
+.ss-title b { color: #15803D; font-weight: 600; }
+.ss-chev { display: grid; place-items: center; transition: transform .2s; color: var(--faint); font-size: 18px; flex: none; }
+.spot-sec.is-open .ss-chev { transform: rotate(180deg); }
+.dp-hint { display: block; margin: -2px 0 8px; }
+.ss-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+.ss-body > .link { align-self: flex-start; }
+.dp-bath.solo { margin-top: 0; padding-top: 0; border-top: 0; }
+
+/* หน้าสรุปก่อนยืนยันการแจ้งซ่อม */
+.modal:has(.review) { max-width: 760px; }
+.review { display: flex; flex-direction: column; gap: 14px; }
+.rv-who { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #F8FAFC; border: 1px solid var(--line); }
+.rv-who > div { display: flex; flex-direction: column; line-height: 1.4; min-width: 0; }
+.rv-who span { font-size: .85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.rv-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.rv-stats span { padding: 10px 8px; border-radius: 12px; background: var(--orange-50); text-align: center; font-size: .82rem; color: var(--orange-800, #9A3412); }
+.rv-stats b { display: block; font: 700 1.35rem var(--font-display); color: var(--orange-700); }
+.rv-dups { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.rv-dups a { font-size: .85rem; color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.rv-ticket { border: 1.5px solid var(--line); border-radius: 16px; overflow: hidden; }
+.rv-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding: 10px 14px; background: var(--navy-800); color: #fff; }
+.rv-no { font-size: .78rem; padding: 2px 9px; border-radius: 999px; background: rgba(255, 255, 255, .18); }
+.rv-head strong { font-family: var(--font-display); font-weight: 600; }
+.rv-spot { display: flex; align-items: center; gap: 6px; padding: 8px 14px 0; font-weight: 600; color: var(--navy-800); }
+.rv-spot .icon { color: var(--orange-600, #EA580C); }
+.rv-items { list-style: none; margin: 0; padding: 6px 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+.rv-items li { padding: 8px 12px; border-radius: 12px; background: #FAFBFD; border: 1px solid #EEF2F6; }
+.rv-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.rv-qty { font-weight: 600; color: var(--orange-700); }
+.rv-tag { font-size: .78rem; padding: 1px 8px; border-radius: 999px; background: #EFF6FF; color: #1D4ED8; }
+.rv-cat { margin-left: auto; font-size: .76rem; color: var(--faint); }
+.rv-detail { margin-top: 2px; font-size: .9rem; color: var(--muted); overflow-wrap: anywhere; }
+.rv-ph { display: flex; gap: 6px; margin-top: 6px; }
+.rv-ph img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+.rv-note { display: flex; gap: 8px; padding: 10px 14px; border-radius: 12px; background: #FFFBEB; color: #92400E; font-size: .9rem; }
+@media (max-width: 640px) {
+  .ss-head { padding: 10px 12px; }
+  .ss-body { padding: 10px 10px 12px; }
+  .rv-cat { margin-left: 0; width: 100%; }
+  .rv-stats b { font-size: 1.15rem; }
+}
+/* กำหนดห้องน้ำทีละห้อง */
+.bc-per { flex-direction: column; align-items: stretch; }
+.bc-rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px; }
+.bc-room { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 10px; background: #fff; border: 1px solid #DBEAFE; }
+.bc-room b { flex: 1; min-width: 80px; font-weight: 600; font-size: .88rem; overflow-wrap: anywhere; }
+.bc-room .pick { flex: none; white-space: nowrap; }
+.bc-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+@media (max-width: 640px) { .bc-rooms { grid-template-columns: 1fr; } }

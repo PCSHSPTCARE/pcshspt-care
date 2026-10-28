@@ -89,8 +89,14 @@ const Doc = (() => {
     return what + (withQty ? qtyText(i) : '');
   };
   const andList = a => a.length > 1 ? `${a.slice(0, -1).join(', ')} และ${a.at(-1)}` : a[0] || '-';
+  // หอพักแยกจุด: "ห้อง 1/2: หลอดไฟ 1 หลอด · ห้องอาบน้ำ: ฝักบัว 1 ชุด และก๊อกอ่าง 1 ตัว"
+  const itemsText = t => {
+    if (!t.items.some(i => i.spot)) return andList(t.items.map(i => memoItem(i)));
+    const groups = t.items.reduce((m, i) => { const k = i.spot || ''; (m.get(k) || m.set(k, []).get(k)).push(memoItem(i)); return m; }, new Map());
+    return [...groups].map(([spot, list]) => `${spot ? `${spot}: ` : ''}${andList(list)}`).join(' · ');
+  };
   const symptomsText = t => [
-    ...t.items.filter(i => String(i.detail || '').trim()).map(i => t.items.length > 1 ? `${memoItem(i, false)}: ${i.detail}` : i.detail),
+    ...t.items.filter(i => String(i.detail || '').trim()).map(i => t.items.length > 1 ? `${i.spot ? `${i.spot} – ` : ''}${memoItem(i, false)}: ${i.detail}` : i.detail),
     t.note ? `หมายเหตุ: ${t.note}` : ''
   ].filter(Boolean).join('  ');
   const CLOSING = 'จึงเรียนมาเพื่อทราบและพิจารณาอนุญาตและอนุมัติ ดังนี้';
@@ -106,7 +112,7 @@ const Doc = (() => {
       <div class="fpara fbody" style="left:22.5mm;top:${B.top}mm;width:${B.width}mm;height:${B.bottom - B.top}mm">
         <p>ด้วยข้าพเจ้า ${nw(r.name)} ตำแหน่ง ${esc(r.position || '-')} ฝ่ายงาน/กลุ่มสาระฯ ${esc(r.dept || '-')} เบอร์ติดต่อ ${nw(r.phone)}
           มีความประสงค์ขอแจ้งซ่อมแซม/บำรุงรักษา เนื่องจากตรวจพบการชำรุดหรือขัดข้อง โดยมีรายละเอียดดังนี้</p>
-        ${line('รายการ/อุปกรณ์', andList(t.items.map(i => memoItem(i))))}
+        ${line('รายการ/อุปกรณ์', itemsText(t))}
         ${line('สถานที่', UI.locationText(t))}
         ${line('ลักษณะการชำรุด/อาการที่พบ', symptomsText(t))}
         <p>${CLOSING}</p>

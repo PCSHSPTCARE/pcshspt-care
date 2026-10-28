@@ -20,14 +20,15 @@ const Store = (() => {
   const CONFIG_VERSION = 7;
   // ห้องน้ำหอพัก (ตั้งที่แต่ละล็อค/ชั้น: zone.bath)
   //   { mode: 'shared', areas } = ห้องน้ำรวมของล็อค/ชั้นนั้น
-  //   { mode: 'rooms', areas, rooms? } = ห้องน้ำในตัวของแต่ละห้อง (rooms = เฉพาะบางห้อง · ไม่ระบุ = ทุกห้อง)
+  //   { mode: 'rooms', areas } = ห้องน้ำในตัวทุกห้องเหมือนกัน
+  //   { mode: 'rooms', areas, perRoom: { ห้อง: [ห้องอาบน้ำ, ห้องสุขา] } } = กำหนดทีละห้อง (รุ่นก่อนใช้ rooms = เฉพาะบางห้อง)
   const BATH_AREAS = ['ห้องอาบน้ำ', 'ห้องสุขา'];
   function defaultBath(l, z) {
     if (/ห้องพักครู/.test(z.name)) return { mode: 'rooms', areas: [...BATH_AREAS] };
     if (/^ล็อค/.test(z.name)) return { mode: 'shared', areas: [...BATH_AREAS] };
     if (z.name === 'ส่วนกลาง') {
       const g = (z.rooms || []).filter(r => /^G\d+$/i.test(r)); // ห้อง G01–G03 มีห้องสุขาในตัว (ไม่มีห้องอาบน้ำ)
-      return g.length ? { mode: 'rooms', areas: ['ห้องสุขา'], rooms: g } : null;
+      return g.length ? { mode: 'rooms', areas: ['ห้องสุขา'], perRoom: Object.fromEntries(g.map(r => [r, ['ห้องสุขา']])) } : null;
     }
     if (/ชั้น/.test(z.name)) return /บัวอุบล/.test(l.name) ? { mode: 'rooms', areas: [...BATH_AREAS] } : { mode: 'shared', areas: [...BATH_AREAS] };
     return null;
@@ -607,11 +608,13 @@ const Store = (() => {
   // คำขอที่ยังเปิดอยู่ในสถานที่เดียวกันและมีรายการซ้ำกัน
   function duplicatesOf(input, exceptId) {
     const room = s => String(s || '').replace(/\s|ห้อง/g, '').toLowerCase();
-    const names = new Set(input.items.map(i => `${i.catId}|${i.name}`));
+    // รายการเดียวกันที่จุดเดียวกัน (หอพักแยกจุด เช่น หลอดไฟห้อง 1/1 กับห้อง 1/2 ไม่ถือว่าซ้ำ)
+    const keyOf = i => `${i.catId}|${i.spot || ''}|${i.name}`;
+    const names = new Set(input.items.map(keyOf));
     return db.tickets.filter(t => t.id !== exceptId && ['pending', 'in_progress', 'review'].includes(t.status)
       && t.formType === input.formType && t.location.locationName === input.location.locationName
       && (t.location.zone || '') === (input.location.zone || '') && room(t.location.room) === room(input.location.room)
-      && t.items.some(i => names.has(`${i.catId}|${i.name}`)));
+      && t.items.some(i => names.has(keyOf(i))));
   }
 
   function notify(d, emails, title, body, ticketId, kind = '') {
@@ -917,7 +920,7 @@ const Store = (() => {
       if (entries.some(e => !e.items?.length || e.items.some(i => !String(i.detail || '').trim()))) throw new Error('กรุณาระบุรายละเอียดของทุกรายการที่แจ้งซ่อม');
       onStep(0);
       if (CLOUD) {
-        if (entries.length > 8) throw new Error('แจ้งได้ครั้งละไม่เกิน 8 สถานที่ กรุณาแบ่งส่งเป็นหลายครั้ง');
+        if (entries.length > 15) throw new Error('แจ้งได้ครั้งละไม่เกิน 15 ใบ กรุณาแบ่งส่งเป็นหลายครั้ง');
         // อัปโหลดรูปลง Drive ก่อน แล้วจองเลขที่ใบไม่ให้ซ้ำกับคนอื่น
         for (const e of entries) for (const it of e.items) it.photos = await Cloud.upload(it.photos);
         input.photos = await Cloud.upload(input.photos);
@@ -1091,7 +1094,7 @@ const Store = (() => {
     const project = t => ({
       id: t.id, formType: t.formType, status: t.status, createdAt: t.createdAt, updatedAt: t.updatedAt || t.createdAt,
       location: t.location,
-      items: (t.items || []).map(i => ({ catId: i.catId, catName: i.catName, itemId: i.itemId || '', name: i.name, unit: i.unit || '', qty: i.qty || 0, detail: i.detail || '', ...(i.acUnit ? { acUnit: i.acUnit } : {}) })),
+      items: (t.items || []).map(i => ({ catId: i.catId, catName: i.catName, itemId: i.itemId || '', name: i.name, unit: i.unit || '', qty: i.qty || 0, detail: i.detail || '', ...(i.acUnit ? { acUnit: i.acUnit } : {}), ...(i.spot ? { spot: i.spot } : {}) })),
       batchIds: t.batchIds || null,
       completion: t.completion ? { at: t.completion.at } : null, cannot: t.cannot ? { at: t.cannot.at } : null,
       history: (t.history || []).map(h => ({ at: h.at, action: h.action })), sample: !!t.sample

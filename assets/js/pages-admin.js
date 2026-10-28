@@ -746,8 +746,11 @@ const Admin = (() => {
   const zonesText = zones => (zones || []).map(z => `${z.name ? z.name + ': ' : ''}${z.rooms.join(', ')}`).join('\n');
 
   // ห้องน้ำหอพัก: zone.bath → ตัวเลือกในหน้าแก้ไข
-  const BATH_MODES = [['none', 'ไม่มีห้องน้ำ'], ['shared', 'ห้องน้ำรวมของกลุ่มนี้'], ['rooms', 'ในตัวทุกห้อง'], ['some', 'ในตัวบางห้อง']];
-  const bathMode = b => !b ? 'none' : b.mode === 'shared' ? 'shared' : b.rooms ? 'some' : 'rooms';
+  const BATH_MODES = [['none', 'ไม่มีห้องน้ำ'], ['shared', 'ห้องน้ำรวมของกลุ่มนี้'], ['rooms', 'ในตัวทุกห้อง (เหมือนกัน)'], ['per', 'กำหนดทีละห้อง']];
+  const bathMode = b => !b ? 'none' : b.mode === 'shared' ? 'shared' : b.perRoom || b.rooms ? 'per' : 'rooms';
+  // ห้องน้ำในตัวรายห้อง { ห้อง: [ห้องอาบน้ำ, ห้องสุขา] } · แปลงจากรูปแบบเดิม (ทุกห้อง / เฉพาะบางห้อง)
+  const perRoomOf = (b, rooms) => b?.perRoom ? { ...b.perRoom }
+    : b?.mode === 'rooms' ? Object.fromEntries(rooms.filter(r => !b.rooms || b.rooms.includes(r)).map(r => [r, [...b.areas]])) : {};
   const bathSummary = l => {
     const zs = (l.zones || []).filter(z => z.bath);
     const sh = zs.filter(z => z.bath.mode === 'shared').length, inr = zs.length - sh;
@@ -815,13 +818,16 @@ const Admin = (() => {
                 const zs = parseZones($('#lz', api.body).value).filter(z => z.name);
                 zs.forEach(z => { if (!baths.has(z.name)) baths.set(z.name, Store.defaultBath({ name: $('#ln', api.body).value }, z) || null); });
                 const chipB = (attr, val, label, on) => `<button type="button" class="pick pick-sm ${on ? 'is-on' : ''}" ${attr}="${esc(val)}"><span class="box">${icon('check')}</span>${esc(label)}</button>`;
+                const short = a => a.replace(/^ห้อง/, '');
                 $('#bathCfg', api.body).innerHTML = zs.map(z => {
-                  const b = baths.get(z.name), mode = bathMode(b);
+                  const b = baths.get(z.name), mode = bathMode(b), pr = mode === 'per' ? perRoomOf(b, z.rooms) : null;
                   return `<div class="bath-cfg" data-bz="${esc(z.name)}">
                     <div class="bc-head"><strong>${esc(z.name)}</strong><span class="faint small">${z.rooms.length} ห้อง</span></div>
                     <div class="pick-grid">${BATH_MODES.map(([k, label]) => chipB('data-bmode', k, label, mode === k)).join('')}</div>
-                    ${b ? `<div class="bc-sub"><span class="small faint">มี</span>${Store.BATH_AREAS.map(a => chipB('data-barea', a, a, b.areas.includes(a))).join('')}</div>` : ''}
-                    ${mode === 'some' ? `<div class="bc-sub"><span class="small faint">ห้องที่มีห้องน้ำในตัว</span><div class="pick-grid">${z.rooms.map(r => chipB('data-broom', r, r, b.rooms.includes(r))).join('')}</div></div>` : ''}
+                    ${b && mode !== 'per' ? `<div class="bc-sub"><span class="small faint">มี</span>${Store.BATH_AREAS.map(a => chipB('data-barea', a, a, b.areas.includes(a))).join('')}</div>` : ''}
+                    ${mode === 'per' ? `<div class="bc-sub bc-per"><span class="small faint">แตะเปิด/ปิด ห้องอาบน้ำ · ห้องสุขา ของแต่ละห้อง (ไม่เลือก = ห้องนั้นไม่มีห้องน้ำในตัว)</span>
+                      <div class="bc-rooms">${z.rooms.map(r => `<div class="bc-room"><b>${esc(r)}</b>${Store.BATH_AREAS.map(a => chipB('data-broom', `${r}|${a}`, short(a), (pr[r] || []).includes(a))).join('')}</div>`).join('')}</div>
+                      <div class="bc-quick"><span class="small faint">ทุกห้อง:</span>${chipB('data-bquick', 'both', 'อาบน้ำ + สุขา', false)}${chipB('data-bquick', 'toilet', 'สุขาอย่างเดียว', false)}${chipB('data-bquick', 'none', 'ไม่มี', false)}</div></div>` : ''}
                   </div>`;
                 }).join('') || '<span class="small faint">พิมพ์ชื่อล็อค / ชั้น ในช่องด้านบนก่อน (เช่น ล็อค 1: 1/1-1/3)</span>';
               };
@@ -830,12 +836,21 @@ const Admin = (() => {
                   const row = e.target.closest('[data-bz]'), btn = e.target.closest('button');
                   if (!row || !btn) return;
                   const zn = row.dataset.bz, b = baths.get(zn);
+                  const rooms = parseZones($('#lz', api.body).value).find(z => z.name === zn)?.rooms || [];
                   if (btn.dataset.bmode) {
                     const m = btn.dataset.bmode, areas = b?.areas?.length ? b.areas : [...Store.BATH_AREAS];
-                    baths.set(zn, m === 'none' ? null : m === 'shared' ? { mode: 'shared', areas } : m === 'rooms' ? { mode: 'rooms', areas } : { mode: 'rooms', areas, rooms: b?.rooms || [] });
+                    baths.set(zn, m === 'none' ? null : m === 'shared' ? { mode: 'shared', areas } : m === 'rooms' ? { mode: 'rooms', areas }
+                      : { mode: 'rooms', areas, perRoom: perRoomOf(b?.mode === 'rooms' ? b : null, rooms) });
                   }
                   if (btn.dataset.barea) { const a = btn.dataset.barea; b.areas = b.areas.includes(a) ? b.areas.filter(x => x !== a) : Store.BATH_AREAS.filter(x => x === a || b.areas.includes(x)); }
-                  if (btn.dataset.broom) { const r = btn.dataset.broom; b.rooms = b.rooms.includes(r) ? b.rooms.filter(x => x !== r) : [...b.rooms, r]; }
+                  if (btn.dataset.broom || btn.dataset.bquick) {
+                    const pr = perRoomOf(b, rooms);
+                    if (btn.dataset.broom) {
+                      const [r, a] = btn.dataset.broom.split('|'), cur = pr[r] || [];
+                      pr[r] = cur.includes(a) ? cur.filter(x => x !== a) : Store.BATH_AREAS.filter(x => x === a || cur.includes(x));
+                    } else rooms.forEach(r => { pr[r] = { both: [...Store.BATH_AREAS], toilet: ['ห้องสุขา'], none: [] }[btn.dataset.bquick]; });
+                    baths.set(zn, { mode: 'rooms', areas: Store.BATH_AREAS.filter(a => Object.values(pr).some(v => v.includes(a))), perRoom: pr });
+                  }
                   renderBath();
                 });
               }
@@ -847,10 +862,14 @@ const Admin = (() => {
               const zones = parseZones($('#lz', api.body).value).map(z => {
                 if (l.type !== 'dorm' || !z.name) return z;
                 const b = baths.get(z.name) ?? null;
+                if (bathMode(b) === 'per') {
+                  // กำหนดทีละห้อง: เก็บเฉพาะห้องที่ยังมีอยู่และมีห้องน้ำอย่างน้อย 1 อย่าง
+                  const pr = Object.fromEntries(Object.entries(perRoomOf(b, z.rooms)).filter(([r, a]) => z.rooms.includes(r) && a.length));
+                  if (!Object.keys(pr).length) throw new Error(`${z.name}: ยังไม่ได้กำหนดห้องที่มีห้องน้ำในตัว (หรือเลือก "ไม่มีห้องน้ำ")`);
+                  return { ...z, bath: { mode: 'rooms', areas: Store.BATH_AREAS.filter(a => Object.values(pr).some(v => v.includes(a))), perRoom: pr } };
+                }
                 if (b && !b.areas.length) throw new Error(`${z.name}: เลือกห้องอาบน้ำ หรือห้องสุขา อย่างน้อย 1 อย่าง`);
-                const rooms = b?.rooms?.filter(r => z.rooms.includes(r));
-                if (b?.rooms && !rooms.length) throw new Error(`${z.name}: เลือกห้องที่มีห้องน้ำในตัวอย่างน้อย 1 ห้อง`);
-                return { ...z, bath: b && (rooms ? { ...b, rooms } : b) };
+                return { ...z, bath: b };
               });
               Store.saveLocation({ ...l, name, group: $('#lg', api.body).value.trim(), zones,
                 ...(l.type === 'building' ? { acUnits: $('#lac', api.body).checked } : {}) });
