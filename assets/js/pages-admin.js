@@ -1274,7 +1274,7 @@ const Admin = (() => {
           <section class="card span-4"><div class="card-head"><h3>${icon('clock')}งานค้าง</h3></div><div class="card-body stack">
             <div class="row" style="gap:12px">ถือว่า "ค้างนาน" เมื่อยังไม่ปิดงานเกิน<input class="input sm" type="number" min="1" id="staleDays" value="${s.staleDays || 7}" style="width:90px">วัน</div>
             <p class="hint">ใช้แสดงป้าย "ค้างนาน" ในรายการงานและนับในสถิติ</p>
-            <div class="row" style="gap:12px">ครูแจ้ง "ยังไม่หาย" ได้ภายใน<input class="input sm" type="number" min="1" id="reopenDays" value="${s.reopenDays || 7}" style="width:90px">วันหลังเสร็จสิ้น</div>
+            <div class="row" style="gap:12px">ครูแจ้งซ่อมซ้ำ (ซ่อมแล้วยังใช้ไม่ได้) ได้ภายใน<input class="input sm" type="number" min="1" id="reopenDays" value="${s.reopenDays || 7}" style="width:90px">วันหลังเสร็จสิ้น</div>
           </div></section>
           <section class="card span-4"><div class="card-head"><h3>${icon('bell')}การแจ้งเตือน</h3></div><div class="card-body stack">
             <label class="checkbox"><input type="checkbox" id="nEmail" ${s.notify.email ? 'checked' : ''}>อีเมล (เจ้าหน้าที่เมื่อมีงานใหม่ · ครูเมื่อสถานะเปลี่ยน)</label>

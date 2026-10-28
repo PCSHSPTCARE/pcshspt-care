@@ -37,7 +37,6 @@ const Pages = (() => {
   // ═══════════ หน้าแรก ═══════════
   function home() {
     const s = S();
-    const sum = summary();
     const forms = Store.FORM_KEYS.filter(k => s.forms[k].enabled);
     const cats = Store.categories();
     // ระบบจริง: ข้อมูลงานซ่อมเห็นได้เฉพาะผู้ที่เข้าสู่ระบบแล้ว
@@ -78,12 +77,11 @@ const Pages = (() => {
               <span class="svc-more">เริ่มแจ้งซ่อม ${icon('arrow')}</span>
             </a>`;
           }).join('')}
-          <a class="svc navy reveal" href="#/my" style="transition-delay:${forms.length * 80}ms">
-            <div class="svc-top"><span class="svc-icon">${icon('activity')}</span><span class="svc-no">0${forms.length + 1}</span></div>
-            <h3>ติดตามสถานะงานซ่อม</h3>
-            <p>ดูความคืบหน้าของงานที่แจ้งไว้ และภาพรวมงานซ่อมทั้งโรงเรียนแบบเรียลไทม์</p>
-            ${live ? `<div class="svc-chips"><span class="chip">${icon('clock')}รออนุมัติ ${sum.pending}</span><span class="chip">${icon('wrench')}กำลังซ่อม ${sum.working}</span><span class="chip">${icon('hourglass')}รอพิจารณา ${sum.review}</span></div>` : ''}
-            <span class="svc-more">งานที่ฉันแจ้ง ${icon('arrow')}</span>
+          <a class="svc rose svc-reopen reveal" href="#/my?reopen=1" style="transition-delay:${forms.length * 80}ms">
+            <div class="svc-top"><span class="svc-icon">${icon('refresh')}</span><span class="svc-no">0${forms.length + 1}</span></div>
+            <div class="svc-text"><h3>แจ้งซ่อมซ้ำ <small>(ซ่อมแล้วไม่หาย)</small></h3>
+              <p>งานที่ซ่อมเสร็จแล้วแต่ยังใช้ไม่ได้ แจ้งซ้ำได้ภายใน ${s.reopenDays || 7} วันหลังซ่อมเสร็จ</p></div>
+            <span class="svc-more"><span class="sm-l">เลือกงานที่จะแจ้งซ้ำ</span> ${icon('arrow')}</span>
           </a>
         </div>
       </section>
@@ -1110,13 +1108,22 @@ const Pages = (() => {
   }
 
   // ═══════════ งานที่ฉันแจ้ง ═══════════
-  function myTickets() {
+  function myTickets(params = {}) {
     const state = { status: 'all', q: '' };
+    const days = S().reopenDays || 7;
     return {
       title: 'งานที่ฉันแจ้ง',
       html: `
       ${pageHero({ title: 'งานที่ฉันแจ้ง', desc: 'ติดตามความคืบหน้า ดูผลการซ่อม และพิมพ์ใบแจ้งซ่อมของคุณ', crumbs: [{ label: 'ติดตามสถานะ' }, { label: 'งานที่ฉันแจ้ง' }] })}
       <div class="page-body"><div class="container stack" style="gap:20px">
+        ${params.reopen ? `
+        <div class="reopen-guide" id="reopenGuide">
+          <span class="rg-ic">${icon('refresh')}</span>
+          <div><strong>แจ้งซ่อมซ้ำ: ซ่อมแล้วยังใช้ไม่ได้</strong>
+            <ol><li>เลือกใบแจ้งซ่อมที่ซ่อมเสร็จแล้วแต่ยังใช้งานไม่ได้ จากรายการด้านล่าง</li>
+              <li>กดปุ่ม <b>"แจ้งซ่อมซ้ำ"</b> ในหน้าใบนั้น แล้วระบุอาการที่ยังพบ (แนบรูปได้)</li></ol>
+            <p>แจ้งได้ภายใน ${days} วันหลังซ่อมเสร็จ ระบบจะเปิดใบใหม่ต่อจากใบเดิมและแจ้งเจ้าหน้าที่ทันที</p></div>
+        </div>` : ''}
         <div class="kpi-row" id="myKpi"></div>
         <div class="card toolbar">
           <div class="input-icon">${icon('search')}<input class="input" id="q" placeholder="ค้นหาเลขที่ รายการ หรือสถานที่"></div>
@@ -1182,11 +1189,11 @@ const Pages = (() => {
                   </div>
                 </section>` : ''}
                 ${t.reporter.email === me.email ? rateCard(t) : ''}
-                ${Store.can(me, 'reopen', t) ? `<section class="card">
-                  <div class="card-head"><h3>${icon('alert')}ซ่อมแล้วยังไม่หาย?</h3></div>
+                ${Store.can(me, 'reopen', t) ? `<section class="card reopen-card" id="reopenCard">
+                  <div class="card-head"><h3>${icon('alert')}ซ่อมแล้วยังใช้ไม่ได้?</h3></div>
                   <div class="card-body stack">
-                    <p class="small muted">แจ้งได้ถึง ${UI.dateLong(Store.reopenDeadline(t).toISOString())} ระบบจะเปิดใบแจ้งซ่อมใหม่ที่อ้างอิงใบนี้ให้อัตโนมัติ</p>
-                    <button class="btn btn-primary btn-block" data-reopen>${icon('refresh')} แจ้งว่ายังไม่หาย / เสียอีก</button>
+                    <p class="small muted">แจ้งซ่อมซ้ำได้ถึง ${UI.dateLong(Store.reopenDeadline(t).toISOString())} ระบบจะเปิดใบแจ้งซ่อมใหม่ต่อจากใบนี้และแจ้งเจ้าหน้าที่ให้อัตโนมัติ</p>
+                    <button class="btn btn-rose btn-block" data-reopen>${icon('refresh')} แจ้งซ่อมซ้ำ</button>
                   </div>
                 </section>` : ''}
                 ${t.reopenedBy ? `<div class="notice">${icon('refresh')}<div>แจ้งซ้ำแล้วในใบ <a class="link" href="#/ticket/${esc(t.reopenedBy)}">${esc(t.reopenedBy)}</a></div></div>` : ''}
@@ -1228,7 +1235,7 @@ const Pages = (() => {
               $('#rpThumbs', body).innerHTML = shots.map((p, i) => `<figure class="thumb sm"><img src="${p}" alt="รูปที่ ${i + 1}"><button type="button" class="thumb-x" data-rpx="${i}" aria-label="ลบรูปที่ ${i + 1}">${icon('close')}</button></figure>`).join('');
               $('#rpAdd', body).hidden = shots.length >= MAX;
             };
-            UI.modal({ title: 'แจ้งว่ายังไม่หาย / เสียอีก', subtitle: params.id,
+            UI.modal({ title: 'แจ้งซ่อมซ้ำ (ซ่อมแล้วยังใช้ไม่ได้)', subtitle: params.id,
               body: `<p class="small muted">ระบบจะสร้างใบแจ้งซ่อมใหม่ด้วยรายการและสถานที่เดิม อ้างอิงใบ ${esc(params.id)} และแจ้งเตือนเจ้าหน้าที่กับกลุ่มไลน์ทันที</p>
                 <div class="field"><label for="why">อาการที่ยังพบ <span class="req">*</span></label><textarea class="textarea" id="why" placeholder="เช่น ซ่อมแล้ว 2 วัน ไฟกลับมากะพริบอีก"></textarea></div>
                 <div class="field"><label>รูปประกอบ <span class="hint">ไม่บังคับ · สูงสุด ${MAX} รูป</span></label>
@@ -1245,7 +1252,7 @@ const Pages = (() => {
               },
               actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'แจ้งซ่อมซ้ำ', kind: 'btn-primary', icon: 'send', onClick: async api => {
                 if (!$('#why', api.body).value.trim()) throw new Error('กรุณาระบุอาการที่ยังพบ');
-                const bz = UI.busy({ title: 'กำลังแจ้งว่ายังไม่หาย', steps: ['อัปโหลดรูปภาพ', 'เปิดใบแจ้งซ่อมใหม่', 'แจ้งเตือนเจ้าหน้าที่และกลุ่มไลน์'] });
+                const bz = UI.busy({ title: 'กำลังแจ้งซ่อมซ้ำ', steps: ['อัปโหลดรูปภาพ', 'เปิดใบแจ้งซ่อมใหม่', 'แจ้งเตือนเจ้าหน้าที่และกลุ่มไลน์'] });
                 let t;
                 try { t = await Store.reopenTicket(params.id, $('#why', api.body).value.trim(), shots, i => bz.step(i)); }
                 catch (err) { bz.close(); throw err; }

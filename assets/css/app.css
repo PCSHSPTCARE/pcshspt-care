@@ -1944,3 +1944,37 @@ p { text-wrap: pretty; }
 .bc-room .pick { flex: none; white-space: nowrap; }
 .bc-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 @media (max-width: 640px) { .bc-rooms { grid-template-columns: 1fr; } }
+
+/* แจ้งซ่อมซ้ำ (ซ่อมแล้วไม่หาย): โทนแดงกุหลาบ เข้าชุดกับป้าย "ซ่อมแล้วไม่หาย" */
+.btn-rose { color: #fff; background: linear-gradient(135deg, #F43F5E, #BE123C); box-shadow: 0 10px 24px -10px rgba(190, 18, 60, .7); }
+.btn-rose:hover { filter: brightness(1.05); }
+.svc.rose::before { background: linear-gradient(90deg, #F43F5E, #FB7185); transform: scaleX(1); }
+.svc.rose::after { background: radial-gradient(circle, rgba(244, 63, 94, .13), transparent 70%); }
+.svc.rose .svc-icon { background: linear-gradient(135deg, #F43F5E, #9F1239); box-shadow: 0 12px 24px -12px rgba(159, 18, 57, .8); }
+.svc.rose .svc-no { color: #FECDD3; }
+.svc.rose h3 small { font-size: .78em; font-weight: 500; color: #E11D48; }
+.svc.rose .svc-more { color: #BE123C; }
+.svc-text { display: flex; flex-direction: column; gap: 12px; }
+.reopen-card { border-color: #FECDD3; }
+.reopen-card .card-head h3 .icon { color: #E11D48; }
+.reopen-guide { display: flex; gap: 14px; padding: 16px 18px; border-radius: 18px; border: 1.5px solid #FECDD3; background: linear-gradient(135deg, #FFF1F2, #fff); color: #4C0519; }
+.reopen-guide .rg-ic { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: linear-gradient(135deg, #F43F5E, #9F1239); color: #fff; font-size: 20px; flex: none; }
+.reopen-guide strong { font-family: var(--font-display); font-size: 1.05rem; color: #9F1239; }
+.reopen-guide ol { margin: 6px 0 4px; padding-left: 20px; line-height: 1.6; }
+.reopen-guide p { margin: 0; font-size: .86rem; color: #881337; }
+@media (max-width: 640px) {
+  /* มือถือ: แสดงเฉพาะการ์ดแจ้งซ่อมซ้ำ แบบย่อ 1 แถว ลอยทับขอบล่างรูป แล้วตามด้วยแดชบอร์ดมินิ */
+  .services { display: block !important; margin-top: -96px; }
+  .services .svc:not(.svc-reopen) { display: none; }
+  .services-grid { grid-template-columns: 1fr !important; gap: 0; }
+  .svc.svc-reopen { flex-direction: row; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; border-radius: 18px; }
+  .svc-reopen .svc-top { flex: none; }
+  .svc-reopen .svc-icon { width: 46px; height: 46px; font-size: 21px; border-radius: 14px; }
+  .svc-reopen .svc-no, .svc-reopen .sm-l { display: none; }
+  .svc-reopen .svc-text { flex: 1; min-width: 0; gap: 2px; }
+  .svc-reopen h3 { font-size: 1.02rem; }
+  .svc-reopen p { font-size: .8rem; line-height: 1.45; margin: 0; }
+  .svc-reopen .svc-more { flex: none; margin: 0; padding: 0; font-size: 20px; }
+  .section.mini-sec { margin-top: 14px !important; }
+  .reopen-guide { padding: 14px; gap: 10px; }
+}

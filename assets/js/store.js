@@ -986,7 +986,7 @@ const Store = (() => {
     // onStep: 0 อัปโหลดรูป · 1 เปิดใบแจ้งซ่อมใหม่ · 2 แจ้งเตือนเจ้าหน้าที่
     async reopenTicket(id, detail, photos = [], onStep = () => {}) {
       const me = currentUser();
-      if (!can(me, 'reopen', db.tickets.find(t => t.id === id))) throw new Error(`แจ้ง "ยังไม่หาย" ได้ภายใน ${db.settings.reopenDays || 7} วันหลังซ่อมเสร็จ`);
+      if (!can(me, 'reopen', db.tickets.find(t => t.id === id))) throw new Error(`แจ้งซ่อมซ้ำได้ภายใน ${db.settings.reopenDays || 7} วันหลังซ่อมเสร็จ`);
       if (!String(detail || '').trim()) throw new Error('กรุณาระบุอาการที่ยังพบ');
       onStep(0);
       if (CLOUD) { photos = await Cloud.upload(photos); onStep(1); await Cloud.reserve(1); } else onStep(1);
@@ -999,7 +999,7 @@ const Store = (() => {
         const t = newTicket(d, { formType: old.formType, location: old.location, items, note: `แจ้งซ้ำจาก ${old.id} (ซ่อมเสร็จเมื่อ ${new Date(old.completion.at).toLocaleDateString('th-TH')})`, photos: photos.slice(0, 3) }, user,
           { reopenOf: old.id, reopenCount: (old.reopenCount || 0) + 1, reopenDetail: String(detail).trim(), prevRepair });
         old.reopenedBy = t.id;
-        old.history.push({ at: nowISO(), by: fullName(user), action: 'แจ้งว่ายังไม่หาย', note: `เปิดใบใหม่ ${t.id} · ${detail}` });
+        old.history.push({ at: nowISO(), by: fullName(user), action: 'แจ้งซ่อมซ้ำ (ซ่อมแล้วยังใช้ไม่ได้)', note: `เปิดใบใหม่ ${t.id} · ${detail}` });
         return t;
       });
       await settle(t, 500);
