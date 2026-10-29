@@ -358,6 +358,25 @@ const Store = (() => {
     const u = sg?.email && d.users.find(x => x.email === sg.email);
     return { title: sg?.title || '', email: u?.email || '', name: u ? fullName(u) : '', signature: u?.signature || '' };
   }
+  // ผู้ลงนามที่บันทึกไว้ในใบ: ถ้าตอนอนุมัติยังไม่มีลายเซ็น (อัปโหลดทีหลัง) หรือยังไม่ได้ตั้งผู้ลงนาม → เติมจากข้อมูลล่าสุด
+  // key = ตำแหน่งผู้ลงนาม (ใช้เมื่อในใบไม่มีอีเมลผู้ลงนาม) · ใบที่มีลายเซ็นอยู่แล้วไม่ถูกเปลี่ยน
+  function signedBy(d, by, key) {
+    if (!by) return by;
+    if (!by.email) { const cur = key ? signerOf(d, key) : null; return cur?.email ? { ...by, ...cur, title: by.title || cur.title } : by; }
+    const u = d.users.find(x => x.email === by.email);
+    return u && (!by.signature || !by.name) ? { ...by, name: by.name || fullName(u), signature: by.signature || u.signature || '' } : by;
+  }
+  // จุดลงนามในใบที่ยังไม่มีลายเซ็น แต่ตอนนี้หาลายเซ็นได้แล้ว → [{ get, set }]
+  function missingSigns(d, t) {
+    const out = [];
+    [['step1', STEP1_KEY[t.formType]], ['step2', STEP2_KEY]].forEach(([s, key]) => {
+      const a = t.approvals?.[s];
+      if (a && !a.by?.signature && signedBy(d, a.by, key)?.signature) out.push(() => { a.by = signedBy(d, a.by, key); });
+    });
+    const ins = t.inspection;
+    if (ins?.by && !ins.by.signature && signedBy(d, ins.by)?.signature) out.push(() => { ins.by = signedBy(d, ins.by); });
+    return out;
+  }
   // เติมลายเซ็นผู้อนุมัติทั้งสองช่องเมื่องานเริ่มดำเนินการ
   function fillApprovals(d, t, at) {
     if (!t.approvals.step1) t.approvals.step1 = { decision: 'approve', at, by: signerOf(d, STEP1_KEY[t.formType]) };
@@ -670,6 +689,15 @@ const Store = (() => {
     duplicates: (input, exceptId) => duplicatesOf(input, exceptId),
     step1Key: t => STEP1_KEY[t.formType],
     signer: key => signerOf(db, key),
+    signedBy: (by, key) => signedBy(db, by, key),
+    // แอดมิน: เติมลายเซ็นที่ขาดในใบเดิม (ผู้ลงนามอัปโหลดลายเซ็นหลังงานถูกอนุมัติแล้ว) · คืนจำนวนใบที่แก้
+    repairSignatures() {
+      if (!hasRole(currentUser(), 'admin') || !db.users.length) return 0;
+      const ids = db.tickets.filter(t => !t._board && missingSigns(db, t).length).map(t => t.id);
+      if (!ids.length) return 0;
+      commit(d => d.tickets.forEach(t => { if (ids.includes(t.id)) missingSigns(d, t).forEach(fix => fix()); }));
+      return ids.length;
+    },
 
     // เซสชัน
     me: currentUser,
@@ -1044,9 +1072,13 @@ const Store = (() => {
     async purge(list, onProgress) {
       if (!hasRole(currentUser(), 'admin')) throw new Error('เฉพาะแอดมินเท่านั้น');
       if (CLOUD) return Cloud.purge(list, onProgress);
-      const ids = new Set(list.map(t => t.id));
-      commit(d => { d.tickets = d.tickets.filter(t => !ids.has(t.id)); });
-      return { tickets: ids.size, photos: 0, photoTotal: 0 };
+      const ids = new Set(list.map(t => t.id)), reset = [];
+      commit(d => {
+        d.tickets = d.tickets.filter(t => !ids.has(t.id));
+        // ปีที่ไม่เหลือใบแล้ว → เลขที่ใบเริ่มใหม่ที่ 1
+        new Set(list.map(t => t.id.split('-')[1])).forEach(y => { if (!d.tickets.some(t => t.id.split('-')[1] === y)) { d.settings.running[y] = 0; reset.push(y); } });
+      });
+      return { tickets: ids.size, photos: 0, photoTotal: 0, reset };
     },
     photoRefs: t => photoRefsOf(t),
 
@@ -1318,8 +1350,8 @@ const Store = (() => {
       real.forEach(d => { const [, y, n] = d.id.split('-'); max[y] = Math.max(max[y] || 0, +n || 0); });
       const counters = await fs.collection('counters').get();
       const b = fs.batch();
-      // floor = เลขสูงสุดของใบจริงที่เคยถูกล้างไปแล้ว (ห้ามนับซ้ำกับเอกสารที่เคยพิมพ์)
-      counters.forEach(c => { const floor = c.data().floor || 0; b.set(c.ref, { n: Math.max(max[c.id] || 0, floor), floor }); });
+      // floor = เลขสูงสุดของใบจริงที่เคยถูกล้างไปแล้ว (ห้ามนับซ้ำกับใบที่ยังอยู่) · ปีที่ไม่เหลือใบเลย → เริ่มใหม่ที่ 1
+      counters.forEach(c => { const floor = max[c.id] ? c.data().floor || 0 : 0; b.set(c.ref, { n: Math.max(max[c.id] || 0, floor), floor }); });
       const { running, ...settings } = db.settings;
       b.set(cfgDoc('settings'), strip({ ...settings, hasSamples: false }));
       await b.commit();
@@ -1357,7 +1389,15 @@ const Store = (() => {
       }
       ids.forEach(id => { extra.delete(id); sets.forEach(s => s.m.delete(id)); });
       rebuild();
-      return { tickets: ids.length, photos: trashed, photoTotal: driveIds.length };
+      // ล้างจนไม่มีใบเหลือในปีนั้นแล้ว → เลขที่ใบเริ่มใหม่ที่ 1 · ยังมีใบเหลือ → เลขไม่ย้อน (กันซ้ำกับใบที่ยังอยู่)
+      const reset = [];
+      for (const y of new Set(list.map(t => t.id.split('-')[1]))) {
+        if (db.tickets.some(t => t.id.split('-')[1] === y)) continue;
+        await fs.collection('counters').doc(y).set({ n: 0, floor: 0 });
+        reset.push(y);
+      }
+      db.settings.running = { ...(db.settings.running || {}), ...Object.fromEntries(reset.map(y => [y, 0])) };
+      return { tickets: ids.length, photos: trashed, photoTotal: driveIds.length, reset };
     }
 
     async function ensureRange(from) {

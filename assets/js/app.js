@@ -255,7 +255,18 @@ const App = (() => {
     if ($('#admBell') && !$('#admBell .dropdown[data-open="true"]')) $('#admBell').innerHTML = bellHTML();
     if ($('#side') && Store.me()) $('#side').innerHTML = sideHTML(path);
     if (!ratePrompted) maybePromptRating();
+    maybeRepairSignatures();
   });
+
+  // แอดมินเปิดเว็บ: เติมลายเซ็นผู้ลงนามที่ขาดในใบเดิม (เช่น ผู้อนุมัติอัปโหลดลายเซ็นทีหลัง) · เขียนเฉพาะเมื่อมีใบที่ต้องแก้
+  let repairTimer = null;
+  function maybeRepairSignatures() {
+    clearTimeout(repairTimer);
+    repairTimer = setTimeout(() => {
+      if (!Store.hasRole(Store.me(), 'admin')) return;
+      try { const n = Store.repairSignatures(); if (n) console.info(`เติมลายเซ็นผู้ลงนามในใบเดิม ${n} ใบ`); } catch (e) { console.error(e); }
+    }, 2500);
+  }
 
   // ───────── เหตุการณ์ร่วม ─────────
   const onScroll = () => $('#nav')?.classList.toggle('is-scrolled', window.scrollY > 8);

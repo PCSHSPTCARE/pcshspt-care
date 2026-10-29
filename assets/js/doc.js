@@ -128,7 +128,9 @@ const Doc = (() => {
   function approvals(t) {
     const A = L.ap, d = DIVIDER[t.formType] || DIVIDER.general, rx = d + 2;
     const lw = d - 22.5, rw = 193 - rx;
-    const a1 = t.approvals?.step1, a2 = t.approvals?.step2;
+    // ใบที่อนุมัติก่อนผู้ลงนามอัปโหลดลายเซ็น → ใช้ลายเซ็นล่าสุดของผู้ลงนามคนเดิม
+    const a1 = t.approvals?.step1 && { ...t.approvals.step1, by: Store.signedBy(t.approvals.step1.by, Store.step1Key(t)) };
+    const a2 = t.approvals?.step2 && { ...t.approvals.step2, by: Store.signedBy(t.approvals.step2.by, Store.STEP2_KEY) };
     const p1 = a1?.by || Store.signer(Store.step1Key(t)), p2 = a2?.by || Store.signer(Store.STEP2_KEY);
     const nm = n => n ? `(${n})` : '(                                        )';
     return `
@@ -149,7 +151,7 @@ const Doc = (() => {
 
   // ───────── ผู้ตรวจงาน: ติ๊ก ลงชื่อ และวันที่ เมื่อปิดงานแล้วเท่านั้น (ยังไม่ปิด = เว้นว่าง) ─────────
   function inspection(t) {
-    const I = L.ins, insp = t.inspection;
+    const I = L.ins, insp = t.inspection && { ...t.inspection, by: Store.signedBy(t.inspection.by) };
     const done = t.status === 'done', cannot = t.status === 'cannot_fix', closed = done || cannot;
     const [dd, mm, yy] = closed ? dateParts(insp?.at || t.completion?.at || t.cannot?.at) : ['', '', ''];
     return `

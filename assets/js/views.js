@@ -110,7 +110,9 @@ const Views = (() => {
 
   // ผลการดำเนินงาน: รอพิจารณา / ผู้อนุมัติ / ผลซ่อม
   function resultCard(t) {
-    const a1 = t.approvals?.step1, a2 = t.approvals?.step2;
+    // ลายเซ็นผู้ลงนามที่อัปโหลดหลังงานถูกอนุมัติ → แสดงลายเซ็นล่าสุด
+    const a1 = t.approvals?.step1 && { ...t.approvals.step1, by: Store.signedBy(t.approvals.step1.by, Store.step1Key(t)) };
+    const a2 = t.approvals?.step2 && { ...t.approvals.step2, by: Store.signedBy(t.approvals.step2.by, Store.STEP2_KEY) };
     if (t.status === 'cancelled') return `<section class="card"><div class="card-body"><div class="notice">${icon('close')}<div><strong>ผู้แจ้งยกเลิกคำขอนี้แล้ว</strong>${t.cancel?.reason ? `<div>เหตุผล: ${esc(t.cancel.reason)}</div>` : ''}<div class="small">${esc(t.cancel?.by || '')} · ${UI.dateTime(t.cancel?.at)}</div></div></div></div></section>`;
     if (t.status === 'pending' && !t.review) return '';
     const sig = (label, a) => a ? `

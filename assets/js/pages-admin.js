@@ -1308,7 +1308,7 @@ const Admin = (() => {
           </div></section>
           <section class="card span-12 purge-card"><div class="card-head"><h3>${icon('trash')}ล้างข้อมูลใบแจ้งซ่อม</h3><span class="badge tone-red">เฉพาะแอดมิน · กู้คืนไม่ได้</span></div>
             <div class="card-body stack" style="gap:14px">
-              <p class="muted small" style="margin:0">ลบใบแจ้งซ่อม<b>ทุกสถานะ</b>ที่<b>วันที่แจ้ง</b>อยู่ในช่วงที่เลือก ทั้งข้อมูลในระบบและรูปใน Google Drive (รูปย้ายไปถังขยะ กู้คืนได้ภายใน 30 วัน) · ระบบดาวน์โหลดไฟล์สำรอง (CSV เปิดด้วย Excel ได้) ให้อัตโนมัติก่อนลบทุกครั้ง · เลขที่ใบไม่ถูกรีเซ็ต</p>
+              <p class="muted small" style="margin:0">ลบใบแจ้งซ่อม<b>ทุกสถานะ</b>ที่<b>วันที่แจ้ง</b>อยู่ในช่วงที่เลือก ทั้งข้อมูลในระบบและรูปใน Google Drive (รูปย้ายไปถังขยะ กู้คืนได้ภายใน 30 วัน) · ระบบดาวน์โหลดไฟล์สำรอง (CSV เปิดด้วย Excel ได้) ให้อัตโนมัติก่อนลบทุกครั้ง · ถ้าล้างจน<b>ไม่เหลือใบของปีนั้นเลย</b> เลขที่ใบจะเริ่มใหม่ที่ 1 (ยังมีใบเหลือ = นับต่อ ไม่ซ้ำ)</p>
               <div class="row purge-range">
                 <select class="select sm" id="pgPreset" aria-label="ช่วงเวลา">
                   ${[['month', 'เดือนนี้'], ['lastMonth', 'เดือนที่แล้ว'], ['year', 'ปีนี้ (ม.ค.–ธ.ค.)'], ['lastYear', 'ปีที่แล้ว'], ['older1', 'เก่ากว่า 1 ปี'], ['older2', 'เก่ากว่า 2 ปี'], ['custom', 'กำหนดวันที่เอง']].map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}
@@ -1320,7 +1320,7 @@ const Admin = (() => {
               <div id="pgResult"></div>
             </div></section>
           ${Store.cloud ? `<section class="card span-12"><div class="card-head"><h3>${icon('trash')}ใบแจ้งซ่อมตัวอย่าง</h3></div><div class="card-body row">
-            <p class="muted small" style="flex:1">ตอนเริ่มระบบ ใส่ใบแจ้งซ่อมตัวอย่างไว้ให้ทดลองใช้ ${Store.hasSamples() ? '<b>(ตอนนี้ยังมีใบตัวอย่างอยู่)</b>' : '(ลบไปแล้ว)'} · เมื่อพร้อมใช้งานจริง กดลบได้ เลขที่ใบจะเริ่มนับต่อจากใบจริงล่าสุด (ถ้ายังไม่มีใบจริง เริ่ม 0001)</p>
+            <p class="muted small" style="flex:1">ตอนเริ่มระบบ ใส่ใบแจ้งซ่อมตัวอย่างไว้ให้ทดลองใช้ ${Store.hasSamples() ? '<b>(ตอนนี้ยังมีใบตัวอย่างอยู่)</b>' : '(ลบไปแล้ว)'} · เมื่อพร้อมใช้งานจริง กดลบได้ เลขที่ใบจะเริ่มนับต่อจากใบจริงล่าสุด (ถ้าไม่เหลือใบจริงเลย เริ่มใหม่ที่ 1)</p>
             <button type="button" class="btn btn-outline btn-sm" id="delSamples" ${Store.hasSamples() ? '' : 'disabled'}>${icon('trash')} ลบใบตัวอย่างทั้งหมด</button></div></section>`
           : `<section class="card span-12"><div class="card-head"><h3>${icon('refresh')}ข้อมูลทดลอง</h3></div><div class="card-body row">
             <p class="muted small" style="flex:1">ต้นแบบนี้เก็บข้อมูลไว้ในเบราว์เซอร์ กดปุ่มเพื่อล้างและสร้างข้อมูลตัวอย่างใหม่</p>
@@ -1408,7 +1408,7 @@ const Admin = (() => {
             const r = await Store.purge(pg.list, prog);
             let rated = null;
             if ($('#pgRatings', root).checked) { prog('กำลังลบผลประเมินความพึงพอใจ...'); rated = await Store.purgeRatings(); }
-            UI.toast(`ล้างข้อมูลแล้ว: ลบ ${UI.num(r.tickets)} ใบ${r.photoTotal ? ` · ย้ายรูปไปถังขยะ ${UI.num(r.photos)} รูป` : ''}${rated ? ` · ลบผลประเมิน ${UI.num(rated.released + rated.queued)} ราย` : ''}`);
+            UI.toast(`ล้างข้อมูลแล้ว: ลบ ${UI.num(r.tickets)} ใบ${r.photoTotal ? ` · ย้ายรูปไปถังขยะ ${UI.num(r.photos)} รูป` : ''}${rated ? ` · ลบผลประเมิน ${UI.num(rated.released + rated.queued)} ราย` : ''}${r.reset?.length ? ` · เลขที่ใบปี ${r.reset.join(', ')} เริ่มใหม่ที่ 1` : ''}`);
             pgReset();
           } catch (err) {
             prog('');
