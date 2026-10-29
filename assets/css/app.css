@@ -1978,3 +1978,35 @@ p { text-wrap: pretty; }
   .section.mini-sec { margin-top: 14px !important; }
   .reopen-guide { padding: 14px; gap: 10px; }
 }
+@media (max-width: 640px) {
+  /* ฟอร์มแยกจุด (หอพัก) บนมือถือ: พื้นที่แคบกว่าการ์ดปกติ → ปุ่มรายการกว้างตามข้อความ ไม่บีบเป็น 2 บรรทัด */
+  .ss-body .cat-panel { padding: 12px 10px; }
+  .ss-body .cat-panel .pick-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ss-body .cat-panel .pick { padding: 8px 10px; font-size: .86rem; }
+  .lb-body .cat-tabs { gap: 6px; margin-bottom: 12px; }
+  .ss-body .cat-tab { padding: 6px 10px; font-size: .82rem; gap: 5px; }
+  .ss-body .cat-tab .icon { font-size: 14px; }
+  .lb-body .cat-panel .row { flex-wrap: wrap !important; gap: 8px; }
+  .lb-body .cat-panel [data-other] { flex: 1 1 100%; min-width: 0; }
+  .lb-body .cat-panel [data-addother] { flex: 1 1 100%; justify-content: center; }
+  /* รายการที่เลือก: ซ่อนไอคอนหมวด ให้ชื่อและปุ่ม ✕ อยู่บรรทัดเดียวกัน */
+  .detail-row { padding: 12px; }
+  .dr-head { gap: 8px; }
+  .dr-ic { display: none; }
+  /* แถวแรก: เลข · ชื่อ · ✕ · แถวสอง: จำนวน/หน่วย (ไม่บีบชื่อจนตัวหนังสือแตก) */
+  .dr-title { flex: 1 1 calc(100% - 96px); min-width: 0; }
+  .dr-head > .icon-btn { order: 4; margin-left: auto; }
+  .dr-head > .qty, .dr-head > .unit, .dr-head > .qty-free { order: 5; }
+  .dr-head > .qty { margin-left: 36px; }
+  .lb-body .ac-unit .pick-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* กล่องตัวเลขสรุป (งานที่ฉันแจ้ง ฯลฯ): 2×2 แทนเรียงยาว 4 กล่อง */
+  .kpi-row { grid-template-columns: 1fr 1fr !important; gap: 10px; }
+  .kpi-row .kpi { padding: 14px; }
+}
+/* หน้าต่าง (modal) ห้ามกว้างเกินจอ แม้เนื้อหาข้างในกว้าง (ตาราง/อีเมลยาว) → เนื้อหาเลื่อนภายในแทน */
+.modal, .modal-body { min-width: 0; }
+.modal-body > * { max-width: 100%; }
+#impPrev td { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  #impPrev .table th:nth-child(3), #impPrev .table td:nth-child(3) { display: none; }
+}
