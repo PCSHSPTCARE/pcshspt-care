@@ -221,3 +221,58 @@
 @media screen and (max-width: 860px) {
   .doc-stage { zoom: .5; }
 }
+
+/* ───────── คู่มือการใช้งาน (PDF) ───────── */
+.sheet.gd { padding: 12mm 14mm 18mm; font-size: 11pt; line-height: 1.4; }
+.gd-head { display: flex; align-items: center; gap: 3.5mm; padding-bottom: 2.5mm; border-bottom: .5mm solid #1E2A78; }
+.gd-head img { height: 11mm; width: auto; flex: none; }
+.gd-head > div { min-width: 0; flex: 1; }
+.gd-head b { display: block; font-size: 11.5pt; color: #1E2A78; }
+.gd-head small { display: block; font-size: 8.5pt; color: #555; }
+.gd-chip { flex: none; padding: .8mm 3mm; border-radius: 99px; background: #FFF1E6; color: #B8430F; font-size: 9pt; font-weight: 700; border: .25mm solid #F7C9A4; }
+.gd-title { display: flex; align-items: center; gap: 3.5mm; margin: 5mm 0 4.5mm; }
+.gd-title i { flex: none; width: 12mm; height: 12mm; border-radius: 3.5mm; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #EE6A1F, #B8430F); font-style: normal; }
+.gd-title i svg { width: 6.5mm; height: 6.5mm; }
+.gd-title h2 { font-size: 19pt; line-height: 1.2; color: #1E2A78; margin: 0; }
+.gd-title h2 small { font-size: 12pt; font-weight: 400; color: #666; }
+.gd-title p { margin: .8mm 0 0; font-size: 10pt; color: #555; }
+.gd-note { margin: -1mm 0 4mm; padding: 2.4mm 4mm; border-radius: 2.5mm; background: #FFF1F4; border: .25mm solid #FBD0DB; color: #8A1C3C; font-size: 11pt; }
+.gd-grid { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 6mm 5mm; justify-items: center; }
+.gd-step { width: 100%; max-width: var(--pw, 50mm); display: flex; flex-direction: column; gap: 2.4mm; }
+.gd-t { display: flex; align-items: flex-start; gap: 2mm; }
+.gd-no { flex: none; width: 7.5mm; height: 7.5mm; border-radius: 50%; display: grid; place-items: center; background: #E8590C; color: #fff; font-size: 12pt; font-weight: 700; line-height: 1; }
+.gd-t h3 { font-size: 11pt; line-height: 1.3; margin: 0; color: #1E2A78; }
+.gd-t p { margin: .6mm 0 0; font-size: 9pt; line-height: 1.35; color: #444; }
+.gd-phone { padding: 1.7mm; border-radius: 6mm; background: linear-gradient(160deg, #2A2D45, #14162A); }
+.gd-screen { overflow: hidden; border-radius: 4.5mm; background: #fff; aspect-ratio: 390 / 700; }
+.gd-screen img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.gd-screen .gm { padding: 4mm 2.6mm 2mm; font-size: 6.4pt; }
+.gd-screen .gm-h { font-size: 9pt; margin: 2.2mm 0 1.6mm; }
+.gd-screen .gm-g { font-size: 6pt; gap: 1.2mm; } .gd-screen .gm-g svg { width: 2.8mm; height: 2.8mm; }
+.gd-screen .gm-row { padding: 1.5mm 1.1mm; gap: 1.6mm; }
+.gd-screen .gm-row b { font-size: 6.8pt; } .gd-screen .gm-row small { font-size: 5.4pt; }
+.gd-screen .gm-av { width: 5.2mm; height: 5.2mm; font-size: 6.6pt; } .gd-screen .gm-av svg { width: 3mm; height: 3mm; }
+.gd-screen .gm-tip { margin-top: 2.4mm; padding: 1.5mm 1.8mm; font-size: 5.8pt; border-radius: 1.6mm; gap: 1.2mm; } .gd-screen .gm-tip svg { width: 2.6mm; height: 2.6mm; }
+/* หน้าปก */
+.gd-cover { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 16mm !important; }
+.gd-logo { height: 30mm; width: auto; margin-bottom: 4mm; }
+.gd-school { font-size: 15pt; font-weight: 700; }
+.gd-div { font-size: 11pt; color: #333; }
+.gd-cover h1 { margin: 11mm 0 0; font-size: 34pt; line-height: 1.2; color: #1E2A78; }
+.gd-cover h2 { margin: 1.5mm 0 0; font-size: 20pt; font-weight: 600; color: #B8430F; }
+.gd-lead { margin: 4mm 0 0; font-size: 11.5pt; color: #444; }
+.gd-toc { width: 150mm; margin-top: 11mm; text-align: left; }
+.gd-toc h3 { margin: 0 0 3mm; font-size: 14pt; color: #1E2A78; border-bottom: .4mm solid #1E2A78; padding-bottom: 1.5mm; }
+.gd-toc-row { display: flex; align-items: center; gap: 3mm; padding: 2.2mm 0; }
+.gd-toc-ic { flex: none; width: 9mm; height: 9mm; border-radius: 2.6mm; display: grid; place-items: center; background: #FFF1E6; color: #B8430F; }
+.gd-toc-ic svg { width: 5mm; height: 5mm; }
+.gd-toc-t b { display: block; font-size: 12pt; }
+.gd-toc-t small { display: block; font-size: 9pt; color: #555; }
+.gd-toc-dots { flex: 1; border-bottom: .35mm dotted #999; align-self: flex-end; margin-bottom: 1.6mm; }
+.gd-toc-n { flex: none; width: 8mm; text-align: right; font-size: 12pt; font-weight: 700; color: #1E2A78; }
+.gd-box { width: 150mm; margin-top: 9mm; padding: 4mm 5mm; border-radius: 3mm; background: #FFF6EF; border: .3mm solid #F7C9A4; text-align: left; font-size: 10.5pt; line-height: 1.6; }
+.gd-box p { margin: 0; } .gd-box p + p { margin-top: 1.5mm; }
+.gd-date { margin-top: auto; margin-bottom: 4mm; font-size: 10pt; color: #666; }
+.gd .ln { display: block; white-space: nowrap; }
+.gd-box p { overflow-wrap: anywhere; }
+.sheet.gd .rp-foot span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

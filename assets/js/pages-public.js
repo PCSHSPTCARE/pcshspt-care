@@ -1925,6 +1925,141 @@ const Pages = (() => {
       <details class="g-q" ${open ? 'open' : ''}><summary><span class="g-qn">${icon('help')}</span><span>${esc(x.q)}</span>${icon('chev', 'g-chev')}</summary>
         <p>${esc(x.a)}</p></details>`).join('')}</div>` : '';
   }
+  // ───────── ส่งออกคู่มือเป็นไฟล์ PDF (ทุกหัวข้อ · ไม่รวมคำถามที่พบบ่อย) ─────────
+  // สร้างหน้า A4 ทีละหน้าแล้วต่อเป็นไฟล์เดียว (ไม่พิมพ์ผ่านเบราว์เซอร์ จึงไม่มีหัวท้ายกระดาษที่เบราว์เซอร์เติม และใช้ได้บน iPad/มือถือ)
+  const PDF_NAME = 'คู่มือการใช้งาน-ระบบแจ้งซ่อมอาคารและสถานที่.pdf';
+  const stepCols = n => n <= 3 ? n : n === 4 ? 2 : 3;
+  // แบ่งขั้นตอนของหัวข้อเป็นหน้า: ≤6 ขั้น = 1 หน้า · 7–8 ขั้น = 2 หน้า (หน้าละเท่า ๆ กัน)
+  const splitSteps = steps => { const parts = Math.ceil(steps.length / 6), per = Math.ceil(steps.length / parts); return Array.from({ length: parts }, (_, i) => steps.slice(i * per, (i + 1) * per)); };
+  function guidePdfHTML() {
+    const s = S(), site = decodeURI(location.href.split('#')[0].split('?')[0]);
+    const pages = [];
+    GUIDE.forEach(g => splitSteps(g.steps).forEach((steps, i, all) => pages.push({ g, steps, offset: all.slice(0, i).reduce((a, p) => a + p.length, 0), cont: i > 0 })));
+    const total = pages.length + 1;
+    const head = sub => `<header class="gd-head"><img src="images/logo.png" alt=""><div><b>คู่มือการใช้งานระบบแจ้งซ่อมอาคารและสถานที่</b><small>${esc(s.unit)} ${esc(s.division)} · ${esc(s.schoolName)}</small></div>${sub ? `<span class="gd-chip">${esc(sub)}</span>` : ''}</header>`;
+    const foot = n => `<footer class="rp-foot"><span>${esc(site)}</span><span>หน้า ${n}/${total}</span></footer>`;
+    let n = 1;
+    const firstPage = g => pages.findIndex(p => p.g === g) + 2;
+    const cover = `
+      <div class="sheet gd gd-cover">
+        <img class="gd-logo" src="images/logo.png" alt="">
+        <div class="gd-school">${esc(s.schoolName)}</div>
+        <div class="gd-div">${esc(s.unit)} · ${esc(s.division)}</div>
+        <h1>คู่มือการใช้งาน</h1>
+        <h2>ระบบแจ้งซ่อมอาคารและสถานที่</h2>
+        <p class="gd-lead">สำหรับครูและบุคลากร · ทำตามทีละขั้น ดูภาพประกอบ ใช้งานได้ทันที</p>
+        <div class="gd-toc"><h3>สารบัญ</h3>
+          ${GUIDE.map(g => `<div class="gd-toc-row"><span class="gd-toc-ic">${icon(g.icon)}</span><span class="gd-toc-t"><b>${esc(g.title)}</b><small>${esc(g.desc)}</small></span><span class="gd-toc-dots"></span><span class="gd-toc-n">${firstPage(g)}</span></div>`).join('')}
+        </div>
+        <div class="gd-box">
+          <p><b>เข้าใช้งานได้ที่</b> ${esc(site)}</p>
+          <p>เข้าสู่ระบบด้วยอีเมลของโรงเรียน (@${esc(Store.domains()[0])}) เท่านั้น · หากไม่มีอีเมลดังกล่าว กรุณาติดต่อฝ่ายบริหารงานทั่วไป เพื่อขอเพิ่มอีเมลของท่านเข้าสู่ระบบ</p>
+        </div>
+        <div class="gd-date">ฉบับ ${UI.dateLong(new Date().toISOString())}</div>
+        ${foot(n++)}
+      </div>`;
+    const topicSheets = pages.map(({ g, steps, offset, cont }) => {
+      const cols = stepCols(steps.length);
+      return `
+      <div class="sheet gd">
+        ${head(g.title)}
+        <div class="gd-title"><i>${icon(g.icon)}</i><div><h2>${esc(g.title)}${cont ? ' <small>(ต่อ)</small>' : ''}</h2><p>${esc(g.desc)}</p></div></div>
+        ${g.id === 'reopen' ? `<div class="gd-note">แจ้งซ้ำได้ภายใน <b>${esc(Store.reopenText())}</b> หลังซ่อมเสร็จ</div>` : ''}
+        <div class="gd-grid" style="--cols:${cols};--pw:${cols === 3 ? 46 : 52}mm">
+          ${steps.map(([h, sub, mock], i) => `
+          <div class="gd-step">
+            <div class="gd-t"><span class="gd-no">${offset + i + 1}</span><div><h3>${esc(h)}</h3>${sub ? `<p>${esc(sub)}</p>` : ''}</div></div>
+            <div class="gd-phone"><div class="gd-screen">${mock === 'google' ? googleMock() : `<img src="${guideImg(g.id, offset + i + 1)}" alt="">`}</div></div>
+          </div>`).join('')}
+        </div>
+        ${foot(n++)}
+      </div>`;
+    }).join('');
+    return cover + topicSheets;
+  }
+  const waitImages = (box, ms) => Promise.all([...box.querySelectorAll('img')].map(img => img.complete ? 0 : new Promise(res => { const t = setTimeout(res, ms); img.onload = img.onerror = () => { clearTimeout(t); res(); }; })));
+  // ตัวสร้างภาพ PDF ไม่เห็นสไตล์จากหน้าเว็บ (ไอคอนเส้นหายไป) และวาดข้อความไทยที่ตัดบรรทัดเองซ้อนกันบางจุด
+  // → ใส่สี/เส้นลงในไอคอนโดยตรง และตัดบรรทัดข้อความไว้ล่วงหน้า วาดทีละบรรทัด
+  function prepareForPdf(box) {
+    box.querySelectorAll('svg.icon').forEach(svg => {
+      const r = svg.getBoundingClientRect();
+      svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', getComputedStyle(svg).color);
+      svg.setAttribute('stroke-width', '1.9'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+      if (r.width) { svg.setAttribute('width', r.width); svg.setAttribute('height', r.height); }
+    });
+    // ภาพโทรศัพท์ใหญ่เกินจนชนท้ายหน้า → ย่อลงทีละ 2 มม. จนพอดี
+    const fitGrids = () => box.querySelectorAll('.sheet.gd').forEach(sh => {
+      const foot = sh.querySelector('.rp-foot'), grid = sh.querySelector('.gd-grid');
+      if (!foot || !grid) return;
+      const mm = sh.getBoundingClientRect().height / 297;
+      let w = parseFloat(grid.style.getPropertyValue('--pw'));
+      while (grid.getBoundingClientRect().bottom > foot.getBoundingClientRect().top - 3 * mm && w > 34) { w -= 2; grid.style.setProperty('--pw', `${w}mm`); }
+    });
+    fitGrids();
+    const range = document.createRange();
+    box.querySelectorAll('.gd-t h3, .gd-t p, .gd-title p, .gd-toc-t small, .gd-box p:not(:has(b))').forEach(el => {
+      const node = el.firstChild;
+      if (el.childNodes.length !== 1 || node.nodeType !== 3) return;
+      const text = node.textContent, lines = [];
+      let start = 0, lastTop = null;
+      for (let i = 0; i < text.length; i++) {
+        range.setStart(node, i); range.setEnd(node, i + 1);
+        const rc = range.getClientRects()[0];
+        if (!rc || !rc.height) continue;
+        if (lastTop !== null && rc.top > lastTop + rc.height * 0.6) { lines.push(text.slice(start, i)); start = i; }
+        lastTop = rc.top;
+      }
+      lines.push(text.slice(start));
+      if (lines.length > 1) el.innerHTML = lines.map(l => `<span class="ln">${esc(l.trim())}</span>`).join('');
+    });
+    fitGrids();
+  }
+  async function exportGuidePdf(btn) {
+    if (!window.html2pdf) return UI.toast('โหลดตัวสร้าง PDF ไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่', 'error');
+    const label = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = `${icon('refresh')} กำลังเตรียมคู่มือ...`;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm;background:#fff;pointer-events:none';
+    try {
+      host.innerHTML = guidePdfHTML();
+      document.body.appendChild(host);
+      await document.fonts.ready;
+      await Promise.all(['400 16px DocSarabun', '700 16px DocSarabun'].map(f => document.fonts.load(f).catch(() => {})));
+      await waitImages(host, 20000);
+      prepareForPdf(host);
+      const sheets = [...host.querySelectorAll('.sheet')];
+      // มือถือ/แท็บเล็ตใช้ความละเอียดพอดีหน่วยความจำ · คอมใช้ความละเอียดสูงกว่า
+      const scale = matchMedia('(pointer: coarse)').matches ? 1.6 : 2;
+      let pdf = null;
+      for (let i = 0; i < sheets.length; i++) {
+        btn.innerHTML = `${icon('refresh')} กำลังสร้าง PDF ${i + 1}/${sheets.length}`;
+        await new Promise(r => setTimeout(r, 30));   // ให้หน้าจอวาดข้อความความคืบหน้าก่อน
+        const worker = html2pdf().set({ margin: 0, html2canvas: { scale, useCORS: true, backgroundColor: '#ffffff', logging: false }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(sheets[i]);
+        const canvas = await worker.toCanvas().get('canvas');
+        const img = canvas.toDataURL('image/jpeg', 0.9);
+        canvas.width = canvas.height = 0;   // คืนหน่วยความจำ
+        if (!pdf) {
+          pdf = await html2pdf().set({ margin: 0, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(document.createElement('div')).toPdf().get('pdf');
+          while (pdf.getNumberOfPages() > 1) pdf.deletePage(pdf.getNumberOfPages());
+        } else pdf.addPage('a4', 'portrait');
+        pdf.addImage(img, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      }
+      pdf.setProperties({ title: 'คู่มือการใช้งานระบบแจ้งซ่อมอาคารและสถานที่' });
+      const blob = pdf.output('blob'), url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = PDF_NAME; document.body.appendChild(a); a.click(); a.remove();
+      // เบราว์เซอร์มือถือบางรุ่นไม่ให้ดาวน์โหลดอัตโนมัติ → มีปุ่มให้กดเองเสมอ
+      UI.modal({
+        title: 'สร้างไฟล์คู่มือเรียบร้อยแล้ว', subtitle: `${sheets.length} หน้า · ${(blob.size / 1048576).toFixed(1)} MB`, size: 'sm',
+        body: `<p style="margin:0 0 14px;line-height:1.7">ระบบดาวน์โหลดไฟล์ให้แล้ว หากไม่เห็นไฟล์ในเครื่อง ให้กดปุ่มด้านล่าง ส่งต่อให้ครูท่านอื่นทางไลน์หรืออีเมลได้ทันที</p>
+          <a class="btn btn-primary btn-lg btn-block" id="gpdfLink" href="${url}" download="${esc(PDF_NAME)}">${icon('download')} ดาวน์โหลดคู่มือ (PDF)</a>`,
+        actions: [{ label: 'ปิด', kind: 'btn-ghost-dark' }],
+        onClose: () => setTimeout(() => URL.revokeObjectURL(url), 60000)
+      });
+    } catch (err) {
+      console.error(err);
+      UI.toast('สร้างไฟล์ PDF ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง (หากใช้มือถือ ลองปิดแท็บอื่นก่อน)', 'error');
+    } finally { host.remove(); btn.disabled = false; btn.innerHTML = label; }
+  }
   function guide(params = {}) {
     const t = GUIDE.find(g => g.id === params.t);
     const idx = t ? GUIDE.indexOf(t) : -1;
@@ -1938,7 +2073,7 @@ const Pages = (() => {
         <div class="g-bar">
           ${t ? `<a class="btn btn-outline" href="#/guide">${icon('back')} หัวข้อทั้งหมด</a>` : ''}
           <span class="spacer"></span>
-          <button class="btn btn-outline" type="button" id="gPrint">${icon('printer')} พิมพ์คู่มือ</button>
+          <span class="g-pdf-hint">ดาวน์โหลดคู่มือทั้งเล่มเป็นไฟล์ PDF ส่งต่อให้ครูท่านอื่นได้</span> <button class="btn btn-primary" type="button" id="gPdf">${icon('download')} Export to PDF</button>
         </div>
         ${t ? `
         ${tabs}
@@ -1963,25 +2098,8 @@ const Pages = (() => {
       </div></div>`,
       mount(root) {
         UI.reveal(root);
-        // พิมพ์ทุกหัวข้อ + คำถามที่พบบ่อย เป็นเอกสารเดียว (รอรูปโหลดครบก่อนสั่งพิมพ์)
-        $('#gPrint', root).addEventListener('click', async e => {
-          const btn = e.currentTarget; btn.disabled = true;
-          document.getElementById('guidePrint')?.remove();
-          const s = S();
-          document.body.insertAdjacentHTML('beforeend', `<div id="guidePrint">
-            <header class="gp-head"><img src="images/logo.png" alt=""><div><b>คู่มือการใช้งานระบบแจ้งซ่อมอาคารและสถานที่</b><span>${esc(s.unit)} ${esc(s.division)} · ${esc(s.schoolName)}</span></div></header>
-            ${GUIDE.map(g => `<section class="gp-topic"><h2>${icon(g.icon)} ${esc(g.title)}</h2>${g.id === 'reopen' ? `<p class="gp-note">แจ้งซ้ำได้ภายใน ${esc(Store.reopenText())} หลังซ่อมเสร็จ</p>` : ''}<ol class="g-steps">${stepsHTML(g, { print: true })}</ol></section>`).join('')}
-            ${Store.faq().length ? `<section class="gp-topic"><h2>${icon('help')} คำถามที่พบบ่อย</h2>${faqHTML(true)}</section>` : ''}
-          </div>`);
-          const box = document.getElementById('guidePrint');
-          await Promise.all([...box.querySelectorAll('img')].map(img => img.complete ? 0 : new Promise(r => { img.onload = img.onerror = r; })));
-          document.body.classList.add('printing-guide');
-          // ขอบกระดาษเฉพาะตอนพิมพ์คู่มือ (เอกสาร PDF อื่นใช้ขอบ 0)
-          document.head.insertAdjacentHTML('beforeend', '<style id="gpPage">@page { size: A4; margin: 12mm 13mm; }</style>');
-          const done = () => { document.body.classList.remove('printing-guide'); document.getElementById('gpPage')?.remove(); box.remove(); btn.disabled = false; window.removeEventListener('afterprint', done); };
-          window.addEventListener('afterprint', done);
-          window.print();
-        });
+        // ส่งออกคู่มือทุกหัวข้อเป็นไฟล์ PDF (ไม่รวมคำถามที่พบบ่อย)
+        $('#gPdf', root).addEventListener('click', e => exportGuidePdf(e.currentTarget));
       }
     };
   }

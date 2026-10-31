@@ -2127,38 +2127,7 @@ p { text-wrap: pretty; }
   .g-head h2 { font-size: 1.45rem; }
   .g-q p { padding-left: 20px; }
 }
-/* พิมพ์คู่มือ: ทุกหัวข้อ + คำถามที่พบบ่อย · ขั้นตอนเรียง 3 คอลัมน์ */
-#guidePrint { display: none; }
-@page guide { size: A4; margin: 12mm 13mm; }
-@media print {
-  body.printing-guide > *:not(#guidePrint) { display: none !important; }
-  body.printing-guide { background: #fff !important; }
-  body.printing-guide #guidePrint { display: block; page: guide; color: #000; font-size: 10.5pt; }
-  #guidePrint * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  #guidePrint .gp-head { display: flex; align-items: center; gap: 4mm; padding-bottom: 3mm; margin-bottom: 4mm; border-bottom: .6mm solid #000; }
-  #guidePrint .gp-head img { height: 15mm; }
-  #guidePrint .gp-head b { display: block; font-size: 15pt; }
-  #guidePrint .gp-head span { font-size: 10pt; color: #333; }
-  #guidePrint .gp-topic { break-before: page; }
-  #guidePrint .gp-head + .gp-topic { break-before: auto; }
-  #guidePrint .gp-topic h2 { display: flex; align-items: center; gap: 2mm; margin: 0 0 3mm; font-size: 16pt; color: #1E2A78; }
-  #guidePrint .gp-topic h2 svg { width: 6mm; height: 6mm; }
-  #guidePrint .gp-note { margin: 0 0 3mm; font-size: 11pt; }
-  #guidePrint .g-steps { grid-template-columns: repeat(3, 1fr); gap: 5mm 6mm; margin: 0; }
-  #guidePrint .g-step { display: flex; flex-direction: column; gap: 2.5mm; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: none; break-inside: avoid; }
-  #guidePrint .g-text { gap: 2.5mm; }
-  #guidePrint .g-no { width: 8mm; height: 8mm; font-size: 12pt; box-shadow: none; }
-  #guidePrint .g-text h3 { font-size: 12pt; }
-  #guidePrint .g-text p { margin-top: 1mm; font-size: 9.5pt; line-height: 1.45; }
-  #guidePrint .g-phone { width: 46mm; padding: 1.4mm; border-radius: 5mm; box-shadow: none; }
-  #guidePrint .g-screen { border-radius: 3.6mm; }
-  #guidePrint .gm { padding: 4mm 3mm; font-size: 8pt; }
-  #guidePrint .g-faq { gap: 2.5mm; }
-  #guidePrint .g-q { break-inside: avoid; border-radius: 2.5mm; }
-  #guidePrint .g-q summary { padding: 2.5mm 3mm; font-size: 11pt; }
-  #guidePrint .g-q .g-chev { display: none; }
-  #guidePrint .g-q p { padding: 0 3mm 2.5mm 10mm; font-size: 10pt; line-height: 1.55; }
-}
+
 
 /* ═══ แก้ไขคำถามที่พบบ่อย (ตั้งค่าระบบ) ═══ */
 .faq-edit { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: fq; }
@@ -2190,3 +2159,6 @@ p { text-wrap: pretty; }
   .nav .user-btn .u-name { display: none; }
   .nav .user-btn { padding-right: 8px; }
 }
+/* ปุ่ม Export to PDF ในหน้าคู่มือ */
+.g-pdf-hint { font-size: 1rem; color: rgba(255, 255, 255, .88); text-shadow: 0 1px 2px rgba(16, 19, 58, .5); }
+@media (max-width: 640px) { .g-pdf-hint { display: none; } .g-bar #gPdf { width: 100%; justify-content: center; } }
