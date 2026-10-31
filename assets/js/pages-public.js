@@ -301,7 +301,10 @@ const Pages = (() => {
           <div class="login-box rise">
             <img src="images/logo.png" alt="" style="height:76px;margin-bottom:18px">
             <h1>เข้าสู่ระบบ</h1>
-            <p class="muted" style="margin:6px 0 24px">ใช้อีเมลโรงเรียน ${Store.domains().map(d => `<strong class="nw">@${esc(d)}</strong>`).join(' หรือ ')} หรือ Gmail ที่แอดมินเพิ่มไว้ ระบบจะรู้ชื่อผู้แจ้งจากบัญชีโดยอัตโนมัติ</p>
+            <div class="login-rule">
+              <p>เข้าสู่ระบบด้วยอีเมลของโรงเรียน <strong class="nw">(@${esc(Store.domains()[0])})</strong> เท่านั้น</p>
+              <p class="small">กรณีไม่มีอีเมลดังกล่าว กรุณาติดต่อ<b>ฝ่ายบริหารงานทั่วไป</b> เพื่อขอเพิ่มอีเมลของท่านเข้าสู่ระบบ</p>
+            </div>
             <div id="loginErr"></div>
             ${Store.cloud ? `
             <button class="g-btn" type="button" id="gLogin">${icon('google')} เข้าสู่ระบบด้วย Google</button>
@@ -1190,9 +1193,7 @@ const Pages = (() => {
                 <section class="card">
                   <div class="card-head"><h3>${icon('phone')}สอบถามเพิ่มเติม</h3></div>
                   <div class="card-body stack small">
-                    <span class="row" style="gap:10px">${icon('phone')}${esc(s.contact.phone)}</span>
-                    <span class="row" style="gap:10px">${icon('mail')}${esc(s.contact.email)}</span>
-                    <span class="row" style="gap:10px">${icon('pin')}${esc(s.contact.office)}</span>
+                    ${[['phone', s.contact.phone], ['mail', s.contact.email], ['pin', s.contact.office]].filter(([, v]) => String(v || '').trim()).map(([ic, v]) => `<span class="row" style="gap:10px">${icon(ic)}${esc(v)}</span>`).join('')}
                     <a class="link" href="#/contact">ดูรายชื่อบุคลากร ${icon('arrow')}</a>
                   </div>
                 </section>
@@ -1855,5 +1856,134 @@ const Pages = (() => {
     return { title: 'ไม่มีสิทธิ์', html: `${pageHero({ title: 'ไม่มีสิทธิ์เข้าถึง' })}<div class="page-body"><div class="container"><div class="card empty">${icon('shield')}<strong>${esc(msg || 'บัญชีของคุณไม่มีสิทธิ์ใช้งานหน้านี้')}</strong><a class="btn btn-primary" href="#/">กลับหน้าแรก</a></div></div></div>` };
   }
 
-  return { home, login, reportChooser, reportForm, success, myTickets, ticket, board, contact, profile, setup, promptRatings, openRating, notFound, forbidden, pageHero, rangeStart, semesterStart, RANGE_LABEL, formTabs };
+  // ═══════════ คู่มือการใช้งาน ═══════════
+  // ขั้นตอนละ 1 ภาพหน้าจอ (มือถือ) + ข้อความสั้น ตัวใหญ่ อ่านง่าย · ภาพอยู่ที่ images/guide/
+  const GUIDE = [
+    { id: 'first', icon: 'login', title: 'เริ่มใช้งานครั้งแรก', desc: 'เข้าสู่ระบบ กรอกข้อมูล และเซ็นลายเซ็น (ทำครั้งเดียว)', steps: [
+      ['กดปุ่ม "เข้าสู่ระบบ"', 'อยู่มุมขวาบนของหน้าแรก'],
+      ['กด "เข้าสู่ระบบด้วย Google"', 'ใช้อีเมลของโรงเรียนเท่านั้น'],
+      ['เลือกบัญชีอีเมลของโรงเรียน', 'หากไม่มีอีเมลของโรงเรียน กรุณาติดต่อฝ่ายบริหารงานทั่วไป', 'google'],
+      ['กรอกข้อมูลส่วนตัว แล้วกด "ถัดไป"', 'ชื่อ ตำแหน่ง ฝ่ายงาน และเบอร์โทร'],
+      ['เซ็นชื่อในกรอบ แล้วกด "ถัดไป"', 'ใช้นิ้ว ปากกา หรือเมาส์ เซ็นครั้งเดียว ระบบใส่ในใบแจ้งซ่อมให้เอง'],
+      ['ตรวจข้อมูล แล้วกด "ยืนยัน เริ่มใช้งาน"', 'เรียบร้อย! ครั้งต่อไปกดเข้าสู่ระบบอย่างเดียว']] },
+    { id: 'general', icon: 'building', title: 'แจ้งซ่อมทั่วไป', desc: 'อาคารเรียน ห้องเรียน ห้องปฏิบัติการ พื้นที่ส่วนกลาง', steps: [
+      ['กดปุ่ม "แจ้งซ่อม"', 'ปุ่มสีส้มที่หน้าแรกของเว็บ'],
+      ['เลือก "แจ้งซ่อมทั่วไป"', 'กดปุ่ม "กรอกแบบฟอร์ม" ใต้หัวข้อนี้'],
+      ['เลือกสถานที่', 'พิมพ์เลขห้องหรือชื่อสถานที่ แล้วแตะเลือก'],
+      ['เลือกรายการที่ชำรุด', 'เลือกหมวดงาน แล้วแตะรายการ'],
+      ['บอกอาการ', 'พิมพ์สั้น ๆ ว่าเสียอย่างไร แนบรูปได้ (ไม่บังคับ)'],
+      ['กด "ส่งแจ้งซ่อม"', 'ตรวจเบอร์โทรให้ถูกก่อนกด'],
+      ['ตรวจอีกครั้ง แล้วกด "ยืนยันส่งแจ้งซ่อม"', 'ถ้าผิด กด "กลับไปแก้ไข" ได้'],
+      ['เสร็จแล้ว!', 'ระบบแจ้งเจ้าหน้าที่ทันที ติดตามได้ที่ "งานที่ฉันแจ้ง"']] },
+    { id: 'dorm', icon: 'bed', title: 'แจ้งซ่อมหอพักนักเรียน', desc: 'ห้องนอน ห้องน้ำ ส่วนกลาง ภายในหอพัก', steps: [
+      ['กดปุ่ม "แจ้งซ่อม"', 'ปุ่มสีส้มที่หน้าแรกของเว็บ'],
+      ['เลือก "แจ้งซ่อมหอพักนักเรียน"', 'กดปุ่ม "กรอกแบบฟอร์ม" ใต้หัวข้อนี้'],
+      ['เลือกหอพัก', 'แตะชื่อหอพักที่ต้องการ'],
+      ['เลือกล็อค หรือชั้น', 'แตะล็อคหรือชั้นที่ชำรุด'],
+      ['แตะจุดที่ชำรุด', 'ห้องนอน ห้องอาบน้ำ หรือห้องสุขา แตะได้หลายจุด'],
+      ['เลือกรายการ และบอกอาการ', 'ทำทีละจุดที่เลือกไว้'],
+      ['แจ้งล็อคอื่นเพิ่มได้', 'ถ้ามีหลายล็อค กดปุ่มนี้ ไม่ต้องส่งใหม่ทีละใบ'],
+      ['กด "ส่งแจ้งซ่อม" แล้วยืนยัน', 'ตรวจรายการอีกครั้งก่อนกดยืนยัน']] },
+    { id: 'track', icon: 'track', title: 'ติดตามงาน และพิมพ์ใบแจ้งซ่อม', desc: 'ดูว่าซ่อมถึงขั้นไหน และพิมพ์เอกสาร', steps: [
+      ['กด "งานที่ฉันแจ้ง"', 'ที่หน้าแรกของเว็บ'],
+      ['ดูสถานะของแต่ละใบ', 'รออนุมัติ › กำลังซ่อม › เสร็จสิ้น'],
+      ['แตะที่ใบ เพื่อดูรายละเอียด', 'เห็นความคืบหน้าทุกขั้นตอน'],
+      ['พิมพ์ใบแจ้งซ่อม', 'กด "ใบแจ้งซ่อม (มีตราครุฑ)"'],
+      ['กด "พิมพ์" หรือ "ดาวน์โหลด PDF"', 'อยู่แถบด้านบนของหน้าเอกสาร'],
+      ['ดูแจ้งเตือนที่รูปกระดิ่ง', 'เมื่องานของคุณเปลี่ยนสถานะ จะมีตัวเลขสีแดงขึ้น']] },
+    { id: 'reopen', icon: 'refresh', title: 'แจ้งซ่อมซ้ำ (ซ่อมแล้วยังไม่หาย)', desc: 'ซ่อมเสร็จแล้วแต่ยังใช้งานไม่ได้', steps: [
+      ['กดการ์ด "แจ้งซ่อมซ้ำ"', 'ที่หน้าแรกของเว็บ'],
+      ['เลือกใบที่ยังใช้งานไม่ได้', 'จากรายการงานที่ซ่อมเสร็จแล้ว'],
+      ['กดปุ่ม "แจ้งซ่อมซ้ำ"', 'ปุ่มสีชมพูในหน้าใบนั้น'],
+      ['บอกอาการที่ยังพบ แล้วกดยืนยัน', 'ระบบเปิดใบใหม่ต่อจากใบเดิม และแจ้งเจ้าหน้าที่ทันที']] }
+  ];
+  const guideImg = (id, n) => `images/guide/${id}-${n}.jpg`;
+  // หน้าจอเลือกบัญชี Google (ภาพจำลอง เพราะเป็นหน้าของ Google)
+  const googleMock = () => `
+    <div class="gm">
+      <div class="gm-g">${icon('google')}<span>ลงชื่อเข้าใช้ด้วย Google</span></div>
+      <div class="gm-h">เลือกบัญชี</div>
+      <div class="gm-row is-pick"><span class="gm-av">ค</span><span><b>ครูใจดี มีสุข</b><small>kru.jaidee@${esc(Store.domains()[0])}</small></span></div>
+      <div class="gm-row"><span class="gm-av alt">ส</span><span><b>บัญชีส่วนตัว</b><small>somchai@gmail.com</small></span></div>
+      <div class="gm-row"><span class="gm-av ghost">${icon('user')}</span><span><b>ใช้บัญชีอื่น</b></span></div>
+      <div class="gm-tip">${icon('check')}<span>เลือกอีเมลที่ลงท้ายด้วย <b>@${esc(Store.domains()[0])}</b></span></div>
+    </div>`;
+  const phone = inner => `<div class="g-phone"><div class="g-screen">${inner}</div></div>`;
+  function stepsHTML(t, { print = false } = {}) {
+    return t.steps.map(([head, sub, mock], i) => `
+      <li class="g-step ${print ? '' : 'reveal'}">
+        <div class="g-text">
+          <span class="g-no">${i + 1}</span>
+          <div><h3>${esc(head)}</h3>${sub ? `<p>${esc(sub)}</p>` : ''}</div>
+        </div>
+        ${phone(mock === 'google' ? googleMock() : `<img src="${guideImg(t.id, i + 1)}" alt="ขั้นที่ ${i + 1}: ${esc(head)}" ${print ? '' : 'loading="lazy"'} decoding="async">`)}
+      </li>`).join('');
+  }
+  function faqHTML(open = false) {
+    const list = Store.faq();
+    return list.length ? `<div class="g-faq">${list.map((x, i) => `
+      <details class="g-q" ${open ? 'open' : ''}><summary><span class="g-qn">${icon('help')}</span><span>${esc(x.q)}</span>${icon('chev', 'g-chev')}</summary>
+        <p>${esc(x.a)}</p></details>`).join('')}</div>` : '';
+  }
+  function guide(params = {}) {
+    const t = GUIDE.find(g => g.id === params.t);
+    const idx = t ? GUIDE.indexOf(t) : -1;
+    const next = t && GUIDE[idx + 1];
+    const tabs = `<nav class="g-tabs" aria-label="หัวข้อคู่มือ">${GUIDE.map(g => `<a class="g-tab ${g === t ? 'is-active' : ''}" href="#/guide?t=${g.id}">${icon(g.icon)}<span>${esc(g.title)}</span></a>`).join('')}</nav>`;
+    return {
+      title: t ? `คู่มือ: ${t.title}` : 'คู่มือการใช้งาน',
+      html: `
+      ${pageHero({ title: 'คู่มือการใช้งาน', desc: 'ทำตามทีละขั้น ดูภาพประกอบ ใช้งานได้ทันที', crumbs: t ? [{ label: 'คู่มือ', href: '/guide' }, { label: t.title }] : [{ label: 'คู่มือ' }] })}
+      <div class="page-body guide"><div class="container stack" style="gap:28px">
+        <div class="g-bar">
+          ${t ? `<a class="btn btn-outline" href="#/guide">${icon('back')} หัวข้อทั้งหมด</a>` : ''}
+          <span class="spacer"></span>
+          <button class="btn btn-outline" type="button" id="gPrint">${icon('printer')} พิมพ์คู่มือ</button>
+        </div>
+        ${t ? `
+        ${tabs}
+        <section class="g-topic">
+          <header class="g-head"><span class="g-ic">${icon(t.icon)}</span><div><h2>${esc(t.title)}</h2><p>${esc(t.desc)} · ${t.steps.length} ขั้นตอน</p></div></header>
+          ${t.id === 'reopen' ? `<div class="g-note">${icon('clock')}<span>แจ้งซ้ำได้ภายใน <b>${esc(Store.reopenText())}</b> หลังซ่อมเสร็จ</span></div>` : ''}
+          <ol class="g-steps">${stepsHTML(t)}</ol>
+          <div class="g-end">
+            ${next ? `<a class="btn btn-primary btn-lg" href="#/guide?t=${next.id}">หัวข้อถัดไป: ${esc(next.title)} ${icon('arrow')}</a>` : `<a class="btn btn-primary btn-lg" href="#/guide">${icon('book')} กลับหน้ารวมคู่มือ</a>`}
+          </div>
+        </section>` : `
+        <div class="g-cards">
+          ${GUIDE.map((g, i) => `
+          <a class="g-card reveal" href="#/guide?t=${g.id}" style="transition-delay:${i * 60}ms">
+            <span class="g-ic">${icon(g.icon)}</span>
+            <span class="g-ct"><b>${esc(g.title)}</b><small>${esc(g.desc)}</small></span>
+            <span class="g-go"><span>${g.steps.length} ขั้นตอน</span>${icon('arrow')}</span>
+          </a>`).join('')}
+        </div>
+        ${Store.faq().length ? `<section class="g-faq-sec"><h2 class="g-h2">${icon('help')} คำถามที่พบบ่อย</h2>${faqHTML()}</section>` : ''}
+        <div class="g-help">${icon('phone')}<span>ยังไม่เข้าใจ หรือมีปัญหาการใช้งาน <a class="link" href="#/contact">ติดต่อฝ่ายบริหารงานทั่วไป</a></span></div>`}
+      </div></div>`,
+      mount(root) {
+        UI.reveal(root);
+        // พิมพ์ทุกหัวข้อ + คำถามที่พบบ่อย เป็นเอกสารเดียว (รอรูปโหลดครบก่อนสั่งพิมพ์)
+        $('#gPrint', root).addEventListener('click', async e => {
+          const btn = e.currentTarget; btn.disabled = true;
+          document.getElementById('guidePrint')?.remove();
+          const s = S();
+          document.body.insertAdjacentHTML('beforeend', `<div id="guidePrint">
+            <header class="gp-head"><img src="images/logo.png" alt=""><div><b>คู่มือการใช้งานระบบแจ้งซ่อมอาคารและสถานที่</b><span>${esc(s.unit)} ${esc(s.division)} · ${esc(s.schoolName)}</span></div></header>
+            ${GUIDE.map(g => `<section class="gp-topic"><h2>${icon(g.icon)} ${esc(g.title)}</h2>${g.id === 'reopen' ? `<p class="gp-note">แจ้งซ้ำได้ภายใน ${esc(Store.reopenText())} หลังซ่อมเสร็จ</p>` : ''}<ol class="g-steps">${stepsHTML(g, { print: true })}</ol></section>`).join('')}
+            ${Store.faq().length ? `<section class="gp-topic"><h2>${icon('help')} คำถามที่พบบ่อย</h2>${faqHTML(true)}</section>` : ''}
+          </div>`);
+          const box = document.getElementById('guidePrint');
+          await Promise.all([...box.querySelectorAll('img')].map(img => img.complete ? 0 : new Promise(r => { img.onload = img.onerror = r; })));
+          document.body.classList.add('printing-guide');
+          // ขอบกระดาษเฉพาะตอนพิมพ์คู่มือ (เอกสาร PDF อื่นใช้ขอบ 0)
+          document.head.insertAdjacentHTML('beforeend', '<style id="gpPage">@page { size: A4; margin: 12mm 13mm; }</style>');
+          const done = () => { document.body.classList.remove('printing-guide'); document.getElementById('gpPage')?.remove(); box.remove(); btn.disabled = false; window.removeEventListener('afterprint', done); };
+          window.addEventListener('afterprint', done);
+          window.print();
+        });
+      }
+    };
+  }
+  return { home, login, guide, reportChooser, reportForm, success, myTickets, ticket, board, contact, profile, setup, promptRatings, openRating, notFound, forbidden, pageHero, rangeStart, semesterStart, RANGE_LABEL, formTabs };
 })();

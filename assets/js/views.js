@@ -158,7 +158,7 @@ const Views = (() => {
         <div class="card-body" style="padding-bottom:0">
           <div class="detail-head">
             <span class="t-ic">${icon(ticketIcon(t))}</span>
-            <div style="min-width:0;flex:1">
+            <div style="min-width:0;flex:1 1 210px">
               <div class="small faint">${esc(formName(t.formType))} · แจ้งเมื่อ ${UI.dateTime(t.createdAt)}</div>
               <h2 style="font-size:1.5rem;font-weight:600;color:var(--navy-800)">${esc(t.id)}</h2>${reopenBadge(t)}
             </div>

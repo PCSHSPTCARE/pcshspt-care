@@ -56,6 +56,7 @@ const App = (() => {
               </ul>
             </li>
             <li><a class="menu-link ${active('/contact')}" href="#/contact">ติดต่อเรา</a></li>
+            <li><a class="menu-link ${active('/guide')}" href="#/guide">คู่มือ</a></li>
             ${Store.isBackOffice(me) ? `<li><a class="menu-link" href="#${adminHome(me)}">${icon('shield')} ระบบหลังบ้าน</a></li>` : ''}
             <li class="mobile-only">${me
               ? `<button class="menu-link" data-logout>${icon('logout')} ออกจากระบบ (${esc(me.first)})</button>`
@@ -118,7 +119,7 @@ const App = (() => {
           <div class="footer-top">
             <div class="footer-brand"><img src="images/logo.png" alt="" width="200" height="302">
               <div><strong>${esc(s.unit)}</strong><span>${esc(s.division)}<br><span class="fb-school">${esc(s.schoolName)}</span></span></div></div>
-            <ul class="footer-links"><li><a href="#/report">แจ้งซ่อม</a></li><li><a href="#/my">ติดตามสถานะ</a></li><li><a href="#/board">แดชบอร์ด</a></li><li><a href="#/contact">ติดต่อเรา</a></li></ul>
+            <ul class="footer-links"><li><a href="#/report">แจ้งซ่อม</a></li><li><a href="#/my">ติดตามสถานะ</a></li><li><a href="#/board">แดชบอร์ด</a></li><li><a href="#/contact">ติดต่อเรา</a></li><li><a href="#/guide">คู่มือการใช้งาน</a></li></ul>
           </div>
         </div>
       </footer>`;
@@ -206,7 +207,7 @@ const App = (() => {
       if ((o.auth || o.staff || o.roles || o.teacher) && !me) return go('/login?next=' + encodeURIComponent(full));
       if (o.guestOnly && me) return go(Store.isBackOffice(me) ? adminHome(me) : '/');
       // ข้อมูลโปรไฟล์ยังไม่ครบ (รวมลายเซ็น) → ต้องตั้งค่าบัญชีให้ครบก่อน · ดูหน้าติดต่อเราได้
-      if (me && !Store.profileComplete(me) && !['/setup', '/contact'].includes(path)) return go('/setup?next=' + encodeURIComponent(full));
+      if (me && !Store.profileComplete(me) && !['/setup', '/contact', '/guide'].includes(path)) return go('/setup?next=' + encodeURIComponent(full));
       if (path === '/admin' && me && !Store.hasRole(me, 'admin') && Store.isBackOffice(me)) return go(adminHome(me));
       if (o.teacher && !Store.hasRole(me, 'teacher')) view = Pages.forbidden('การแจ้งซ่อมเปิดให้เฉพาะครูและบุคลากรเท่านั้น');
       else if (o.staff && !Store.isStaff(me)) view = Pages.forbidden('หน้านี้สำหรับแอดมินและผู้อนุมัติเท่านั้น');
@@ -328,6 +329,7 @@ App.route('/my', Pages.myTickets, { auth: true });
 App.route('/ticket/:id', Pages.ticket, { auth: true });
 App.route('/board', Pages.board, { auth: true });
 App.route('/contact', Pages.contact);
+App.route('/guide', Pages.guide);
 App.route('/profile', Pages.profile, { auth: true });
 App.route('/setup', Pages.setup, { auth: true });
 App.route('/doc/:id', Doc.page, { auth: true, layout: 'bare' });

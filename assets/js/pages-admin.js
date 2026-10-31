@@ -1308,6 +1308,19 @@ const Admin = (() => {
       </div>`;
   }
 
+  // แถวแก้ไขคำถามที่พบบ่อย 1 ข้อ
+  const faqRow = (x = { q: '', a: '' }) => `
+    <li class="faq-row">
+      <div class="faq-fields">
+        <input class="input" data-fq maxlength="200" placeholder="คำถาม เช่น แจ้งผิด ยกเลิกได้ไหม" value="${esc(x.q)}" aria-label="คำถาม">
+        <textarea class="textarea" data-fa maxlength="1000" placeholder="คำตอบ" aria-label="คำตอบ">${esc(x.a)}</textarea>
+      </div>
+      <div class="faq-tools">
+        <button type="button" class="icon-btn sm" data-fup aria-label="เลื่อนขึ้น" title="เลื่อนขึ้น">${icon('chev', 'up')}</button>
+        <button type="button" class="icon-btn sm" data-fdown aria-label="เลื่อนลง" title="เลื่อนลง">${icon('chev')}</button>
+        <button type="button" class="icon-btn sm danger" data-fdel aria-label="ลบคำถามนี้" title="ลบ">${icon('trash')}</button>
+      </div>
+    </li>`;
   function settings() {
     return {
       title: 'ตั้งค่าระบบ', subtitle: 'ข้อมูลหน่วยงาน ผู้ลงนาม แบบฟอร์มเอกสาร และการแจ้งเตือน',
@@ -1372,6 +1385,15 @@ const Admin = (() => {
               <div class="ro-preview">${icon('eye')}<span>ข้อความที่ครูเห็น: <b id="roPreview">แจ้งซ้ำได้ภายใน ${esc(Store.reopenText())}</b></span></div>
               <p class="hint">ใบที่มีหลายหมวด ใช้จำนวนวันที่มากที่สุดของหมวดในใบ · เปลี่ยนแล้วมีผลกับใบที่ซ่อมเสร็จไปแล้วด้วย (นับใหม่จากวันที่ซ่อมเสร็จ) · แจ้งซ้ำได้ใบละ 1 ครั้ง</p>
             </div></section>
+          <section class="card span-12"><div class="card-head"><h3>${icon('help')}คำถามที่พบบ่อย (หน้าคู่มือ)</h3><span class="small faint">แสดงท้ายหน้า "คู่มือ" · กด "บันทึกการตั้งค่า" ด้านบนเมื่อแก้เสร็จ</span></div>
+            <div class="card-body stack">
+              <ol class="faq-edit" id="faqList">${Store.faq(true).map(faqRow).join('')}</ol>
+              <div class="row" style="gap:10px;flex-wrap:wrap">
+                <button type="button" class="btn btn-outline btn-sm" id="faqAdd">${icon('plus')} เพิ่มคำถาม</button>
+                <a class="btn btn-ghost-dark btn-sm" href="#/guide" target="_blank" rel="noopener">${icon('eye')} ดูหน้าคู่มือ</a>
+              </div>
+              <p class="hint">ใส่คำว่า <b>{วันแจ้งซ้ำ}</b> ในคำตอบ ระบบจะแทนด้วยระยะเวลาแจ้งซ่อมซ้ำที่ตั้งไว้ (เช่น "7 วัน (เครื่องปรับอากาศ 30 วัน)") · <b>{โดเมน}</b> = อีเมลโรงเรียน (${esc(s.domain)}) · ปุ่มลูกศรใช้เลื่อนลำดับ</p>
+            </div></section>
           <section class="card span-12"><div class="card-head"><h3>${icon('bell')}แถบเหตุฉุกเฉิน และประกาศหน้าเว็บ</h3><span class="small faint">ทุกคนเห็นได้ ไม่ต้องเข้าสู่ระบบ · กด "บันทึกการตั้งค่า" ด้านบนเมื่อแก้เสร็จ</span></div>
             <div class="card-body grid-2 banner-edit">
               <div class="stack" style="gap:12px">
@@ -1418,16 +1440,27 @@ const Admin = (() => {
             <button type="button" class="btn btn-outline btn-sm" id="resetDemo">${icon('refresh')} รีเซ็ตข้อมูลทดลอง</button></div></section>`}`;
         const lines = id => $('#' + id, root).value.split('\n').map(x => x.trim()).filter(Boolean);
         const val = id => $('#' + id, root).value.trim();
+        // คำถามที่พบบ่อย: เพิ่ม / ลบ / เลื่อนลำดับ
+        const fl = $('#faqList', root);
+        $('#faqAdd', root).addEventListener('click', () => { fl.insertAdjacentHTML('beforeend', faqRow()); fl.lastElementChild.querySelector('[data-fq]').focus(); });
+        fl.addEventListener('click', e => {
+          const li = e.target.closest('.faq-row'); if (!li) return;
+          if (e.target.closest('[data-fdel]')) li.remove();
+          else if (e.target.closest('[data-fup]') && li.previousElementSibling) li.previousElementSibling.before(li);
+          else if (e.target.closest('[data-fdown]') && li.nextElementSibling) li.nextElementSibling.after(li);
+        });
+        const faqInputs = () => $$('.faq-row', fl).map(li => ({ q: li.querySelector('[data-fq]').value.trim(), a: li.querySelector('[data-fa]').value.trim() })).filter(x => x.q || x.a);
         // ระยะเวลาแจ้งซ่อมซ้ำแยกหมวด: อ่านค่าจากช่อง (1–365 วัน) + ดูข้อความที่ครูเห็นทันทีขณะพิมพ์
         const reopenInputs = () => Object.fromEntries($$('[data-ro]', root).map(i => [i.dataset.ro, Math.min(365, Math.max(1, Math.round(+i.value) || 7))]));
         $$('[data-ro]', root).forEach(i => i.addEventListener('input', () => { $('#roPreview', root).textContent = `แจ้งซ้ำได้ภายใน ${Store.reopenText(reopenInputs())}`; }));
         $('#saveAll').addEventListener('click', () => {
           if (!val('domain').includes('.')) return UI.toast('โดเมนอีเมลไม่ถูกต้อง', 'error');
           if ($$('[data-ro]', root).some(i => !(+i.value >= 1 && +i.value <= 365))) return UI.toast('จำนวนวันแจ้งซ่อมซ้ำต้องอยู่ระหว่าง 1–365 วัน', 'error');
+          if (faqInputs().some(x => !x.q || !x.a)) return UI.toast('คำถามที่พบบ่อย: กรอกทั้งคำถามและคำตอบให้ครบทุกข้อ (หรือกดลบข้อที่ไม่ใช้)', 'error');
           if (val('bnNoFrom') && val('bnNoTo') && val('bnNoTo') < val('bnNoFrom')) return UI.toast('วันที่สิ้นสุดประกาศต้องไม่ก่อนวันที่เริ่ม', 'error');
           Store.saveSettings({
             schoolName: val('schoolName'), division: val('division'), unit: val('unit'), addressee: val('addressee'), domain: val('domain').replace(/^@/, ''),
-            docPrefix: val('docPrefix'), showRefOnDoc: $('#showRef', root).checked, staleDays: Math.max(1, +val('staleDays') || 7), reopenByCat: reopenInputs(),
+            docPrefix: val('docPrefix'), showRefOnDoc: $('#showRef', root).checked, staleDays: Math.max(1, +val('staleDays') || 7), reopenByCat: reopenInputs(), faq: faqInputs(),
             signatories: Object.fromEntries(Object.keys(s.signatories).map(k => [k, { title: val('sigt_' + k), email: val('sigu_' + k) }])),
             forms: Object.fromEntries(Store.FORM_KEYS.map(k => [k, { ...s.forms[k], enabled: $('#en_' + k, root).checked, name: val('fn_' + k), desc: val('fd_' + k), subject: val('fs_' + k), notes: lines('fx_' + k) }])),
             notify: { ...s.notify, email: $('#nEmail', root).checked, inApp: $('#nApp', root).checked },
