@@ -34,7 +34,7 @@ const App = (() => {
     const forms = Store.FORM_KEYS.filter(k => s.forms[k].enabled);
     const active = p => path.startsWith(p) ? 'is-active' : '';
     return `
-      <header class="nav ${onHero ? 'on-hero' : ''}" id="nav">
+      <header class="nav ${onHero ? 'on-hero' : ''} ${Store.isBackOffice(me) ? 'is-staff' : ''}" id="nav">
         <div class="container nav-inner">
           <a href="#/" class="brand" aria-label="หน้าแรก">
             <img src="images/logo.png" alt="ตรา${esc(s.schoolName)}" width="200" height="302">

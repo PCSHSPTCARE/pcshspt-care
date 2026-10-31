@@ -300,11 +300,12 @@ p { margin: 0; }
 .brand-title { font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; color: var(--navy-800); white-space: nowrap; }
 .brand-sub { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
 .brand-sub .bs-long { display: none; }
+/* ชื่อภาษาอังกฤษแบบยาวใต้ชื่อโรงเรียน: แสดงเฉพาะผู้ใช้ทั่วไป (เมนูน้อย) · ผู้ใช้หลังบ้านเมนูครบ 6 รายการ ใช้แบบสั้นเพื่อไม่ให้แถบแน่น */
 @media (min-width: 1360px) {
-  .brand-sub .bs-long { display: inline; }
-  .brand-sub .bs-short { display: none; }
+  .nav:not(.is-staff) .brand-sub .bs-long { display: inline; }
+  .nav:not(.is-staff) .brand-sub .bs-short { display: none; }
   .nav .brand-title { font-size: 1.12rem; }
-  .nav .brand-sub { margin-top: 2px; font-size: .6rem; letter-spacing: .1em; }
+  .nav:not(.is-staff) .brand-sub { margin-top: 2px; font-size: .6rem; letter-spacing: .1em; }
 }
 .menu { display: flex; align-items: center; gap: 2px; margin: 0 0 0 auto; list-style: none; padding: 0; }
 .menu > li { position: relative; }
@@ -319,6 +320,9 @@ p { margin: 0; }
   content: ""; position: absolute; left: 50%; bottom: 2px; width: 18px; height: 3px; transform: translateX(-50%);
   border-radius: 3px; background: var(--orange-500);
 }
+.menu-link { white-space: nowrap; }
+.menu { flex-shrink: 0; }
+.brand { flex-shrink: 1; }
 .menu-link .chev { font-size: .9em; transition: transform .2s; }
 .dropdown[data-open="true"] > .menu-link .chev { transform: rotate(180deg); }
 .dropdown-panel {
@@ -2175,3 +2179,14 @@ p { text-wrap: pretty; }
 .gm-row small { overflow-wrap: anywhere; }
 .gm-tip b { white-space: nowrap; }
 @media (max-width: 640px) { .faq-fields .textarea { min-height: 120px; } }
+
+/* แถบเมนูบนจอคอมที่ยังไม่กว้างมาก (1181–1339px): กระชับช่องไฟ ซ่อนชื่อผู้ใช้ (เหลือรูปอักษรย่อ) เพื่อให้เมนูทุกรายการอยู่บรรทัดเดียว */
+@media (min-width: 1181px) and (max-width: 1339px) {
+  .nav-inner { gap: 12px; }
+  .menu { gap: 0; }
+  .menu-link { padding: 10px 10px; font-size: .92rem; gap: 4px; }
+  .nav .brand-title { font-size: .98rem; }
+  .brand img { height: 46px; }
+  .nav .user-btn .u-name { display: none; }
+  .nav .user-btn { padding-right: 8px; }
+}
