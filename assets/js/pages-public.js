@@ -59,7 +59,7 @@ const Pages = (() => {
           <a class="svc rose svc-reopen reveal" href="#/my?reopen=1" style="transition-delay:${forms.length * 80}ms">
             <div class="svc-top"><span class="svc-icon">${icon('refresh')}</span><span class="svc-no">0${forms.length + 1}</span></div>
             <div class="svc-text"><h3>แจ้งซ่อมซ้ำ <small>(ซ่อมแล้วไม่หาย)</small></h3>
-              <p>งานที่ซ่อมเสร็จแล้วแต่ยังใช้ไม่ได้ แจ้งซ้ำได้ภายใน ${s.reopenDays || 7} วันหลังซ่อมเสร็จ</p></div>
+              <p>งานที่ซ่อมเสร็จแล้วแต่ยังใช้ไม่ได้ แจ้งซ้ำได้ภายใน ${esc(Store.reopenText())}</p></div>
             <span class="svc-more"><span class="sm-l">เลือกงานที่จะแจ้งซ้ำ</span> ${icon('arrow')}</span>
           </a>
         </div>
@@ -1091,7 +1091,7 @@ const Pages = (() => {
   // ═══════════ งานที่ฉันแจ้ง ═══════════
   function myTickets(params = {}) {
     const state = { status: 'all', q: '' };
-    const days = S().reopenDays || 7;
+    const days = Store.reopenText();   // เช่น "7 วัน (เครื่องปรับอากาศ 30 วัน)" ตามที่ตั้งในหลังบ้าน
     return {
       title: 'งานที่ฉันแจ้ง',
       html: `
@@ -1103,7 +1103,7 @@ const Pages = (() => {
           <div><strong>แจ้งซ่อมซ้ำ: ซ่อมแล้วยังใช้ไม่ได้</strong>
             <ol><li>เลือกใบแจ้งซ่อมที่ซ่อมเสร็จแล้วแต่ยังใช้งานไม่ได้ จากรายการด้านล่าง</li>
               <li>กดปุ่ม <b>"แจ้งซ่อมซ้ำ"</b> ในหน้าใบนั้น แล้วระบุอาการที่ยังพบ (แนบรูปได้)</li></ol>
-            <p>แจ้งได้ภายใน ${days} วันหลังซ่อมเสร็จ ระบบจะเปิดใบใหม่ต่อจากใบเดิมและแจ้งเจ้าหน้าที่ทันที</p></div>
+            <p>แจ้งได้ภายใน ${esc(days)} หลังซ่อมเสร็จ ระบบจะเปิดใบใหม่ต่อจากใบเดิมและแจ้งเจ้าหน้าที่ทันที</p></div>
         </div>` : ''}
         <div class="kpi-row" id="myKpi"></div>
         <div class="card toolbar">
@@ -1173,7 +1173,7 @@ const Pages = (() => {
                 ${Store.can(me, 'reopen', t) ? `<section class="card reopen-card" id="reopenCard">
                   <div class="card-head"><h3>${icon('alert')}ซ่อมแล้วยังใช้ไม่ได้?</h3></div>
                   <div class="card-body stack">
-                    <p class="small muted">แจ้งซ่อมซ้ำได้ถึง ${UI.dateLong(Store.reopenDeadline(t).toISOString())} ระบบจะเปิดใบแจ้งซ่อมใหม่ต่อจากใบนี้และแจ้งเจ้าหน้าที่ให้อัตโนมัติ</p>
+                    <p class="small muted">แจ้งซ่อมซ้ำได้ถึง <b>${UI.dateLong(Store.reopenDeadline(t).toISOString())}</b> (ภายใน ${Store.reopenDaysOf(t)} วันหลังซ่อมเสร็จ) ระบบจะเปิดใบแจ้งซ่อมใหม่ต่อจากใบนี้และแจ้งเจ้าหน้าที่ให้อัตโนมัติ</p>
                     <button class="btn btn-rose btn-block" data-reopen>${icon('refresh')} แจ้งซ่อมซ้ำ</button>
                   </div>
                 </section>` : ''}

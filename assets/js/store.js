@@ -17,7 +17,7 @@ const Store = (() => {
   const STEP2_KEY = 'deputy_general';
   // สถานะที่กดเปลี่ยนได้ (รออนุมัติเป็นสถานะเริ่มต้นเท่านั้น)
   const ACTIONS = ['in_progress', 'review', 'done', 'cannot_fix'];
-  const CONFIG_VERSION = 7;
+  const CONFIG_VERSION = 8;
   // ห้องน้ำหอพัก (ตั้งที่แต่ละล็อค/ชั้น: zone.bath)
   //   { mode: 'shared', areas } = ห้องน้ำรวมของล็อค/ชั้นนั้น
   //   { mode: 'rooms', areas } = ห้องน้ำในตัวทุกห้องเหมือนกัน
@@ -223,7 +223,8 @@ const Store = (() => {
           subject: 'ขออนุญาตแจ้งซ่อมและบำรุงรักษา ในหอพักนักเรียน',
           notes: ['ให้ผู้ขออนุญาตลงนามและกรอกข้อมูลตามแบบฟอร์มให้ละเอียดชัดเจน นำส่งที่ฝ่ายกิจการนักเรียนและหอพัก', 'ติดต่อประสานงาน นายพิทักษ์  แซ่โง้ว'] }
       },
-      reopenDays: 7,
+      reopenDays: 7,                  // ค่ากลาง (หมวดที่ยังไม่ได้ตั้งวัน)
+      reopenByCat: { ac: 30 },        // แจ้งซ่อมซ้ำได้ภายใน (วัน) แยกตามหมวด
       configVersion: CONFIG_VERSION,
       banners: seedBanners(),
       notify: { email: true, inApp: true, line: false },
@@ -251,6 +252,7 @@ const Store = (() => {
   // v5: แจ้ง "ซ่อมแล้วไม่หาย" ได้ภายใน 7 วัน (เปลี่ยนเฉพาะที่ยังเป็นค่าเดิม 14 วัน)
   // v6: ห้องเรียน ม.1–ม.6 และ จ.ภ. สุพรรณบุรี มีแอร์ 2 ตัว (acUnits) ให้ผู้แจ้งเลือกตัว
   // v7: ห้องน้ำหอพัก — ห้องน้ำรวมประจำล็อค/ชั้น · บัวอุบล ห้องพักครู และ G01–G03 มีห้องน้ำในตัว
+  // v8: ระยะเวลาแจ้งซ่อมซ้ำแยกตามหมวด — ทุกหมวดเท่าค่าเดิม (7 วัน) ยกเว้นเครื่องปรับอากาศ 30 วัน
   function upgradeConfig(d) {
     const v = d.settings.configVersion || 1;
     if (v >= CONFIG_VERSION) return false;
@@ -263,6 +265,10 @@ const Store = (() => {
     if (v < 5 && (!d.settings.reopenDays || d.settings.reopenDays === 14)) d.settings.reopenDays = 7;
     if (v < 6) d.locations.forEach(l => { if (l.type === 'building' && AC_UNIT_GROUPS.includes(l.group) && l.acUnits === undefined) l.acUnits = true; });
     if (v < 7) d.locations.forEach(l => { if (l.type === 'dorm') applyBathDefaults(l); });
+    if (v < 8) {
+      const base = d.settings.reopenDays || 7;
+      d.settings.reopenByCat = { ...Object.fromEntries(d.categories.map(c => [c.id, c.id === 'ac' ? 30 : base])), ...(d.settings.reopenByCat || {}) };
+    }
     d.settings.configVersion = CONFIG_VERSION;
     return true;
   }
@@ -690,11 +696,26 @@ const Store = (() => {
     // ผู้แจ้งแก้ไข/ยกเลิกได้เฉพาะตอนยังรออนุมัติ
     if (action === 'edit' || action === 'cancel') return mine && t.status === 'pending';
     // แจ้ง "ยังไม่หาย" ได้ภายในจำนวนวันที่กำหนดหลังเสร็จสิ้น และแจ้งได้ครั้งเดียวต่อใบ
-    if (action === 'reopen') return mine && t.status === 'done' && !t.reopenedBy &&
-      (Date.now() - new Date(t.completion?.at || 0)) / 864e5 <= (db.settings.reopenDays || 7);
+    if (action === 'reopen') return mine && t.status === 'done' && !t.reopenedBy && Date.now() <= deadline(t).getTime();
     return false;
   }
-  const deadline = t => new Date(new Date(t.completion?.at || 0).getTime() + (db.settings.reopenDays || 7) * 864e5);
+  // ── แจ้งซ่อมซ้ำ: จำนวนวันแยกตามหมวด (settings.reopenByCat) · หมวดที่ยังไม่ได้ตั้ง = ค่ากลาง reopenDays ──
+  const reopenOfCat = (s, catId) => Math.max(1, Math.round(+(s.reopenByCat || {})[catId] || s.reopenDays || 7));
+  // ใบที่มีหลายหมวด: ใช้จำนวนวันที่มากที่สุดของหมวดในใบ
+  const reopenDaysOf = t => Math.max(...(t?.items?.length ? t.items.map(i => reopenOfCat(db.settings, i.catId)) : [reopenOfCat(db.settings, '')]));
+  const deadline = t => new Date(new Date(t.completion?.at || 0).getTime() + reopenDaysOf(t) * 864e5);
+  // ข้อความสรุป เช่น "7 วัน (เครื่องปรับอากาศ 30 วัน)" · วันหลัก = จำนวนวันที่หมวดส่วนใหญ่ใช้ · byCat ใส่เพื่อดูตัวอย่างก่อนบันทึก
+  function reopenText(byCat) {
+    const s = byCat ? { ...db.settings, reopenByCat: byCat } : db.settings;
+    const cats = db.categories.filter(c => c.active !== false);
+    const d = n => `${n}\u00a0วัน`;   // ตัวเลขกับ "วัน" ไม่แยกบรรทัด
+    if (!cats.length) return d(reopenOfCat(s, ''));
+    const groups = new Map();
+    cats.forEach(c => { const n = reopenOfCat(s, c.id); groups.set(n, [...(groups.get(n) || []), c.name]); });
+    const main = [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0] - b[0])[0][0];
+    const others = [...groups.entries()].filter(([n]) => n !== main).sort((a, b) => b[0] - a[0]).map(([n, names]) => `${names.join(', ')} ${d(n)}`);
+    return `${d(main)}${others.length ? ` (${others.join(' · ')})` : ''}`;
+  }
   // คำขอที่ยังเปิดอยู่ในสถานที่เดียวกันและมีรายการซ้ำกัน
   function duplicatesOf(input, exceptId) {
     const room = s => String(s || '').replace(/\s|ห้อง/g, '').toLowerCase();
@@ -756,7 +777,7 @@ const Store = (() => {
     // รูปที่เก็บใน Drive อ้างอิงเป็น "drive:<id>" · ใช้ <img ${Store.img(src)}> แล้วระบบโหลดรูปให้เอง
     img: src => CLOUD ? Cloud.imgAttr(src) : `src="${src}"`,
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    fullName, hasRole, isStaff, isBackOffice, can, canSee, formsOf, actionsOf, reopenDeadline: deadline,
+    fullName, hasRole, isStaff, isBackOffice, can, canSee, formsOf, actionsOf, reopenDeadline: deadline, reopenDaysOf, reopenText, reopenOfCat: catId => reopenOfCat(db.settings, catId),
     duplicates: (input, exceptId) => duplicatesOf(input, exceptId),
     step1Key: t => STEP1_KEY[t.formType],
     signer: key => signerOf(db, key),
@@ -1103,7 +1124,7 @@ const Store = (() => {
     // onStep: 0 อัปโหลดรูป · 1 เปิดใบแจ้งซ่อมใหม่ · 2 แจ้งเตือนเจ้าหน้าที่
     async reopenTicket(id, detail, photos = [], onStep = () => {}) {
       const me = currentUser();
-      if (!can(me, 'reopen', db.tickets.find(t => t.id === id))) throw new Error(`แจ้งซ่อมซ้ำได้ภายใน ${db.settings.reopenDays || 7} วันหลังซ่อมเสร็จ`);
+      if (!can(me, 'reopen', db.tickets.find(t => t.id === id))) { const t0 = db.tickets.find(t => t.id === id); throw new Error(`แจ้งซ่อมซ้ำได้ภายใน ${t0 ? reopenDaysOf(t0) : reopenText()} วันหลังซ่อมเสร็จ`); }
       if (!String(detail || '').trim()) throw new Error('กรุณาระบุอาการที่ยังพบ');
       onStep(0);
       if (CLOUD) { photos = await Cloud.upload(photos); onStep(1); await Cloud.reserve(1); } else onStep(1);

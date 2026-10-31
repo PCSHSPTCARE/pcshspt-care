@@ -1354,13 +1354,24 @@ const Admin = (() => {
           <section class="card span-4"><div class="card-head"><h3>${icon('clock')}งานค้าง</h3></div><div class="card-body stack">
             <div class="row" style="gap:12px">ถือว่า "ค้างนาน" เมื่อยังไม่ปิดงานเกิน<input class="input sm" type="number" min="1" id="staleDays" value="${s.staleDays || 7}" style="width:90px">วัน</div>
             <p class="hint">ใช้แสดงป้าย "ค้างนาน" ในรายการงานและนับในสถิติ</p>
-            <div class="row" style="gap:12px">ครูแจ้งซ่อมซ้ำ (ซ่อมแล้วยังใช้ไม่ได้) ได้ภายใน<input class="input sm" type="number" min="1" id="reopenDays" value="${s.reopenDays || 7}" style="width:90px">วันหลังเสร็จสิ้น</div>
           </div></section>
           <section class="card span-4"><div class="card-head"><h3>${icon('bell')}การแจ้งเตือน</h3></div><div class="card-body stack">
             <label class="checkbox"><input type="checkbox" id="nEmail" ${s.notify.email ? 'checked' : ''}>อีเมล (เจ้าหน้าที่เมื่อมีงานใหม่ · ครูเมื่อสถานะเปลี่ยน)</label>
             <label class="checkbox"><input type="checkbox" id="nApp" ${s.notify.inApp ? 'checked' : ''}>กระดิ่งแจ้งเตือนในเว็บ</label>
             <label class="checkbox" style="opacity:.55"><input type="checkbox" disabled>LINE Official Account (เพิ่มในระยะถัดไป)</label>
           </div></section>
+          <section class="card span-12"><div class="card-head"><h3>${icon('refresh')}ระยะเวลาแจ้งซ่อมซ้ำ (ซ่อมแล้วยังใช้ไม่ได้)</h3><span class="small faint">นับจากวันที่ซ่อมเสร็จ · กด "บันทึกการตั้งค่า" ด้านบนเมื่อแก้เสร็จ</span></div>
+            <div class="card-body stack">
+              <div class="ro-grid">
+                ${Store.allCategories().map(c => `<label class="ro-row ${c.active === false ? 'is-off' : ''}" for="ro_${esc(c.id)}">
+                  <span class="ro-ic">${icon(c.icon)}</span>
+                  <span class="ro-name">${esc(c.name)}${c.active === false ? '<small>ปิดใช้งาน</small>' : ''}</span>
+                  <input class="input sm" type="number" min="1" max="365" step="1" inputmode="numeric" id="ro_${esc(c.id)}" data-ro="${esc(c.id)}" value="${Store.reopenOfCat(c.id)}" aria-label="จำนวนวันแจ้งซ่อมซ้ำ หมวด${esc(c.name)}">
+                  <span class="ro-unit">วัน</span></label>`).join('')}
+              </div>
+              <div class="ro-preview">${icon('eye')}<span>ข้อความที่ครูเห็น: <b id="roPreview">แจ้งซ้ำได้ภายใน ${esc(Store.reopenText())}</b></span></div>
+              <p class="hint">ใบที่มีหลายหมวด ใช้จำนวนวันที่มากที่สุดของหมวดในใบ · เปลี่ยนแล้วมีผลกับใบที่ซ่อมเสร็จไปแล้วด้วย (นับใหม่จากวันที่ซ่อมเสร็จ) · แจ้งซ้ำได้ใบละ 1 ครั้ง</p>
+            </div></section>
           <section class="card span-12"><div class="card-head"><h3>${icon('bell')}แถบเหตุฉุกเฉิน และประกาศหน้าเว็บ</h3><span class="small faint">ทุกคนเห็นได้ ไม่ต้องเข้าสู่ระบบ · กด "บันทึกการตั้งค่า" ด้านบนเมื่อแก้เสร็จ</span></div>
             <div class="card-body grid-2 banner-edit">
               <div class="stack" style="gap:12px">
@@ -1407,12 +1418,16 @@ const Admin = (() => {
             <button type="button" class="btn btn-outline btn-sm" id="resetDemo">${icon('refresh')} รีเซ็ตข้อมูลทดลอง</button></div></section>`}`;
         const lines = id => $('#' + id, root).value.split('\n').map(x => x.trim()).filter(Boolean);
         const val = id => $('#' + id, root).value.trim();
+        // ระยะเวลาแจ้งซ่อมซ้ำแยกหมวด: อ่านค่าจากช่อง (1–365 วัน) + ดูข้อความที่ครูเห็นทันทีขณะพิมพ์
+        const reopenInputs = () => Object.fromEntries($$('[data-ro]', root).map(i => [i.dataset.ro, Math.min(365, Math.max(1, Math.round(+i.value) || 7))]));
+        $$('[data-ro]', root).forEach(i => i.addEventListener('input', () => { $('#roPreview', root).textContent = `แจ้งซ้ำได้ภายใน ${Store.reopenText(reopenInputs())}`; }));
         $('#saveAll').addEventListener('click', () => {
           if (!val('domain').includes('.')) return UI.toast('โดเมนอีเมลไม่ถูกต้อง', 'error');
+          if ($$('[data-ro]', root).some(i => !(+i.value >= 1 && +i.value <= 365))) return UI.toast('จำนวนวันแจ้งซ่อมซ้ำต้องอยู่ระหว่าง 1–365 วัน', 'error');
           if (val('bnNoFrom') && val('bnNoTo') && val('bnNoTo') < val('bnNoFrom')) return UI.toast('วันที่สิ้นสุดประกาศต้องไม่ก่อนวันที่เริ่ม', 'error');
           Store.saveSettings({
             schoolName: val('schoolName'), division: val('division'), unit: val('unit'), addressee: val('addressee'), domain: val('domain').replace(/^@/, ''),
-            docPrefix: val('docPrefix'), showRefOnDoc: $('#showRef', root).checked, staleDays: Math.max(1, +val('staleDays') || 7), reopenDays: Math.max(1, +val('reopenDays') || 7),
+            docPrefix: val('docPrefix'), showRefOnDoc: $('#showRef', root).checked, staleDays: Math.max(1, +val('staleDays') || 7), reopenByCat: reopenInputs(),
             signatories: Object.fromEntries(Object.keys(s.signatories).map(k => [k, { title: val('sigt_' + k), email: val('sigu_' + k) }])),
             forms: Object.fromEntries(Store.FORM_KEYS.map(k => [k, { ...s.forms[k], enabled: $('#en_' + k, root).checked, name: val('fn_' + k), desc: val('fd_' + k), subject: val('fs_' + k), notes: lines('fx_' + k) }])),
             notify: { ...s.notify, email: $('#nEmail', root).checked, inApp: $('#nApp', root).checked },

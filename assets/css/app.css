@@ -1,4 +1,4 @@
-/* ═══════════════════════════════════════════════════════════
+﻿/* ═══════════════════════════════════════════════════════════
    ระบบแจ้งซ่อมอาคารและสถานที่ — สไตล์หลัก
    สีส้ม (หลัก) · น้ำเงิน (รอง) · ทอง (เส้นตกแต่ง) จากตราโรงเรียน
    ═══════════════════════════════════════════════════════════ */
@@ -2027,3 +2027,19 @@ p { text-wrap: pretty; }
 .hb-side .row { flex-wrap: wrap; }
 @media (max-width: 900px) { .health { grid-template-columns: 1fr; gap: 18px; } }
 @media (max-width: 640px) { .hb-sub { display: none; } }
+
+/* ═══ ระยะเวลาแจ้งซ่อมซ้ำแยกหมวด (ตั้งค่าระบบ) ═══ */
+.ro-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 10px; }
+.ro-row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; cursor: text; }
+.ro-row:focus-within { border-color: var(--orange-400); box-shadow: 0 0 0 3px var(--orange-100); }
+.ro-row.is-off { opacity: .6; }
+.ro-ic { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--orange-50); color: var(--orange-600); }
+.ro-ic svg { width: 18px; height: 18px; }
+.ro-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; color: var(--ink); line-height: 1.35; }
+.ro-name small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.ro-row .input { width: 72px; flex: none; text-align: center; }
+.ro-unit { flex: none; font-size: 13.5px; color: var(--muted); }
+.ro-preview { display: flex; align-items: flex-start; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--orange-50); font-size: 14px; color: var(--ink-2); }
+.ro-preview svg { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--orange-600); }
+.ro-preview b { color: var(--ink); }
+@media (max-width: 900px) { .card-head:has(> span.small.faint) { flex-wrap: wrap; row-gap: 4px; } .card-head > span.small.faint:not(.hb-sub) { flex-basis: 100%; } }
