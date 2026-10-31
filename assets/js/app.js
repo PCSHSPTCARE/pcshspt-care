@@ -258,13 +258,14 @@ const App = (() => {
     maybeRepairSignatures();
   });
 
-  // แอดมินเปิดเว็บ: เติมลายเซ็นผู้ลงนามที่ขาดในใบเดิม (เช่น ผู้อนุมัติอัปโหลดลายเซ็นทีหลัง) · เขียนเฉพาะเมื่อมีใบที่ต้องแก้
+  // แอดมินเปิดเว็บ: ดูแลลายเซ็นอัตโนมัติ — ตัดขอบ/ย่อลายเซ็นที่ยังไม่ได้จัดการ เปลี่ยนในใบเดิมทุกใบเมื่อเจ้าของเปลี่ยนลายเซ็น
+  // และเติมช่องลงนามที่ยังว่าง · เขียนเฉพาะเมื่อมีงานต้องทำ
   let repairTimer = null;
   function maybeRepairSignatures() {
     clearTimeout(repairTimer);
-    repairTimer = setTimeout(() => {
+    repairTimer = setTimeout(async () => {
       if (!Store.hasRole(Store.me(), 'admin')) return;
-      try { const n = Store.repairSignatures(); if (n) console.info(`เติมลายเซ็นผู้ลงนามในใบเดิม ${n} ใบ`); } catch (e) { console.error(e); }
+      try { const n = await Store.maintainSignatures(UI.shrinkSignature); if (n) console.info(`ปรับลายเซ็นในใบแจ้งซ่อม ${n} ใบ`); } catch (e) { console.error(e); }
     }, 2500);
   }
 

@@ -1239,12 +1239,92 @@ const Admin = (() => {
   }
 
   // ═══════════ ตั้งค่าระบบ ═══════════
+  // ═══════════ สุขภาพระบบ: ประเมินการใช้โควตาฟรีของ Firebase จากข้อมูลที่โหลดอยู่ (ตัวเลขจริงดูที่ Firebase Console) ═══════════
+  const QUOTA = { storage: 1024 ** 3, reads: 50000, egress: 10 * 1024 ** 3 };
+  const HEALTH_KEY = 'pcshs-health-teachers';
+  const fmtBytes = b => b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(2)} GB` : b >= 1024 ** 2 ? `${(b / 1024 ** 2).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`;
+  function healthHTML() {
+    let teachers = 60;
+    try { teachers = Math.max(0, +localStorage.getItem(HEALTH_KEY) || 60); } catch (e) { /* ignore */ }
+    const size = o => JSON.stringify(o).length;
+    const all = Store.tickets().filter(t => !t._board);
+    const avg = all.length ? all.reduce((a, t) => a + size(t), 0) / all.length : 6000;
+    // ข้อมูลกระดาน (ไม่มีลายเซ็น/ชื่อผู้แจ้ง) ที่ครูทุกคนโหลด
+    const boardAvg = all.length ? all.reduce((a, t) => a + size({ id: t.id, status: t.status, location: t.location, items: (t.items || []).map(i => ({ name: i.name, detail: i.detail })), history: (t.history || []).map(h => ({ at: h.at, action: h.action })) }), 0) / all.length : 1500;
+    const y = String(new Date().getFullYear() + 543);
+    const ofYear = all.filter(t => t.id.split('-')[1] === y);
+    const totalYear = Math.max(ofYear.length, ...ofYear.map(t => +t.id.split('-')[2] || 0), 0); // เลขที่ใบสูงสุด ≈ ใบทั้งปี
+    const DAY = 864e5, now = Date.now();
+    const within = d => all.filter(t => now - new Date(t.updatedAt || t.createdAt) < d * DAY).length;
+    const open = all.filter(t => UI.OPEN.includes(t.status)).length;
+    const users = Store.users().filter(u => u.active);
+    const admins = users.filter(u => u.roles.includes('admin')).length;
+    const approvers = users.filter(u => u.roles.includes('approver') && !u.roles.includes('admin')).length;
+    const sigs = users.filter(u => u.signature);
+    const sigAvg = sigs.length ? sigs.reduce((a, u) => a + u.signature.length, 0) / sigs.length : 0;
+    const sigPending = sigs.filter(u => Store.signaturePending(u)).length;
+    // ต่อการเปิดเว็บ 1 ครั้ง (นับใหม่เมื่อปิดเว็บเกิน ~30 นาที) · ผู้อนุมัติ/แอดมิน ≈ 1.5 ครั้งต่อวัน
+    const board = open + within(45);
+    const per = {
+      teacher: { reads: 15 + board + 3, bytes: board * boardAvg + 3 * avg },
+      admin: { reads: open + within(120) + board, bytes: (open + within(120)) * avg + board * boardAvg },
+      approver: { reads: totalYear + board, bytes: totalYear * avg + board * boardAvg }
+    };
+    const day = { teacher: teachers, admin: admins * 1.5, approver: approvers * 1.5 };
+    const readsDay = Object.keys(day).reduce((a, k) => a + day[k] * per[k].reads, 0);
+    const share = Object.fromEntries(Object.keys(day).map(k => [k, day[k] * per[k].bytes * 22]));
+    const egressMonth = Object.values(share).reduce((a, b) => a + b, 0);
+    const storage = totalYear * (avg + boardAvg) * 1.15 + users.reduce((a, u) => a + size(u), 0);
+    const bar = (label, used, quota, txt, note) => {
+      const p = Math.min(100, used / quota * 100), tone = p >= 85 ? 'red' : p >= 60 ? 'orange' : 'green';
+      return `<div class="hb-row"><div class="hb-head"><b>${label}</b><span class="hb-val hb-v-${tone}">${txt} · ${p < 1 ? '<1' : Math.round(p)}%</span></div>
+        <div class="hb-track"><i class="hb-${tone}" style="width:${Math.max(p, 1.5)}%"></i></div><small class="faint">${note}</small></div>`;
+    };
+    const top = Object.entries(share).sort((a, b) => b[1] - a[1])[0];
+    const WHO = { teacher: 'ครูที่เปิดหน้าเว็บ', admin: 'แอดมิน', approver: 'ผู้อนุมัติ (โหลดใบทั้งปีของหมวด)' };
+    const me = Store.usage();
+    return `
+      <div class="card-head"><h3>${icon('activity')}สุขภาพระบบ · โควตาฟรีของ Firebase</h3><span class="small faint hb-sub">ประเมินจากข้อมูลจริงในระบบ · อัปเดตอัตโนมัติ</span></div>
+      <div class="card-body health">
+        <div class="hb-bars">
+          ${bar('พื้นที่ฐานข้อมูล (ทั้งปี)', storage, QUOTA.storage, fmtBytes(storage), `ฟรี 1 GB · ใบแจ้งซ่อมปีนี้ ≈ ${UI.num(totalYear)} ใบ × ${fmtBytes(avg)}`)}
+          ${bar('การอ่านต่อวัน', readsDay, QUOTA.reads, `≈ ${UI.num(Math.round(readsDay))} ครั้ง`, 'ฟรี 50,000 ครั้ง/วัน · เกินแล้วใช้งานไม่ได้จนรอบถัดไป')}
+          ${bar('การดาวน์โหลดต่อเดือน', egressMonth, QUOTA.egress, `≈ ${fmtBytes(egressMonth)}`, `ฟรี 10 GB/เดือน · เกินแล้วฐานข้อมูลถูกปิดถึงสิ้นเดือน · ส่วนใหญ่มาจาก${WHO[top[0]]}`)}
+        </div>
+        <div class="hb-side">
+          <label class="field" style="margin:0"><span class="label">ครูที่เปิดเว็บต่อวัน (ประมาณ)</span>
+            <input class="input sm" type="number" min="0" step="10" id="hTeachers" value="${teachers}"></label>
+          <ul class="hb-facts">
+            <li>ขนาดเฉลี่ยต่อใบ <b>${fmtBytes(avg)}</b> (ใบแจ้งซ่อมที่โหลดอยู่ ${UI.num(all.length)} ใบ)</li>
+            <li>ลายเซ็นเฉลี่ย <b>${fmtBytes(sigAvg)}</b> · มีลายเซ็น ${sigs.length} คน${sigPending ? ` · <span style="color:#B45309">รอระบบตัดขอบ ${sigPending} คน</span>` : ' · ตัดขอบครบแล้ว'}</li>
+            <li>แอดมิน ${admins} คน · ผู้อนุมัติ ${approvers} คน</li>
+            ${me ? `<li>เครื่องนี้วันนี้: อ่าน <b>${UI.num(me.today.reads)}</b> ครั้ง · ดาวน์โหลด <b>${fmtBytes(me.today.bytes)}</b></li>` : '<li class="faint">โหมดทดลอง (ข้อมูลอยู่ในเบราว์เซอร์) ไม่มีโควตา</li>'}
+          </ul>
+          <div class="row" style="gap:8px">
+            <a class="btn btn-outline btn-sm" href="https://console.firebase.google.com/project/pcshs-repair-da0cc/firestore/usage" target="_blank" rel="noopener">${icon('chart')} ตัวเลขจริง (Firebase)</a>
+            <a class="btn btn-ghost-dark btn-sm" href="https://drive.google.com/settings/storage" target="_blank" rel="noopener">${icon('layers')} พื้นที่ Drive</a>
+          </div>
+        </div>
+      </div>`;
+  }
+
   function settings() {
     return {
       title: 'ตั้งค่าระบบ', subtitle: 'ข้อมูลหน่วยงาน ผู้ลงนาม แบบฟอร์มเอกสาร และการแจ้งเตือน',
       actions: `<button class="btn btn-primary btn-sm" id="saveAll">${icon('check')} บันทึกการตั้งค่า</button>`,
-      html: `<form id="sf" class="chart-grid"></form>`,
+      html: `<div class="chart-grid" style="margin-bottom:22px"><section class="card span-12" id="health"></section></div><form id="sf" class="chart-grid"></form>`,
       mount(root) {
+        // สุขภาพระบบ: วาดใหม่เมื่อข้อมูลเปลี่ยน (หน่วงไว้) และทุก 30 วินาที
+        let hTimer = 0;
+        const drawHealth = () => { clearTimeout(hTimer); hTimer = setTimeout(() => { if ($('#health', root) && document.activeElement?.id !== 'hTeachers') $('#health', root).innerHTML = healthHTML(); }, 400); };
+        $('#health', root).innerHTML = healthHTML();
+        $('#health', root).addEventListener('change', e => {
+          if (e.target.id !== 'hTeachers') return;
+          try { localStorage.setItem(HEALTH_KEY, String(Math.max(0, +e.target.value || 0))); } catch (err) { /* ignore */ }
+          e.target.blur(); $('#health', root).innerHTML = healthHTML();
+        });
+        App.onCleanup(Store.subscribe(drawHealth));
+        const hInt = setInterval(drawHealth, 30000); App.onCleanup(() => clearInterval(hInt));
         const s = JSON.parse(JSON.stringify(S()));
         const users = Store.users().filter(u => u.active);
         const f = (id, label, val, extra = '') => `<div class="field"><label for="${id}">${label}</label><input class="input" id="${id}" value="${esc(val)}" ${extra}></div>`;

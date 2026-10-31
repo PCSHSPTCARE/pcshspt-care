@@ -311,6 +311,57 @@ const UI = (() => {
     };
   }
 
+  // ───────── ย่อลายเซ็นก่อนเก็บ ─────────
+  // ลายเซ็นถูกคัดลอกลงทุกใบแจ้งซ่อม (สูงสุด 4 จุดต่อใบ) จึงไม่ควรใหญ่เกินจำเป็น · คงหน้าตาเดิม (สีและเส้นเดิม)
+  // เน้นตัดขอบว่าง · พื้นกระดาษ (รูปที่เคยอัปโหลด) → โปร่งใส · ย่อเฉพาะรูปที่ใหญ่เกิน 600×200 px
+  // ขนาดบน PDF ไม่เปลี่ยน (ยืดเต็มช่องเซ็นสูง 15 มม. เหมือนเดิม) ความละเอียดยังเกินพอสำหรับพิมพ์
+  const SIG_MAX = { w: 600, h: 200 };
+  function shrinkSignature(src) {
+    return new Promise(resolve => {
+      if (!src || !String(src).startsWith('data:image')) return resolve(src);
+      const im = new Image();
+      im.onload = () => {
+        try {
+          const w = im.naturalWidth, h = im.naturalHeight;
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          const ctx = c.getContext('2d', { willReadFrequently: true });
+          ctx.drawImage(im, 0, 0);
+          const img = ctx.getImageData(0, 0, w, h), p = img.data;
+          // พื้นหลังทึบ (ถ่ายรูป/สแกน) หรือโปร่งใส (เซ็นบนจอ)
+          let solid = 0, n = 0;
+          for (let i = 3; i < p.length; i += 64) { n++; if (p[i] > 250) solid++; }
+          const opaque = solid > n * .9;
+          const lum = i => .299 * p[i] + .587 * p[i + 1] + .114 * p[i + 2];
+          // พื้นกระดาษ: ความสว่างที่พบมาก (เปอร์เซ็นไทล์ 75) · หมึก = จุดที่เข้มกว่าพื้นชัดเจน (ไม่เหลือเงา/มุมกระดาษ)
+          let bg = 255;
+          if (opaque) { const s = []; for (let i = 0; i < p.length; i += 4 * 7) s.push(lum(i)); s.sort((a, b) => a - b); bg = s[Math.floor(s.length * .75)] || 255; }
+          const inkA = i => opaque ? Math.max(0, Math.min(255, (bg - 30 - lum(i)) * 2.5)) : p[i + 3];
+          let x0 = w, y0 = h, x1 = -1, y1 = -1;
+          for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+            const i = (y * w + x) * 4, a = inkA(i) < 24 ? 0 : inkA(i);
+            p[i + 3] = a; // คงสีเดิมของเส้น เปลี่ยนเฉพาะความโปร่งใส
+            if (a) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+          }
+          if (x1 < 0) return resolve(src); // ไม่มีหมึกเลย
+          ctx.putImageData(img, 0, 0);
+          const pad = 3, sx = Math.max(0, x0 - pad), sy = Math.max(0, y0 - pad);
+          const cw = Math.min(w - sx, x1 - x0 + 1 + pad * 2), ch = Math.min(h - sy, y1 - y0 + 1 + pad * 2);
+          const scale = Math.min(1, SIG_MAX.w / cw, SIG_MAX.h / ch);
+          const o = document.createElement('canvas');
+          o.width = Math.max(1, Math.round(cw * scale)); o.height = Math.max(1, Math.round(ch * scale));
+          const octx = o.getContext('2d');
+          octx.imageSmoothingQuality = 'high';
+          octx.drawImage(c, sx, sy, cw, ch, 0, 0, o.width, o.height);
+          const out = o.toDataURL('image/png');
+          // รูปพื้นกระดาษ → ใช้แบบพื้นใสเสมอ (สะอาดกว่าใน PDF) · เซ็นบนจอ → ใช้แบบที่เล็กกว่า
+          resolve(opaque || out.length < String(src).length ? out : src);
+        } catch (e) { resolve(src); }
+      };
+      im.onerror = () => resolve(src);
+      im.src = src;
+    });
+  }
+
   // ───────── อื่น ๆ ─────────
   const initials = name => {
     const clean = String(name || '').replace(/^(นาย|นางสาว|นาง|ดร\.|ว่าที่ร้อยตรี)/, '').trim();
@@ -384,7 +435,7 @@ const UI = (() => {
   return {
     STATUS, STATUS_KEYS, OPEN, FORM_ICON, TH_MONTHS, TH_MONTHS_SHORT,
     statusBadge, date, dateLong, time, dateTime, ago, money, num, bahtText,
-    toast, modal, confirm, busy, thanks, compressImage, photoInput, lightbox, signaturePad,
+    toast, modal, confirm, busy, thanks, compressImage, photoInput, lightbox, signaturePad, shrinkSignature,
     avatar, initials, locationText, AC_UNITS, itemName, itemsText, detailsText, download, csv, countUp, reveal
   };
 })();

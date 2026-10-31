@@ -13,27 +13,6 @@ const Pages = (() => {
       </section>`;
   }
 
-  // ───────── สถิติรวมที่ใช้หลายหน้า ─────────
-  function summary() {
-    const tickets = Store.tickets();
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const finished = t => t.completion?.at || t.cannot?.at;
-    const recentDone = tickets.filter(t => t.completion && new Date(t.completion.at) > new Date(Date.now() - 90 * 864e5));
-    const avg = recentDone.length ? recentDone.reduce((s, t) => s + (new Date(t.completion.at) - new Date(t.createdAt)), 0) / recentDone.length / 864e5 : null;
-    return {
-      monthName: UI.TH_MONTHS[now.getMonth()],
-      month: tickets.filter(t => new Date(t.createdAt) >= monthStart).length,
-      pending: tickets.filter(t => t.status === 'pending').length,
-      working: tickets.filter(t => t.status === 'in_progress').length,
-      review: tickets.filter(t => t.status === 'review').length,
-      doneMonth: tickets.filter(t => t.status === 'done' && new Date(finished(t)) >= monthStart).length,
-      doneToday: tickets.filter(t => t.status === 'done' && new Date(finished(t)) >= today).length,
-      avgDays: avg
-    };
-  }
-
   // ═══════════ หน้าแรก ═══════════
   function home() {
     const s = S();
@@ -209,30 +188,32 @@ const Pages = (() => {
     return `<span class="ago-l">${full}</span><span class="ago-s">${short}</span>`;
   };
   const MD_NEW_MS = 60 * 6e4;   // ป้าย NEW บนรายการ "แจ้งใหม่" แสดง 1 ชั่วโมง แล้วหายเอง
-  const dayKey = d => { const x = new Date(d); return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`; };
+  // ตัวเลขสถานะ: งานที่ยังไม่ปิด (โหลดอยู่แล้ว) · งานย้อนหลัง ฟีด และ KPI: เอกสารสรุปฉบับเดียว (Store.homeSummary)
   function mdashData() {
-    const ts = Store.tickets().filter(t => t.status !== 'cancelled');
-    const since30 = Date.now() - 30 * 864e5;
+    const sm = Store.homeSummary(), now = Date.now();
+    const open = Store.tickets().filter(t => ['pending', 'in_progress', 'review'].includes(t.status));
+    const within = (o, days) => { const min = Store.dayKey(now - days * 864e5); return Object.entries(o || {}).filter(([k]) => k >= min).map(([, v]) => v); };
+    const done30 = within(sm.done, 30).reduce((a, v) => a + v[0], 0);
+    const d90 = within(sm.done, 90).reduce((a, v) => [a[0] + v[0], a[1] + v[1]], [0, 0]);
     const counts = {
-      pending: ts.filter(t => t.status === 'pending').length,
-      in_progress: ts.filter(t => t.status === 'in_progress').length,
-      review: ts.filter(t => t.status === 'review').length,
-      done: ts.filter(t => t.status === 'done' && new Date(t.completion?.at || t.createdAt) >= since30).length
+      pending: open.filter(t => t.status === 'pending').length,
+      in_progress: open.filter(t => t.status === 'in_progress').length,
+      review: open.filter(t => t.status === 'review').length,
+      done: done30
     };
     const days = Array.from({ length: 14 }, (_, i) => {
       const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (13 - i));
-      return { d, n: ts.filter(t => dayKey(t.createdAt) === dayKey(d)).length };
+      return { d, n: sm.days?.[Store.dayKey(d)] || 0 };
     });
-    const feed = ts.flatMap(t => (t.history || []).map((h, i) => ({ t, h, i })))
-      .filter(x => MD_FEED[x.h.action] || x.h.action.startsWith('แจ้งซ้ำ'))
-      .sort((a, b) => b.h.at.localeCompare(a.h.at)).slice(0, 5)
-      .map(({ t, h, i }) => {
-        const [st, ic, label] = MD_FEED[h.action] || ['pending', 'refresh', 'แจ้งซ้ำ'];
-        const newUntil = h.action === 'แจ้งซ่อม' ? new Date(h.at).getTime() + MD_NEW_MS : 0;
-        return { key: `${t.id}#${i}`, st, ic, label, no: t.id.split('-').pop(), where: UI.locationText({ ...t.location, point: '' }), at: h.at, newUntil: newUntil > Date.now() ? newUntil : 0 };
-      });
-    const sum = summary();
-    const kpi = { monthName: sum.monthName, month: sum.month, avg: sum.avgDays === null ? null : sum.avgDays.toFixed(1) };
+    const feed = (sm.feed || []).slice(0, 5).map(f => {
+      const [st, ic, label] = MD_FEED[f.a] || ['pending', 'refresh', 'แจ้งซ้ำ'];
+      const newUntil = f.a === 'แจ้งซ่อม' ? new Date(f.at).getTime() + MD_NEW_MS : 0;
+      return { key: `${f.id}#${f.i}`, st, ic, label, no: f.id.split('-').pop(), where: UI.locationText({ ...f.loc, point: '' }), at: f.at, newUntil: newUntil > now ? newUntil : 0 };
+    });
+    const kpi = {
+      monthName: UI.TH_MONTHS[new Date().getMonth()], month: sm.months?.[Store.dayKey(now).slice(0, 7)] || 0,
+      avg: d90[0] ? (d90[1] / d90[0] / 864e5).toFixed(1) : null
+    };
     return { counts, days, feed, kpi, sig: JSON.stringify([counts, days.map(x => x.n), feed.map(f => f.key), kpi]) };
   }
   // ข้อมูลตัวอย่างสำหรับผู้ที่ยังไม่เข้าสู่ระบบ (แสดงแบบเบลอ ไม่ใช่ข้อมูลจริง)
@@ -1345,6 +1326,8 @@ const Pages = (() => {
       </div></div>`,
       mount(root) {
         const me = Store.me();
+        // โหลดงานย้อนหลัง 45 วันเฉพาะตอนเปิดหน้านี้ (หน้าอื่นไม่ต้องใช้ ประหยัดโควตาการอ่าน)
+        App.onCleanup(Store.watchBoard());
         // ใบของคนอื่นที่เห็นแค่ข้อมูลกระดาน (ไม่มีสิทธิ์เปิดรายละเอียด) ไม่ต้องลิงก์ไปไหน
         const linkFor = t => t._board ? '/board' : Store.isStaff(me) && Store.canSee(me, t) ? `/admin/job/${t.id}` : `/ticket/${t.id}`;
         const lastAct = t => t.history.at(-1).at;
@@ -1576,9 +1559,8 @@ const Pages = (() => {
             <div class="card-body stack">
               ${signFor.length ? `<div class="notice">${icon('shield')}<div>คุณเป็นผู้ลงนามในตำแหน่ง <strong>${signFor.map(esc).join(', ')}</strong> ลายเซ็นนี้จะลงในใบแจ้งซ่อมอัตโนมัติเมื่อเริ่มดำเนินการซ่อม</div></div>` : ''}
               <div class="sig-preview" id="sigPrev">${me.signature ? `<img src="${me.signature}" alt="ลายเซ็นปัจจุบัน">` : '<span class="small faint">ยังไม่มีลายเซ็น</span>'}</div>
-              <div class="seg" id="sigMode"><button type="button" class="is-active" data-m="draw">${icon('edit')}เซ็นบนจอ</button><button type="button" data-m="upload">${icon('upload')}อัปโหลดรูป</button></div>
+              <p class="small muted" style="margin:0">${icon('edit')} เซ็นชื่อในกรอบด้านล่าง (ใช้เมาส์ ทัชแพด ปากกา หรือนิ้ว) · เปลี่ยนลายเซ็นแล้ว ใบแจ้งซ่อมเดิมที่คุณเคยเซ็นจะเปลี่ยนตามอัตโนมัติ</p>
               <div id="sigDraw"><div class="sig-box"><canvas id="sigCanvas"></canvas></div><div class="row" style="justify-content:space-between;margin-top:10px"><button type="button" class="btn btn-ghost-dark btn-sm" id="sigClear">ล้าง</button><button type="button" class="btn btn-primary btn-sm" id="sigSave">${icon('check')} ใช้ลายเซ็นนี้</button></div></div>
-              <div id="sigUpload" hidden><label class="dropzone"><input type="file" accept="image/*" hidden id="sigFile"><span class="dz-icon">${icon('image')}</span><span class="dz-text"><strong>เลือกรูปลายเซ็น</strong><small>แนะนำ PNG พื้นหลังโปร่งใส หรือเซ็นบนกระดาษขาวแล้วถ่ายรูป</small></span></label></div>
               <p class="small faint">ลายเซ็นจะลงในใบแจ้งซ่อมเมื่อคุณกดปิดงาน (ช่องผู้ตรวจงาน) หรือเมื่อคุณเป็นผู้ลงนามตามตำแหน่ง และในช่องผู้แจ้งซ่อมของแบบฟอร์มเครื่องปรับอากาศ</p>
             </div>
           </section>
@@ -1586,25 +1568,17 @@ const Pages = (() => {
       </div></div>`,
       mount(root) {
         const pad = UI.signaturePad($('#sigCanvas', root));
+        // เซ็นบนจอเท่านั้น (ไม่รับรูปอัปโหลด) · ตัดขอบว่างก่อนบันทึก
         const saveSig = async dataUrl => {
-          try { await Store.updateProfile({ signature: dataUrl }); $('#sigPrev', root).innerHTML = `<img src="${dataUrl}" alt="ลายเซ็นปัจจุบัน">`; UI.toast('บันทึกลายเซ็นแล้ว'); }
-          catch (e) { UI.toast(e.message, 'error'); }
+          try {
+            const sig = await UI.shrinkSignature(dataUrl);
+            await Store.updateProfile({ signature: sig });
+            $('#sigPrev', root).innerHTML = `<img src="${sig}" alt="ลายเซ็นปัจจุบัน">`; pad.clear();
+            UI.toast('บันทึกลายเซ็นแล้ว · ใบแจ้งซ่อมเดิมจะเปลี่ยนเป็นลายเซ็นใหม่อัตโนมัติ');
+          } catch (e) { UI.toast(e.message, 'error'); }
         };
-        $('#sigMode', root).addEventListener('click', e => {
-          const b = e.target.closest('[data-m]'); if (!b) return;
-          $$('#sigMode button', root).forEach(x => x.classList.toggle('is-active', x === b));
-          $('#sigDraw', root).hidden = b.dataset.m !== 'draw';
-          $('#sigUpload', root).hidden = b.dataset.m !== 'upload';
-        });
         $('#sigClear', root).addEventListener('click', () => pad.clear());
         $('#sigSave', root).addEventListener('click', () => { if (pad.isEmpty()) return UI.toast('กรุณาเซ็นชื่อในกรอบก่อน', 'error'); saveSig(pad.toDataURL()); });
-        $('#sigFile', root).addEventListener('change', async e => {
-          const f = e.target.files[0]; if (!f) return;
-          if (f.size > 400e3) return saveSig(await UI.compressImage(f, 600, .9));
-          const reader = new FileReader();
-          reader.onload = () => saveSig(reader.result);
-          reader.readAsDataURL(f);
-        });
         $('#pf', root).addEventListener('submit', async e => {
           e.preventDefault();
           const v = id => $('#' + id, root).value.trim();
@@ -1803,9 +1777,8 @@ const Pages = (() => {
             <div class="card-head"><h3>${icon('sign')}ขั้นที่ 2 · ลายเซ็น</h3><span class="small faint st-hint">ใช้ลงในใบแจ้งซ่อมและเอกสาร PDF</span></div>
             <div class="card-body stack">
               <div class="sig-preview" id="stPrev">${data.signature ? `<img src="${data.signature}" alt="ลายเซ็นของคุณ">` : '<span class="small faint">ยังไม่มีลายเซ็น</span>'}</div>
-              <div class="seg" id="stMode"><button type="button" class="is-active" data-m="draw">${icon('edit')}เซ็นบนจอ</button><button type="button" data-m="upload">${icon('upload')}อัปโหลดรูป</button></div>
+              <p class="small muted" style="margin:0">${icon('edit')} เซ็นชื่อในกรอบด้านล่าง (ใช้เมาส์ ทัชแพด ปากกา หรือนิ้ว)</p>
               <div id="stDraw"><div class="sig-box"><canvas id="stCanvas"></canvas></div><div class="row" style="justify-content:space-between;margin-top:10px"><button type="button" class="btn btn-ghost-dark btn-sm" id="stClear">ล้าง</button><button type="button" class="btn btn-soft btn-sm" id="stUse">${icon('check')} ใช้ลายเซ็นนี้</button></div></div>
-              <div id="stUpload" hidden><label class="dropzone"><input type="file" accept="image/*" hidden id="stFile"><span class="dz-icon">${icon('image')}</span><span class="dz-text"><strong>เลือกรูปลายเซ็น</strong><small>แนะนำ PNG พื้นหลังโปร่งใส หรือเซ็นบนกระดาษขาวแล้วถ่ายรูป</small></span></label></div>
               <div class="f-err" id="stSigErr"></div>
               <div class="setup-actions"><button type="button" class="btn btn-ghost-dark" data-go="0">${icon('back')} ย้อนกลับ</button><button type="button" class="btn btn-primary" id="stNext">ถัดไป: ตรวจทาน ${icon('arrow')}</button></div>
             </div>`,
@@ -1832,31 +1805,21 @@ const Pages = (() => {
           pad = null;
           if (step === 1) {
             pad = UI.signaturePad($('#stCanvas', root));
-            const setSig = async url => {
+            // เซ็นบนจอเท่านั้น (ไม่รับรูปอัปโหลด) · ตัดขอบว่างก่อนบันทึก
+            const setSig = async raw => {
+              const url = await UI.shrinkSignature(raw);
               data.signature = url;
               $('#stPrev', root).innerHTML = `<img src="${url}" alt="ลายเซ็นของคุณ">`;
               $('#stSigErr', root).textContent = '';
+              pad.clear();
               try { await Store.updateProfile({ signature: url }); UI.toast('บันทึกลายเซ็นแล้ว'); } catch (e) { UI.toast(e.message, 'error'); }
             };
-            $('#stMode', root).addEventListener('click', e => {
-              const b = e.target.closest('[data-m]'); if (!b) return;
-              $$('#stMode button', root).forEach(x => x.classList.toggle('is-active', x === b));
-              $('#stDraw', root).hidden = b.dataset.m !== 'draw';
-              $('#stUpload', root).hidden = b.dataset.m !== 'upload';
-            });
             $('#stClear', root).addEventListener('click', () => pad.clear());
             $('#stUse', root).addEventListener('click', () => { if (pad.isEmpty()) return UI.toast('กรุณาเซ็นชื่อในกรอบก่อน', 'error'); setSig(pad.toDataURL()); });
-            $('#stFile', root).addEventListener('change', async e => {
-              const f = e.target.files[0]; if (!f) return;
-              if (f.size > 400e3) return setSig(await UI.compressImage(f, 600, .9));
-              const reader = new FileReader();
-              reader.onload = () => setSig(reader.result);
-              reader.readAsDataURL(f);
-            });
             $('#stNext', root).addEventListener('click', async () => {
               // เซ็นไว้ในกรอบแต่ยังไม่ได้กด "ใช้ลายเซ็นนี้" → ใช้ให้เลย
               if (pad && !pad.isEmpty()) await setSig(pad.toDataURL());
-              if (!data.signature) { $('#stSigErr', root).textContent = 'กรุณาเซ็นชื่อ หรืออัปโหลดรูปลายเซ็นก่อน'; return; }
+              if (!data.signature) { $('#stSigErr', root).textContent = 'กรุณาเซ็นชื่อในกรอบก่อน'; return; }
               show(2);
             });
           }
@@ -1892,5 +1855,5 @@ const Pages = (() => {
     return { title: 'ไม่มีสิทธิ์', html: `${pageHero({ title: 'ไม่มีสิทธิ์เข้าถึง' })}<div class="page-body"><div class="container"><div class="card empty">${icon('shield')}<strong>${esc(msg || 'บัญชีของคุณไม่มีสิทธิ์ใช้งานหน้านี้')}</strong><a class="btn btn-primary" href="#/">กลับหน้าแรก</a></div></div></div>` };
   }
 
-  return { home, login, reportChooser, reportForm, success, myTickets, ticket, board, contact, profile, setup, promptRatings, openRating, notFound, forbidden, pageHero, summary, rangeStart, semesterStart, RANGE_LABEL, formTabs };
+  return { home, login, reportChooser, reportForm, success, myTickets, ticket, board, contact, profile, setup, promptRatings, openRating, notFound, forbidden, pageHero, rangeStart, semesterStart, RANGE_LABEL, formTabs };
 })();

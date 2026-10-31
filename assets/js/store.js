@@ -360,12 +360,67 @@ const Store = (() => {
   }
   // ผู้ลงนามที่บันทึกไว้ในใบ: ถ้าตอนอนุมัติยังไม่มีลายเซ็น (อัปโหลดทีหลัง) หรือยังไม่ได้ตั้งผู้ลงนาม → เติมจากข้อมูลล่าสุด
   // key = ตำแหน่งผู้ลงนาม (ใช้เมื่อในใบไม่มีอีเมลผู้ลงนาม) · ใบที่มีลายเซ็นอยู่แล้วไม่ถูกเปลี่ยน
+  // ลายเซ็นใช้ของล่าสุดในโปรไฟล์ก่อนเสมอ (ผู้ใช้เปลี่ยนลายเซ็น → ใบเดิมเปลี่ยนตาม) · ไม่มีข้อมูลผู้ใช้ → ใช้ที่บันทึกในใบ
   function signedBy(d, by, key) {
     if (!by) return by;
     if (!by.email) { const cur = key ? signerOf(d, key) : null; return cur?.email ? { ...by, ...cur, title: by.title || cur.title } : by; }
     const u = d.users.find(x => x.email === by.email);
-    return u && (!by.signature || !by.name) ? { ...by, name: by.name || fullName(u), signature: by.signature || u.signature || '' } : by;
+    return u && (u.signature && u.signature !== by.signature || !by.name) ? { ...by, name: by.name || fullName(u), signature: u.signature || by.signature || '' } : by;
   }
+  // ลายนิ้วมือของลายเซ็น (บอกว่าแอดมินจัดการลายเซ็นนี้แล้ว: ย่อ + เปลี่ยนในใบเดิมแล้ว)
+  const sigHash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return `${(h >>> 0).toString(36)}:${s.length}`; };
+  // ช่องลายเซ็นในใบแจ้งซ่อมที่เป็นของผู้ใช้คนนี้
+  const SIG_FIELDS = [['reporter.email', 'reporter.signature'], ['approvals.step1.by.email', 'approvals.step1.by.signature'],
+    ['approvals.step2.by.email', 'approvals.step2.by.signature'], ['inspection.by.email', 'inspection.by.signature']];
+  const pick = (o, path) => path.split('.').reduce((x, k) => x?.[k], o);
+
+  // ───────── สรุปหน้าแรก (เอกสารเดียว stats/summary) ─────────
+  // หน้าแรกอ่านสรุป 1 ฉบับแทนใบแจ้งซ่อมย้อนหลังทุกใบ · อัปเดตทุกครั้งที่บันทึกใบแจ้งซ่อม และแอดมินคำนวณใหม่จากข้อมูลครบเพื่อแก้ค่าคลาดเคลื่อน
+  //  days: แจ้งซ่อมรายวัน (35 วัน) · months: แจ้งซ่อมเดือนนี้ · done: ซ่อมเสร็จรายวัน [จำนวน, เวลารวม ms] (92 วัน) · feed: ความเคลื่อนไหวล่าสุด 10 รายการ (หน้าแรกแสดง 5)
+  const SUM_DAYS = 35, SUM_DONE = 92, FEED_N = 10;
+  const FEED_ACTS = ['แจ้งซ่อม', 'กำลังดำเนินการซ่อม', 'รอพิจารณา', 'เสร็จสิ้น', 'ไม่สามารถซ่อมได้'];
+  const isFeed = a => FEED_ACTS.includes(a) || String(a || '').startsWith('แจ้งซ้ำ');
+  const dayKey = v => { const x = new Date(v); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+  const LOC_KEYS = ['locationName', 'zone', 'lock', 'room', 'spots', 'areas'];
+  const feedLoc = l => Object.fromEntries(LOC_KEYS.filter(k => l?.[k] && !(Array.isArray(l[k]) && !l[k].length)).map(k => [k, l[k]]));
+  const feedOf = t => t && t.status !== 'cancelled'
+    ? (t.history || []).map((h, i) => isFeed(h.action) ? { id: t.id, i, at: h.at, a: h.action, loc: feedLoc(t.location) } : null).filter(Boolean) : [];
+  function contrib(S, t, k) {
+    if (!t || t.status === 'cancelled') return;
+    const d = dayKey(t.createdAt);
+    S.days[d] = (S.days[d] || 0) + k;
+    S.months[d.slice(0, 7)] = (S.months[d.slice(0, 7)] || 0) + k;
+    if (t.status === 'done' && t.completion?.at) {
+      const c = dayKey(t.completion.at), e = S.done[c] || [0, 0];
+      S.done[c] = [e[0] + k, e[1] + k * Math.max(0, new Date(t.completion.at) - new Date(t.createdAt))];
+    }
+  }
+  function tidySummary(S, now) {
+    const sorted = o => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a < b ? -1 : 1));
+    const keep = (o, days) => { const min = dayKey(now - days * 864e5); return sorted(Object.fromEntries(Object.entries(o).filter(([k, v]) => k >= min && (Array.isArray(v) ? v[0] > 0 : v > 0)))); };
+    const m = dayKey(now).slice(0, 7);
+    return {
+      v: 1, days: keep(S.days, SUM_DAYS), months: S.months[m] > 0 ? { [m]: S.months[m] } : {}, done: keep(S.done, SUM_DONE),
+      feed: S.feed.slice().sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id) || b.i - a.i).slice(0, FEED_N)
+    };
+  }
+  // คำนวณใหม่ทั้งหมดจากใบที่มี (แอดมินมีใบครบ 120 วัน จึงคำนวณได้ตรง)
+  function buildSummary(tickets, now = Date.now()) {
+    const S = { days: {}, months: {}, done: {}, feed: tickets.flatMap(feedOf) };
+    tickets.forEach(t => contrib(S, t, 1));
+    return tidySummary(S, now);
+  }
+  // ปรับสรุปเดิมตามใบที่เพิ่งบันทึก: pairs = [[ใบเดิม, ใบใหม่]] (ใบใหม่ null = ลบ)
+  function applySummary(S0, pairs, now = Date.now()) {
+    const S = { days: { ...S0.days }, months: { ...S0.months }, done: { ...S0.done }, feed: (S0.feed || []).slice() };
+    const ids = new Set(pairs.map(([o, n]) => (n || o).id));
+    pairs.forEach(([o, n]) => { contrib(S, o, -1); contrib(S, n, 1); });
+    S.feed = S.feed.filter(f => !ids.has(f.id)).concat(pairs.flatMap(([, n]) => feedOf(n)));
+    return tidySummary(S, now);
+  }
+  // เทียบสรุปสองชุดโดยไม่สนลำดับคีย์และเวลาที่บันทึก
+  const canonSummary = s => JSON.stringify(s ? { v: s.v, days: s.days, months: s.months, done: s.done, feed: s.feed } : null,
+    (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : 1)) : v);
   // จุดลงนามในใบที่ยังไม่มีลายเซ็น แต่ตอนนี้หาลายเซ็นได้แล้ว → [{ get, set }]
   function missingSigns(d, t) {
     const out = [];
@@ -558,6 +613,22 @@ const Store = (() => {
   }
   let db = CLOUD ? cloudStartDb() : load();
   const Cloud = CLOUD ? makeCloud() : null;
+  let sigBusy = false;
+  // เปลี่ยนลายเซ็นของผู้ใช้คนนี้ในทุกใบที่เคยเซ็น (ผู้แจ้ง / ผู้อนุมัติ 2 ช่อง / ผู้ตรวจงาน) · คืนจำนวนใบที่แก้
+  async function propagateSignature(email, sig) {
+    if (CLOUD) return Cloud.propagateSignature(email, sig);
+    let n = 0;
+    commit(d => d.tickets.forEach(t => {
+      let hit = false;
+      SIG_FIELDS.forEach(([ef, sf]) => {
+        if (pick(t, ef) !== email || pick(t, sf) === sig) return;
+        const ks = sf.split('.'), last = ks.pop();
+        ks.reduce((o, k) => o[k], t)[last] = sig; hit = true;
+      });
+      if (hit) n++;
+    }));
+    return n;
+  }
   // การบันทึก: แก้สำเนาของข้อมูลด้วย mutator แล้วบันทึกลงที่เก็บ (ระบบจริงส่งเฉพาะส่วนที่เปลี่ยนไป Firestore)
   let lastWrite = Promise.resolve();
   function commit(mutator) {
@@ -690,14 +761,32 @@ const Store = (() => {
     step1Key: t => STEP1_KEY[t.formType],
     signer: key => signerOf(db, key),
     signedBy: (by, key) => signedBy(db, by, key),
-    // แอดมิน: เติมลายเซ็นที่ขาดในใบเดิม (ผู้ลงนามอัปโหลดลายเซ็นหลังงานถูกอนุมัติแล้ว) · คืนจำนวนใบที่แก้
-    repairSignatures() {
-      if (!hasRole(currentUser(), 'admin') || !db.users.length) return 0;
-      const ids = db.tickets.filter(t => !t._board && missingSigns(db, t).length).map(t => t.id);
-      if (!ids.length) return 0;
-      commit(d => d.tickets.forEach(t => { if (ids.includes(t.id)) missingSigns(d, t).forEach(fix => fix()); }));
-      return ids.length;
+    // แอดมินเปิดเว็บ → ดูแลลายเซ็นอัตโนมัติ (ทำเฉพาะเมื่อมีงาน) · คืนจำนวนใบที่แก้
+    //  1) ลายเซ็นที่ยังไม่ผ่านการจัดการ (ใหม่/เปลี่ยน/ของเดิม) → ตัดขอบ ย่อ แล้วเปลี่ยนในทุกใบที่คนนั้นเคยเซ็น
+    //  2) ใบที่ช่องลงนามยังว่าง (อนุมัติก่อนผู้ลงนามมีลายเซ็น / ยังไม่ได้ตั้งผู้ลงนาม) → เติมให้
+    async maintainSignatures(shrink = async s => s) {
+      if (!hasRole(currentUser(), 'admin') || !db.users.length || sigBusy) return 0;
+      sigBusy = true;
+      try {
+        let n = 0;
+        for (const u of db.users.filter(x => x.signature && x.sigHash !== sigHash(x.signature))) {
+          const small = await shrink(u.signature);
+          n += await propagateSignature(u.email, small);
+          // ระหว่างนี้เจ้าของเปลี่ยนลายเซ็นอีก → ข้ามไป รอบหน้าค่อยทำ
+          commit(d => { const x = d.users.find(v => v.email === u.email); if (x && x.signature === u.signature) Object.assign(x, { signature: small, sigHash: sigHash(small) }); });
+        }
+        const ids = db.tickets.filter(t => !t._board && missingSigns(db, t).length).map(t => t.id);
+        if (ids.length) commit(d => d.tickets.forEach(t => { if (ids.includes(t.id)) missingSigns(d, t).forEach(fix => fix()); }));
+        return n + ids.length;
+      } finally { sigBusy = false; }
     },
+    signaturePending: u => !!u?.signature && u.sigHash !== sigHash(u.signature),
+    usage: () => CLOUD ? Cloud.usage() : null,
+    // สรุปหน้าแรก (แดชบอร์ดมินิ) · ระบบจริงอ่านจากเอกสารสรุปฉบับเดียว
+    homeSummary: () => CLOUD ? Cloud.summary() : buildSummary(db.tickets),
+    dayKey, buildSummary, applySummary, canonSummary,
+    // หน้าแดชบอร์ดเต็ม: โหลดข้อมูลกระดาน 45 วันเฉพาะตอนเปิดหน้านี้ · คืนฟังก์ชันหยุดโหลด
+    watchBoard: () => CLOUD ? Cloud.watchBoard() : () => {},
 
     // เซสชัน
     me: currentUser,
@@ -1145,18 +1234,70 @@ const Store = (() => {
         if (me && !users.some(u => u.email === me.email)) users.push(me);
         db = { ...db, users, tickets: [...map.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)) };
         emit();
+        scheduleHeal();
       });
     }
+
+    // ── สรุปหน้าแรก stats/summary ──
+    const sumRef = fs.collection('stats').doc('summary');
+    let summaryDoc = null, dataReady = false, healTimer = 0, dataGen = 0;
+    // แอดมิน (มีใบครบ 120 วัน) คำนวณสรุปใหม่ทั้งหมด แล้วบันทึกเฉพาะเมื่อไม่ตรงกับที่เก็บไว้ → แก้ค่าคลาดเคลื่อนเอง
+    function scheduleHeal() {
+      if (!dataReady || !hasRole(me, 'admin')) return;
+      clearTimeout(healTimer);
+      healTimer = setTimeout(async () => {
+        if (!dataReady || !hasRole(me, 'admin')) return;
+        const want = buildSummary(db.tickets);
+        if (canonSummary(want) === canonSummary(summaryDoc)) return;
+        try { await sumRef.set(strip({ ...want, at: nowISO() })); } catch (e) { console.error('summary', e); }
+      }, 3000);
+    }
+    // ผู้แจ้ง/ผู้อนุมัติบันทึกใบแจ้งซ่อม → ปรับสรุปตามใบที่เปลี่ยน (ยังไม่มีสรุป = รอแอดมินสร้างจากข้อมูลครบ)
+    function bumpSummary(pairs) {
+      if (hasRole(me, 'admin')) return scheduleHeal();
+      fs.runTransaction(async tx => {
+        const s = await tx.get(sumRef);
+        if (!s.exists) return;
+        meter.add([s.data()]);
+        tx.set(sumRef, strip({ ...applySummary(s.data(), pairs), at: nowISO() }));
+      }).catch(e => console.error('summary', e));
+    }
+    // หน้าแดชบอร์ดเต็ม: โหลดข้อมูลกระดาน 45 วันเฉพาะตอนเปิดหน้า (แอดมินมีใบครบอยู่แล้ว · ผู้บริหารโหลดไว้ตั้งแต่เข้าระบบ)
+    function watchBoard() {
+      if (!me || hasRole(me, 'admin') || sets.has('boardRecent')) return () => {};
+      const h = listenQuery('boardRecent', fs.collection('board').where('updatedAt', '>=', since(45)), 'board');
+      dataUnsubs.push(h.stop);
+      return () => { h.stop(); rebuild(); };
+    }
+    // มิเตอร์ (ประมาณ) ของเครื่องนี้: เอกสารและขนาดที่ได้จากเซิร์ฟเวอร์ ไม่นับที่อ่านจากแคชในเครื่อง → การ์ดสุขภาพระบบ
+    const meter = (() => {
+      const key = () => `pcshs-meter:${new Date().toISOString().slice(0, 10)}`;
+      const load = () => { try { return JSON.parse(localStorage.getItem(key()) || 'null') || { reads: 0, bytes: 0 }; } catch (e) { return { reads: 0, bytes: 0 }; } };
+      const session = { reads: 0, bytes: 0, since: nowISO() };
+      let today = null, day = '', timer = 0;
+      return {
+        add(docs) {
+          if (!docs.length) return;
+          const bytes = docs.reduce((a, d) => a + JSON.stringify(d).length, 0);
+          if (day !== key()) { day = key(); today = load(); }
+          session.reads += docs.length; session.bytes += bytes; today.reads += docs.length; today.bytes += bytes;
+          clearTimeout(timer);
+          timer = setTimeout(() => { try { localStorage.setItem(day, JSON.stringify(today)); } catch (e) { /* ignore */ } }, 1500);
+        },
+        get: () => ({ session: { ...session }, today: day === key() && today ? { ...today } : load() })
+      };
+    })();
     function listenQuery(name, query, kind) {
       const m = new Map();
       sets.set(name, { kind, m });
       let firstDone;
       const first = new Promise(res => { firstDone = res; });
       const un = query.onSnapshot(snap => {
+        if (!snap.metadata?.fromCache) meter.add(snap.docChanges().filter(ch => ch.type !== 'removed').map(ch => ch.doc.data()));
         snap.docChanges().forEach(ch => { if (ch.type === 'removed') m.delete(ch.doc.id); else m.set(ch.doc.id, ch.doc.data()); });
         firstDone(); rebuild();
       }, err => { console.error(name, err); firstDone(); });
-      return { stop: () => { un(); sets.delete(name); }, first };
+      return { stop: () => { un(); if (sets.get(name)?.m === m) sets.delete(name); }, first };
     }
 
     // ── ค่าตั้งระบบ (อ่านได้ทุกคน รวมถึงก่อนเข้าสู่ระบบ) ──
@@ -1182,18 +1323,27 @@ const Store = (() => {
       ownUnsub?.(); ownUnsub = null;
       dataUnsubs.forEach(f => f()); dataUnsubs = [];
       sets.clear(); extra.clear(); usersList = []; loadedFrom = null;
+      summaryDoc = null; dataReady = false; clearTimeout(healTimer);
       db = { ...db, ratings: [] };
     }
     // เปิด listener ตามบทบาท: โหลดเฉพาะที่ต้องใช้เพื่อประหยัดโควตาการอ่านแบบฟรี
     function startData() {
       dataUnsubs.forEach(f => f()); dataUnsubs = [];
       [...sets.keys()].forEach(k => sets.delete(k));
+      dataReady = false;
+      const gen = ++dataGen;
       const T = fs.collection('tickets'), B = fs.collection('board');
       const firsts = [];
       const L = (name, q, kind) => { const h = listenQuery(name, q, kind); dataUnsubs.push(h.stop); firsts.push(h.first); };
       L('mine', T.where('reporter.email', '==', me.email), 'full');
+      // งานที่ยังไม่ปิด (ตัวเลขสถานะหน้าแรก + เตือนแจ้งซ่อมซ้ำ) · งานย้อนหลังหน้าแรกใช้เอกสารสรุปแทน
       L('boardOpen', B.where('status', 'in', OPEN), 'board');
-      L('boardRecent', B.where('updatedAt', '>=', since(45)), 'board');
+      if (hasRole(me, 'executive') && !hasRole(me, 'admin')) L('boardRecent', B.where('updatedAt', '>=', since(45)), 'board');
+      firsts.push(new Promise(res => dataUnsubs.push(sumRef.onSnapshot(s => {
+        if (!s.metadata?.fromCache && s.exists) meter.add([s.data()]);
+        summaryDoc = s.exists ? s.data() : null;
+        res(); rebuild();
+      }, e => { console.error('summary', e); res(); }))));
       if (hasRole(me, 'admin')) {
         L('open', T.where('status', 'in', OPEN), 'full');
         L('recent', T.where('updatedAt', '>=', since(120)), 'full');
@@ -1209,7 +1359,7 @@ const Store = (() => {
       if (hasRole(me, 'admin') || hasRole(me, 'executive')) {
         dataUnsubs.push(fs.collection('ratings').onSnapshot(s => { db = { ...db, ratings: s.docs.map(d => d.data()) }; emit(); }, e => console.error('ratings', e)));
       }
-      return Promise.race([Promise.all(firsts), sleep(10000)]);
+      return Promise.race([Promise.all(firsts), sleep(10000)]).then(() => { if (gen === dataGen) { dataReady = true; rebuild(); } });
     }
     async function startUser(u, email, school) {
       const ref = fs.collection('users').doc(email);
@@ -1290,16 +1440,19 @@ const Store = (() => {
       diffList(prev.staff, next.staff, 'id', (m, i) => put(fs.collection('staff').doc(m.id), { ...m, order: i }), id => del(fs.collection('staff').doc(id)), true);
       diffList(prev.users, next.users, 'email', u => put(fs.collection('users').doc(u.email), u), id => del(fs.collection('users').doc(id)));
       const at = nowISO();
+      const before = new Map((prev.tickets || []).map(t => [t.id, t])), pairs = [];
       diffList(prev.tickets, next.tickets, 'id', t => {
         if (t._board) return;
         nextTicket();
         t.updatedAt = at;
         put(fs.collection('tickets').doc(t.id), t);
         put(fs.collection('board').doc(t.id), project(t));
-      }, id => { nextTicket(); del(fs.collection('tickets').doc(id)); del(fs.collection('board').doc(id)); });
+        pairs.push([before.get(t.id), t]);
+      }, id => { nextTicket(); del(fs.collection('tickets').doc(id)); del(fs.collection('board').doc(id)); pairs.push([before.get(id), null]); });
       if (!n) return;
       // ชุดแรกมีใบใหม่/ใบเดิมที่อ้างอิงกัน (เช่น แจ้งยังไม่หาย) บันทึกพร้อมกัน ชุดถัดไปบันทึกต่อเนื่อง
       for (const b of batches) await b.commit();
+      if (pairs.length) bumpSummary(pairs);
     }
     // จองเลขที่ใบแจ้งซ่อม (ไม่ซ้ำแม้หลายคนกดส่งพร้อมกัน) แล้วให้ newTicket ใช้เลขต่อจากนี้
     async function reserve(k) {
@@ -1359,6 +1512,23 @@ const Store = (() => {
       rebuild();
       return ids.length;
     }
+    // ── เปลี่ยนลายเซ็นในใบเดิมทุกใบ (รวมใบเก่าที่ไม่ได้โหลดไว้) · แก้เฉพาะช่องลายเซ็น ไม่เขียนทับส่วนอื่น ──
+    async function propagateSignature(email, sig) {
+      const T = fs.collection('tickets'), updates = new Map();
+      for (const [ef, sf] of SIG_FIELDS) {
+        const snap = await T.where(ef, '==', email).get();
+        meter.add(snap.docs.map(d => d.data()));
+        snap.forEach(doc => { if (pick(doc.data(), sf) !== sig) updates.set(doc.id, { ...(updates.get(doc.id) || {}), [sf]: sig }); });
+      }
+      const ids = [...updates.keys()];
+      for (let i = 0; i < ids.length; i += 400) {
+        const b = fs.batch();
+        ids.slice(i, i + 400).forEach(id => b.update(T.doc(id), updates.get(id)));
+        await b.commit();
+      }
+      return ids.length;
+    }
+
     // ── ล้างข้อมูลตามช่วงวันที่แจ้ง (แอดมิน) ──
     async function fetchRange(from, to) {
       const snap = await fs.collection('tickets').where('createdAt', '>=', from).where('createdAt', '<', to).get();
@@ -1407,6 +1577,7 @@ const Store = (() => {
       let q = fs.collection('tickets').where('createdAt', '>=', iso);
       if (loadedFrom && loadedFrom !== '0000') q = q.where('createdAt', '<', loadedFrom);
       const snap = await q.get();
+      meter.add(snap.docs.map(d => d.data()));
       snap.forEach(d => extra.set(d.id, d.data()));
       loadedFrom = iso;
       rebuild();
@@ -1543,7 +1714,9 @@ const Store = (() => {
       });
     }
     return {
-      ready, rebuild, persist, reserve, friendly, ensureRange, deleteSamples, upload, notifyNew, unshare, imgAttr, fetchRange, purge,
+      ready, rebuild, persist, reserve, friendly, ensureRange, deleteSamples, upload, notifyNew, unshare, imgAttr, fetchRange, purge, propagateSignature,
+      usage: () => meter.get(),
+      summary: () => summaryDoc || buildSummary(db.tickets), watchBoard,
       notifications, markRead, login, callScript, awaitRating,
       logout: () => auth.signOut(),
       me: () => me

@@ -2010,3 +2010,20 @@ p { text-wrap: pretty; }
 @media (max-width: 640px) {
   #impPrev .table th:nth-child(3), #impPrev .table td:nth-child(3) { display: none; }
 }
+
+/* ═══ สุขภาพระบบ (ตั้งค่าระบบ) ═══ */
+.health { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+.hb-bars { display: grid; gap: 18px; min-width: 0; }
+.hb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.hb-val { font-weight: 700; font-size: 14px; white-space: nowrap; }
+.hb-v-green { color: #15803D; } .hb-v-orange { color: #B45309; } .hb-v-red { color: #B91C1C; }
+.hb-track { height: 10px; border-radius: 99px; background: #F1ECE6; overflow: hidden; margin-bottom: 4px; }
+.hb-track i { display: block; height: 100%; border-radius: 99px; transition: width .4s; }
+.hb-green { background: #22C55E; } .hb-orange { background: #F59E0B; } .hb-red { background: #EF4444; }
+.hb-row small { display: block; font-size: 12.5px; line-height: 1.5; }
+.hb-side { display: grid; gap: 14px; min-width: 0; padding: 16px; border-radius: 14px; background: var(--orange-50); }
+.hb-side .input { max-width: 160px; }
+.hb-facts { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13.5px; color: var(--ink-2); }
+.hb-side .row { flex-wrap: wrap; }
+@media (max-width: 900px) { .health { grid-template-columns: 1fr; gap: 18px; } }
+@media (max-width: 640px) { .hb-sub { display: none; } }
