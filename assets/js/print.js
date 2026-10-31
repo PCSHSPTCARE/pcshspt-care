@@ -65,22 +65,30 @@ const Print = (() => {
       </div>`;
   }
 
-  // ตารางสรุป (แบ่งหน้าอัตโนมัติ)
-  function tablePages(title, sub, list, startNo = 1) {
+  // ชื่อผู้แจ้งไม่มีคำนำหน้า (ใช้ชื่อในบัญชีถ้ามี ไม่งั้นตัดคำนำหน้าออกจากชื่อในใบ)
+  const noPrefix = n => String(n || '').trim().replace(/^(นางสาว|นาง|นาย|ดร\.?|ว่าที่\s*(?:ร้อยตรี|ร\.?\s*ต\.?)(?:\s*หญิง)?|เด็กชาย|เด็กหญิง|(?:Mr|Mrs|Ms|Miss)\.?)\s*/i, '').trim();
+  const whoName = t => {
+    const u = t.reporter?.email && Store.userByEmail(t.reporter.email);
+    return u && (u.first || u.last) ? `${u.first || ''} ${u.last || ''}`.trim() : noPrefix(t.reporter?.name);
+  };
+
+  // ตารางสรุป (แบ่งหน้าอัตโนมัติ: แบ่งชุดละ 15 แถวก่อน แล้ว paginate วัดความสูงจริงอีกครั้ง)
+  function tablePages(title, sub, list, startNo = 1, run = 'tbl') {
     const PER = 15;
     const pages = [];
     for (let i = 0; i < Math.max(1, list.length); i += PER) pages.push(list.slice(i, i + PER));
     return pages.map((rows, p) => `
-      <div class="sheet rp">
+      <div class="sheet rp" data-run="${esc(run)}">
         ${reportHead(title, sub)}
         <table class="rp-table rp-list">
-          <thead><tr><th style="width:8mm">ที่</th><th style="width:34mm">เลขที่ / วันที่แจ้ง</th><th>รายการ / อาการ</th><th style="width:34mm">สถานที่</th><th style="width:29mm">ผู้แจ้ง</th><th style="width:27mm">สถานะ</th></tr></thead>
+          <colgroup><col style="width:8mm"><col style="width:22mm"><col><col style="width:42mm"><col style="width:30mm"><col style="width:29mm"></colgroup>
+          <thead><tr><th class="c">ที่</th><th>วันที่แจ้ง</th><th>รายการ / อาการ</th><th>สถานที่</th><th>ผู้แจ้ง</th><th>สถานะ</th></tr></thead>
           <tbody>${rows.map((t, i) => `<tr>
             <td class="c">${startNo + p * PER + i}</td>
-            <td><b>${esc(t.id)}</b><div class="m">${UI.dateTime(t.createdAt)}</div></td>
-            <td><div class="clamp">${esc(Views.itemsTitle(t))}</div><div class="m clamp1">${esc(t.items.map(i => i.detail).filter(Boolean).join(" · "))}</div></td>
-            <td><div class="clamp">${esc(UI.locationText(t))}</div></td>
-            <td><div class="clamp">${esc(t.reporter.name)}</div></td>
+            <td class="rp-when">${UI.date(t.createdAt)}<div class="m">${UI.time(t.createdAt)} น.</div></td>
+            <td><div class="clamp3">${esc(Views.itemsTitle(t))}</div><div class="m clamp2">${esc(t.items.map(i => i.detail).filter(Boolean).join(' · '))}</div></td>
+            <td><div class="clamp4">${esc(UI.locationText(t))}</div></td>
+            <td><div class="rp-who" title="${esc(t.reporter.name)}">${esc(whoName(t))}</div></td>
             <td><span class="rp-st st-${t.status}">${esc(UI.STATUS[t.status].label)}</span>${t.completion?.at || t.cannot?.at ? `<div class="m">${UI.date(t.completion?.at || t.cannot?.at)}</div>` : ''}</td>
           </tr>`).join('') || '<tr><td colspan="6" class="c">ไม่มีรายการ</td></tr>'}</tbody>
         </table>
@@ -88,6 +96,63 @@ const Print = (() => {
       </div>`).join('');
   }
 
+  // ───────── จัดหน้าให้พอดี A4 หลังวาดจริง (ฟอนต์โหลดแล้ว) ─────────
+  // ชื่อผู้แจ้งบรรทัดเดียว: ยาวเกินช่อง → ลดขนาดตัวอักษรทีละน้อย (ไม่ต่ำกว่า 7pt) แล้วค่อยตัด …
+  function fitNames(box) {
+    box.querySelectorAll('.rp-who').forEach(el => {
+      el.style.fontSize = '';
+      for (let pt = 10; el.scrollWidth > el.clientWidth + 1 && pt > 7; pt -= .5) el.style.fontSize = `${pt - .5}pt`;
+    });
+  }
+  // เนื้อหาที่ล้นเลยท้ายกระดาษ → ย้ายไปหน้าใหม่ (ตาราง: ย้ายเป็นแถว · หน้าสถิติ: ย้ายเป็นกล่อง) พร้อมหัวรายงานและท้ายหน้าเดิม
+  function splitSheet(sh) {
+    for (let guard = 0; guard < 80; guard++) {
+      const foot = sh.querySelector(':scope > .rp-foot'), head = sh.querySelector(':scope > .rp-head');
+      if (!foot || !head) return;
+      const r = sh.getBoundingClientRect(), mm = r.height / 297;
+      const limit = foot.getBoundingClientRect().top - 2 * mm;
+      const next = sh.cloneNode(false);
+      const table = sh.querySelector(':scope > .rp-list');
+      if (table) {
+        const rows = [...table.tBodies[0].rows];
+        const cut = rows.findIndex(row => row.getBoundingClientRect().bottom > limit);
+        if (cut <= 0) return;
+        const t2 = table.cloneNode(false), body = document.createElement('tbody');
+        [...table.children].forEach(ch => { if (ch.tagName !== 'TBODY') t2.appendChild(ch.cloneNode(true)); });
+        rows.slice(cut).forEach(row => body.appendChild(row));
+        t2.appendChild(body);
+        next.append(head.cloneNode(true), t2, foot.cloneNode(true));
+      } else {
+        const blocks = [...sh.children].filter(el => el !== head && el !== foot);
+        const cut = blocks.findIndex(el => el.getBoundingClientRect().bottom > limit);
+        if (cut <= 0) return;
+        next.append(head.cloneNode(true), ...blocks.slice(cut), foot.cloneNode(true));
+      }
+      sh.after(next);
+      sh = next;
+    }
+  }
+  // เลขหน้า "หน้า x/y" นับใหม่ตามชุด (data-run) หลังแบ่งหน้า
+  function renumber(box) {
+    const runs = new Map();
+    box.querySelectorAll('.sheet.rp[data-run]').forEach(s => runs.set(s.dataset.run, [...(runs.get(s.dataset.run) || []), s]));
+    runs.forEach(list => list.forEach((s, i) => {
+      const sp = s.querySelector('.rp-foot span:last-child');
+      if (sp) sp.textContent = sp.textContent.replace(/หน้า \d+\/\d+/, `หน้า ${i + 1}/${list.length}`);
+    }));
+  }
+  function layout(box, done = () => {}) {
+    const run = () => {
+      if (!box.isConnected) return;
+      fitNames(box);
+      [...box.querySelectorAll('.sheet.rp[data-run]')].forEach(splitSheet);
+      renumber(box);
+      done(box.querySelectorAll('.sheet').length);
+    };
+    if (!document.fonts) return run();
+    Promise.all(['400 16px DocSarabun', '700 16px DocSarabun'].map(f => document.fonts.load(f).catch(() => {})))
+      .then(() => document.fonts.ready).then(run, run);
+  }
   // ═══════════ พิมพ์รวมใบแจ้งซ่อม ═══════════
   function batch(params) {
     let job = null;
@@ -108,7 +173,7 @@ const Print = (() => {
       let no = 1;
       for (const [k, items] of groups) {
         if (job.style === 'table') {
-          html += tablePages(job.title, `${k ? Views.formName(k) : (job.scope || 'ทุกหมวด')} · ${items.length} รายการ`, items, no);
+          html += tablePages(job.title, `${k ? Views.formName(k) : (job.scope || 'ทุกหมวด')} · ${items.length} รายการ`, items, no, 'g-' + (k || 'all'));
         } else {
           if (k) html += divider(k, items);
           html += items.map(t => Doc.sheet(t, job.style) + (job.photos !== false ? Doc.photoSheet(t) : '')).join('');
@@ -136,6 +201,7 @@ const Print = (() => {
       mount(root) {
         const box = $('#sheets', root);
         Doc.refit(box);
+        layout(box);
         $('#printBtn', root).addEventListener('click', () => window.print());
         $('#pdfBtn', root).addEventListener('click', e => Doc.downloadPdf(box, `${job.title}.pdf`, e.currentTarget));
       }
@@ -180,7 +246,7 @@ const Print = (() => {
     const total = 2 + listPages;
     const kpi = (l, v, u) => `<div class="rp-kpi"><div class="l">${l}</div><div class="v">${v}<small>${u}</small></div></div>`;
     const pages = `
-      <div class="sheet rp">
+      <div class="sheet rp" data-run="rep">
         ${reportHead(title, sub)}
         <div class="rp-kpis">
           ${kpi('แจ้งซ่อมทั้งหมด', UI.num(st.total), 'รายการ')}
@@ -204,7 +270,7 @@ const Print = (() => {
         </tbody></table></section>
         ${foot(1, total, scope)}
       </div>
-      <div class="sheet rp">
+      <div class="sheet rp" data-run="rep">
         ${reportHead(title, sub)}
         <div class="rp-cols">
           ${barTable('หมวดงานที่แจ้งซ่อม', st.cats, 'งาน')}
@@ -221,14 +287,14 @@ const Print = (() => {
         </ul></section>
         ${foot(2, total, scope)}
       </div>
-      ${tablePages(title, `ภาคผนวก: รายการแจ้งซ่อม · ${sub}`, [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt))).replace(/หน้า (\d+)\/\d+/g, (m, n) => `หน้า ${+n + 2}/${total}`)}`;
+      ${tablePages(title, `ภาคผนวก: รายการแจ้งซ่อม · ${sub}`, [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt)), 1, 'rep')}`;
     return {
       title: 'รายงานสถิติ',
       html: `
       <div class="doc-page">
         <div class="doc-toolbar">
           <a class="btn btn-outline btn-sm" href="#/admin/stats">${icon('back')} กลับ</a>
-          <div><div class="t">${title}</div><div class="sub">${esc(sub)} · ${list.length} รายการ · ${total} หน้า</div></div>
+          <div><div class="t">${title}</div><div class="sub" id="rpSub">${esc(sub)} · ${list.length} รายการ · ${total} หน้า</div></div>
           <span class="spacer"></span>
           <button class="btn btn-outline btn-sm" id="printBtn">${icon('printer')} พิมพ์ / บันทึกเป็น PDF</button>
           <button class="btn btn-primary btn-sm" id="pdfBtn">${icon('download')} ดาวน์โหลด PDF</button>
@@ -236,6 +302,8 @@ const Print = (() => {
         <div class="doc-stage"><div id="sheets">${pages}</div></div>
       </div>`,
       mount(root) {
+        // จัดหน้าให้พอดีกระดาษ แล้วอัปเดตจำนวนหน้าบนแถบเครื่องมือ
+        layout($('#sheets', root), n => { $('#rpSub', root).textContent = `${sub} · ${list.length} รายการ · ${n} หน้า`; });
         $('#printBtn', root).addEventListener('click', () => window.print());
         $('#pdfBtn', root).addEventListener('click', e => Doc.downloadPdf($('#sheets', root), `${title}-${scope}.pdf`, e.currentTarget));
       }

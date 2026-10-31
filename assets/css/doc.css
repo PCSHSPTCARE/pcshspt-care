@@ -164,6 +164,13 @@
 .rp-list .m { font-size: 8.6pt; color: #444; }
 .clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .clamp1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.clamp2, .clamp3, .clamp4 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.clamp2 { -webkit-line-clamp: 2; } .clamp3 { -webkit-line-clamp: 3; } .clamp4 { -webkit-line-clamp: 4; }
+/* ตารางรายการ: ความกว้างคอลัมน์คงที่ · วันที่ 2 บรรทัด · ชื่อผู้แจ้งบรรทัดเดียว (ยาวเกิน = ย่อตัวอักษร) */
+.rp-list { table-layout: fixed; }
+.rp-list td { overflow-wrap: anywhere; }
+.rp-list .rp-when { white-space: nowrap; font-size: 9.6pt; }
+.rp-who { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rp-st { display: inline-block; padding: .2mm 1.6mm; border: .25mm solid currentColor; border-radius: 1.2mm; font-size: 8.8pt; white-space: nowrap; }
 .rp-st.st-pending { color: #92400E; } .rp-st.st-in_progress { color: #9A3412; } .rp-st.st-review { color: #3730A3; } .rp-st.st-done { color: #166534; } .rp-st.st-cannot_fix { color: #9F1239; }
 .rp-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2.5mm; margin-bottom: 4mm; }
