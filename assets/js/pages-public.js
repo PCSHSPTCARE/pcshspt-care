@@ -2019,6 +2019,7 @@ const Pages = (() => {
     const label = btn.innerHTML;
     btn.disabled = true; btn.innerHTML = `${icon('refresh')} กำลังเตรียมคู่มือ...`;
     const host = document.createElement('div');
+    let savedY = null;
     host.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm;background:#fff;pointer-events:none';
     try {
       host.innerHTML = guidePdfHTML();
@@ -2026,39 +2027,18 @@ const Pages = (() => {
       await document.fonts.ready;
       await Promise.all(['400 16px DocSarabun', '700 16px DocSarabun'].map(f => document.fonts.load(f).catch(() => {})));
       await waitImages(host, 20000);
+      // หน้าที่เลื่อนลงมาแล้วทำให้ตัวสร้างภาพจับผิดตำแหน่ง (ได้หน้าว่าง) → เลื่อนขึ้นบนสุดระหว่างสร้าง แล้วคืนตำแหน่งเดิม
+      savedY = window.scrollY; window.scrollTo(0, 0);
+      host.querySelectorAll('*').forEach(el => { const cs = getComputedStyle(el); if (cs.overflowWrap !== 'normal' || cs.wordBreak !== 'normal') { el.style.overflowWrap = 'normal'; el.style.wordBreak = 'normal'; } });
       prepareForPdf(host);
       const sheets = [...host.querySelectorAll('.sheet')];
-      // มือถือ/แท็บเล็ตใช้ความละเอียดพอดีหน่วยความจำ · คอมใช้ความละเอียดสูงกว่า
-      const scale = matchMedia('(pointer: coarse)').matches ? 2.5 : 3;
-      let pdf = null;
-      for (let i = 0; i < sheets.length; i++) {
-        btn.innerHTML = `${icon('refresh')} กำลังสร้าง PDF ${i + 1}/${sheets.length}`;
-        await new Promise(r => setTimeout(r, 30));   // ให้หน้าจอวาดข้อความความคืบหน้าก่อน
-        const worker = html2pdf().set({ margin: 0, html2canvas: { scale, useCORS: true, backgroundColor: '#ffffff', logging: false }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(sheets[i]);
-        const canvas = await worker.toCanvas().get('canvas');
-        const img = canvas.toDataURL('image/jpeg', 0.95);
-        canvas.width = canvas.height = 0;   // คืนหน่วยความจำ
-        if (!pdf) {
-          pdf = await html2pdf().set({ margin: 0, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(document.createElement('div')).toPdf().get('pdf');
-          while (pdf.getNumberOfPages() > 1) pdf.deletePage(pdf.getNumberOfPages());
-        } else pdf.addPage('a4', 'portrait');
-        pdf.addImage(img, 'JPEG', 0, 0, 210, 297, undefined, 'NONE');
-      }
+      const pdf = await Doc.sheetsToPdf(sheets, (i, n) => { btn.innerHTML = `${icon('refresh')} กำลังสร้าง PDF ${i}/${n}`; });
       pdf.setProperties({ title: 'คู่มือการใช้งานระบบแจ้งซ่อมอาคารและสถานที่' });
-      const blob = pdf.output('blob'), url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = PDF_NAME; document.body.appendChild(a); a.click(); a.remove();
-      // เบราว์เซอร์มือถือบางรุ่นไม่ให้ดาวน์โหลดอัตโนมัติ → มีปุ่มให้กดเองเสมอ
-      UI.modal({
-        title: 'สร้างไฟล์คู่มือเรียบร้อยแล้ว', subtitle: `${sheets.length} หน้า · ${(blob.size / 1048576).toFixed(1)} MB`, size: 'sm',
-        body: `<p style="margin:0 0 14px;line-height:1.7">ระบบดาวน์โหลดไฟล์ให้แล้ว หากไม่เห็นไฟล์ในเครื่อง ให้กดปุ่มด้านล่าง ส่งต่อให้ครูท่านอื่นทางไลน์หรืออีเมลได้ทันที</p>
-          <a class="btn btn-primary btn-lg btn-block" id="gpdfLink" href="${url}" download="${esc(PDF_NAME)}">${icon('download')} ดาวน์โหลดคู่มือ (PDF)</a>`,
-        actions: [{ label: 'ปิด', kind: 'btn-ghost-dark' }],
-        onClose: () => setTimeout(() => URL.revokeObjectURL(url), 60000)
-      });
+      Doc.offerPdf(pdf, PDF_NAME, sheets.length, 'ส่งต่อให้ครูท่านอื่นทางไลน์หรืออีเมลได้ทันที');
     } catch (err) {
       console.error(err);
       UI.toast('สร้างไฟล์ PDF ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง (หากใช้มือถือ ลองปิดแท็บอื่นก่อน)', 'error');
-    } finally { host.remove(); btn.disabled = false; btn.innerHTML = label; }
+    } finally { host.remove(); if (savedY !== null) window.scrollTo(0, savedY); btn.disabled = false; btn.innerHTML = label; }
   }
   function guide(params = {}) {
     const t = GUIDE.find(g => g.id === params.t);

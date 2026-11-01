@@ -264,32 +264,99 @@ const Doc = (() => {
     });
   }
 
-  // ดาวน์โหลด PDF จากกลุ่มหน้า A4
+  // ───────── สร้าง PDF ทีละหน้า A4 (ใช้ร่วมกัน: บันทึกข้อความ ตารางสรุป รายงาน คู่มือ) ─────────
+  // วาดแต่ละหน้าเป็นภาพแยกกันแล้วต่อเป็นไฟล์เดียว: ไม่มีหน้าว่างแทรก ไม่ขึ้นกับตำแหน่งเลื่อนจอ และใช้หน่วยความจำน้อย (iPad/มือถือ)
+  const pdfScale = (desk = 3) => matchMedia('(pointer: coarse)').matches ? 2.5 : desk;
+  async function sheetsToPdf(sheets, onStep = () => {}, scale = pdfScale()) {
+    let pdf = null;
+    for (let i = 0; i < sheets.length; i++) {
+      onStep(i + 1, sheets.length);
+      await new Promise(r => setTimeout(r, 30));   // ให้หน้าจอวาดข้อความความคืบหน้าก่อน
+      const canvas = await html2pdf().set({ margin: 0, html2canvas: { scale, useCORS: true, backgroundColor: '#ffffff', logging: false, scrollX: 0, scrollY: 0 } }).from(sheets[i]).toCanvas().get('canvas');
+      const img = canvas.toDataURL('image/jpeg', 0.95);
+      canvas.width = canvas.height = 0;   // คืนหน่วยความจำ
+      if (!pdf) {
+        pdf = await html2pdf().set({ margin: 0, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(document.createElement('div')).toPdf().get('pdf');
+        while (pdf.getNumberOfPages() > 1) pdf.deletePage(pdf.getNumberOfPages());
+      } else pdf.addPage('a4', 'portrait');
+      pdf.addImage(img, 'JPEG', 0, 0, 210, 297, undefined, 'NONE');
+    }
+    return pdf;
+  }
+  // ดาวน์โหลดไฟล์ + มีปุ่มให้กดเองเสมอ (เบราว์เซอร์มือถือบางรุ่นไม่ให้ดาวน์โหลดอัตโนมัติ)
+  function offerPdf(pdf, filename, pages, note = '') {
+    const blob = pdf.output('blob'), url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    UI.modal({
+      title: 'สร้างไฟล์ PDF เรียบร้อยแล้ว', subtitle: `${pages} หน้า · ${(blob.size / 1048576).toFixed(1)} MB`, size: 'sm',
+      body: `<p style="margin:0 0 14px;line-height:1.7">ระบบดาวน์โหลดไฟล์ให้แล้ว หากไม่เห็นไฟล์ในเครื่อง ให้กดปุ่มด้านล่าง${note ? ` · ${esc(note)}` : ''}</p>
+        <a class="btn btn-primary btn-lg btn-block" href="${url}" download="${esc(filename)}">${icon('download')} ดาวน์โหลด PDF</a>`,
+      actions: [{ label: 'ปิด', kind: 'btn-ghost-dark' }],
+      onClose: () => setTimeout(() => URL.revokeObjectURL(url), 60000)
+    });
+  }
+
+  // ตัวสร้างภาพ PDF วาดข้อความไทยที่ตัดบรรทัดเองซ้อนกัน (ข้อความไทยไม่มีช่องว่างคั่นคำ)
+  // → หาตำแหน่งที่เบราว์เซอร์ตัดบรรทัดจริง แล้วแทรกการขึ้นบรรทัดใหม่ไว้ตรงนั้น (หน้าตาเหมือนเดิมทุกประการ)
+  const blockOf = el => { for (let e = el; e; e = e.parentElement) if (!/^inline/.test(getComputedStyle(e).display)) return e; return null; };
+  function breakLines(root) {
+    // ตัดคำแบบ break-word/break-all ทำให้ตัวสร้างภาพแยกสระ/วรรณยุกต์ออกจากพยัญชนะ → ปิดที่ตัวองค์ประกอบโดยตรง (สไตล์จากกล่องครอบหลุดตอนตัวสร้างคัดลอกหน้า)
+    root.querySelectorAll('*').forEach(el => {
+      const cs = getComputedStyle(el);
+      if (cs.overflowWrap !== 'normal' || cs.wordBreak !== 'normal') { el.style.overflowWrap = 'normal'; el.style.wordBreak = 'normal'; }
+    });
+    const range = document.createRange(), cuts = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    // สระบน/ล่าง วรรณยุกต์ (อักษรผสม) มีกรอบสูงต่ำต่างจากพยัญชนะ → ไม่ใช้วัดและไม่ตัดหน้าอักษรพวกนี้เด็ดขาด
+    const MARK = /[ัิ-ฺ็-๎̀-ͯ]/;
+    let prev = null, prevBlock = null;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent;
+      if (!text.trim() || getComputedStyle(node.parentElement).whiteSpace === 'nowrap') { prev = null; continue; }
+      const block = blockOf(node.parentElement);
+      if (block !== prevBlock) { prev = null; prevBlock = block; }
+      for (let i = 0; i < text.length; i++) {
+        if (MARK.test(text[i]) || /\s/.test(text[i])) continue;
+        range.setStart(node, i); range.setEnd(node, i + 1);
+        const rc = range.getClientRects()[0];
+        if (!rc || !rc.height) continue;
+        // บรรทัดใหม่ = ลงมาเกินครึ่งบรรทัด และย้อนกลับไปทางซ้าย
+        if (prev && i > 0 && rc.top > prev.top + rc.height * 0.6 && rc.left < prev.left) cuts.push([node, i]);
+        prev = rc;
+      }
+    }
+    // แทรกจากท้ายไปหน้า ตำแหน่งที่หาไว้จะไม่เลื่อน
+    for (const [node, i] of cuts.reverse()) { const tail = node.splitText(i); tail.parentNode.insertBefore(document.createElement('br'), tail); }
+  }
+
+  // ดาวน์โหลด PDF จากกลุ่มหน้า A4 ที่แสดงอยู่ (ใบแจ้งซ่อม · พิมพ์รวม · รายงาน)
   async function downloadPdf(box, filename, btn) {
-    if (!window.html2pdf) return UI.toast('โหลดตัวสร้าง PDF ไม่สำเร็จ ใช้ปุ่ม "พิมพ์" แล้วเลือก "บันทึกเป็น PDF" แทน', 'error');
+    if (!window.html2pdf) return UI.toast('โหลดตัวสร้าง PDF ไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต หรือใช้ปุ่ม "พิมพ์" แล้วเลือก "บันทึกเป็น PDF" แทน', 'error');
     const label = btn.innerHTML;
     btn.disabled = true; btn.innerHTML = `${icon('refresh')} กำลังสร้าง PDF...`;
+    // สำเนาเอกสารขนาดจริง (ไม่ย่อแบบจอมือถือ) วางไว้นอกจอ · วาดทีละหน้าจากสำเนานี้
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm;background:#fff;pointer-events:none';
     try {
       await document.fonts.ready;
       fit(box);
       await Promise.all([...trimmed.values()]);
       const clone = box.cloneNode(true);
-      clone.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm;background:#fff;zoom:1';
-      $$('.sheet', clone).forEach((s, i, all) => { s.style.margin = '0'; s.style.boxShadow = 'none'; s.style.pageBreakAfter = i < all.length - 1 ? 'always' : 'auto'; });
-      document.body.appendChild(clone);
-      await html2pdf().set({
-        margin: 0, filename, image: { type: 'jpeg', quality: 0.96 },
-        html2canvas: { scale: 2.4, useCORS: true, backgroundColor: '#ffffff', logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css'] }
-      }).from(clone).save();
-      clone.remove();
-      UI.toast('ดาวน์โหลด PDF แล้ว');
+      clone.removeAttribute('id');
+      host.appendChild(clone);
+      document.body.appendChild(host);
+      host.classList.add('pdf-host');
+      $$('.sheet', host).forEach(s => { s.style.margin = '0'; s.style.boxShadow = 'none'; });
+      await Promise.all($$('img', host).map(img => img.complete ? 0 : new Promise(res => { const t = setTimeout(res, 15000); img.onload = img.onerror = () => { clearTimeout(t); res(); }; })));
+      breakLines(host);
+      const sheets = $$('.sheet', host);
+      const pdf = await sheetsToPdf(sheets, (i, n) => { btn.innerHTML = `${icon('refresh')} กำลังสร้าง PDF ${i}/${n}`; });
+      offerPdf(pdf, filename, sheets.length);
     } catch (err) {
       console.error(err);
       UI.toast('สร้าง PDF ไม่สำเร็จ ใช้ปุ่ม "พิมพ์" แล้วเลือก "บันทึกเป็น PDF" แทน', 'error');
-    } finally { btn.disabled = false; btn.innerHTML = label; }
+    } finally { host.remove(); btn.disabled = false; btn.innerHTML = label; }
   }
-
   // ───────── หน้าแสดงเอกสารรายการเดียว ─────────
   function page(params) {
     const t = Store.ticket(params.id);
@@ -339,5 +406,5 @@ const Doc = (() => {
     };
   }
 
-  return { page, sheet, sheets, photoSheet, fit, refit, downloadPdf, dateParts };
+  return { page, sheet, sheets, photoSheet, fit, refit, downloadPdf, sheetsToPdf, offerPdf, dateParts };
 })();
