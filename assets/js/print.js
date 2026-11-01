@@ -73,9 +73,12 @@ const Print = (() => {
   };
 
   // ตารางสรุป (แบ่งหน้าอัตโนมัติ: แบ่งชุดละ 15 แถวก่อน แล้ว paginate วัดความสูงจริงอีกครั้ง)
+  // list = ใบแจ้งซ่อม หรือ { group: 'ชื่อหมวด' } = แถบหัวหมวดคั่นในตารางเดียวกัน (รายการต่อเนื่อง ไม่ขึ้นหน้าใหม่)
   function tablePages(title, sub, list, startNo = 1, run = 'tbl') {
     const PER = 15;
     const pages = [];
+    let seq = startNo;
+    const numOf = new Map(list.filter(x => !x.group).map(t => [t, seq++]));
     for (let i = 0; i < Math.max(1, list.length); i += PER) pages.push(list.slice(i, i + PER));
     return pages.map((rows, p) => `
       <div class="sheet rp" data-run="${esc(run)}">
@@ -83,8 +86,8 @@ const Print = (() => {
         <table class="rp-table rp-list">
           <colgroup><col style="width:8mm"><col style="width:22mm"><col><col style="width:42mm"><col style="width:30mm"><col style="width:29mm"></colgroup>
           <thead><tr><th class="c">ที่</th><th>วันที่แจ้ง</th><th>รายการ / อาการ</th><th>สถานที่</th><th>ผู้แจ้ง</th><th>สถานะ</th></tr></thead>
-          <tbody>${rows.map((t, i) => `<tr>
-            <td class="c">${startNo + p * PER + i}</td>
+          <tbody>${rows.map(t => t.group ? `<tr class="rp-grp"><td colspan="6">${esc(t.group)}</td></tr>` : `<tr>
+            <td class="c">${numOf.get(t)}</td>
             <td class="rp-when">${UI.date(t.createdAt)}<div class="m">${UI.time(t.createdAt)} น.</div></td>
             <td><div class="clamp3">${esc(Views.itemsTitle(t))}</div><div class="m clamp2">${esc(t.items.map(i => i.detail).filter(Boolean).join(' · '))}</div></td>
             <td><div class="clamp4">${esc(UI.locationText(t))}</div></td>
@@ -115,7 +118,9 @@ const Print = (() => {
       const table = sh.querySelector(':scope > .rp-list');
       if (table) {
         const rows = [...table.tBodies[0].rows];
-        const cut = rows.findIndex(row => row.getBoundingClientRect().bottom > limit);
+        let cut = rows.findIndex(row => row.getBoundingClientRect().bottom > limit);
+        // แถบหัวหมวดค้างเป็นแถวสุดท้ายของหน้า → ย้ายไปหน้าใหม่พร้อมรายการของหมวดนั้น
+        if (cut > 1 && rows[cut - 1].classList.contains('rp-grp')) cut--;
         if (cut <= 0) return;
         const t2 = table.cloneNode(false), body = document.createElement('tbody');
         [...table.children].forEach(ch => { if (ch.tagName !== 'TBODY') t2.appendChild(ch.cloneNode(true)); });
@@ -170,15 +175,14 @@ const Print = (() => {
     const build = () => {
       const groups = job.group ? Store.FORM_KEYS.map(k => [k, list.filter(t => t.formType === k)]).filter(g => g[1].length) : [['', list]];
       let html = job.cover ? cover(job, list) : '';
-      let no = 1;
+      // ตารางสรุป: ทุกหมวดอยู่ในตารางเดียวกัน คั่นด้วยแถบหัวหมวด รายการต่อกันไม่ขึ้นหน้าใหม่
+      if (job.style === 'table') {
+        const rows = groups[0][0] ? groups.flatMap(([k, items]) => [{ group: `${Views.formName(k)} · ${items.length} รายการ` }, ...items]) : list;
+        return html + tablePages(job.title, `${job.scope || 'ทุกหมวด'} · ${list.length} รายการ`, rows, 1, 'tbl');
+      }
       for (const [k, items] of groups) {
-        if (job.style === 'table') {
-          html += tablePages(job.title, `${k ? Views.formName(k) : (job.scope || 'ทุกหมวด')} · ${items.length} รายการ`, items, no, 'g-' + (k || 'all'));
-        } else {
-          if (k) html += divider(k, items);
-          html += items.map(t => Doc.sheet(t, job.style) + (job.photos !== false ? Doc.photoSheet(t) : '')).join('');
-        }
-        no += items.length;
+        if (k) html += divider(k, items);
+        html += items.map(t => Doc.sheet(t, job.style) + (job.photos !== false ? Doc.photoSheet(t) : '')).join('');
       }
       return html;
     };

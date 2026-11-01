@@ -976,6 +976,8 @@ const Pages = (() => {
         });
 
         // ───── หน้าสรุปก่อนยืนยัน: ผู้แจ้ง · ทุกใบ ทุกจุด ทุกรายการ พร้อมรูป · งานที่อาจแจ้งซ้ำ ─────
+        // ใบแอร์ที่ถูกแยกออกมา (มีใบอื่นในที่เดียวกันด้วย)
+        const acSplit = entries => new Set(entries.filter(x => x.items.every(Store.isAcItem) && entries.some(y => y !== x && locKey(y.location) === locKey(x.location))));
         function reviewBeforeSend(entries, input, dups) {
           const nItems = entries.reduce((a, x) => a + x.items.length, 0);
           const nPhotos = entries.reduce((a, x) => a + x.items.reduce((b2, i) => b2 + (i.photos?.length || 0), 0), 0);
@@ -987,11 +989,12 @@ const Pages = (() => {
           const body = `<div class="review">
             <div class="rv-who">${UI.avatar(Store.fullName(me))}<div><b>${esc(Store.fullName(me))}</b><span>${esc([input.position, input.dept].filter(Boolean).join(' · '))}</span><span>${icon('phone')} ${esc(input.phone)}</span></div></div>
             <div class="rv-stats"><span><b>${entries.length}</b> ใบแจ้งซ่อม</span><span><b>${nItems}</b> รายการ</span><span><b>${nPhotos}</b> รูป</span></div>
+            ${acSplit(entries).size ? `<div class="notice">${icon('aircon')}<div>งาน<b>เครื่องปรับอากาศ</b>แยกเป็นใบของตัวเองอัตโนมัติ ใบแจ้งซ่อมแอร์จะไม่มีงานอื่นปน</div></div>` : ''}
             ${dups.length ? `<div class="notice orange">${icon('alert')}<div><b>พบงานเดิมที่ยังไม่ปิด ${dups.length} ใบ ในที่และรายการเดียวกัน</b> ตรวจสอบก่อนเพื่อไม่ให้แจ้งซ้ำ
               <div class="rv-dups">${dups.map(t => `<a href="#/ticket/${t.id}" target="_blank">${esc(t.id)} · ${esc(Views.itemsTitle(t))} · ${esc(UI.locationText(t))} ${UI.statusBadge(t.status)}</a>`).join('')}</div></div></div>` : ''}
             ${entries.map((x, n) => `
               <section class="rv-ticket">
-                <div class="rv-head"><span class="rv-no">${entries.length > 1 ? `ใบที่ ${n + 1}` : 'สถานที่'}</span><strong>${esc(UI.locationText({ ...x.location, spots: [] }))}</strong></div>
+                <div class="rv-head"><span class="rv-no">${entries.length > 1 ? `ใบที่ ${n + 1}` : 'สถานที่'}</span><strong>${esc(UI.locationText({ ...x.location, spots: [] }))}</strong>${acSplit(entries).has(x) ? `<span class="rv-ac">${icon('aircon')} ใบแอร์</span>` : ''}</div>
                 ${[...bySpot(x.items)].map(([spot, list]) => `${spot ? `<div class="rv-spot">${icon(AREA_ICON[spot] || (spot === 'ตัวห้อง' ? 'home' : 'bed'))} ${esc(spot)}</div>` : ''}<ul class="rv-items">${list.map(itemRow).join('')}</ul>`).join('')}
               </section>`).join('')}
             ${input.note ? `<div class="rv-note">${icon('edit')}<span><b>หมายเหตุ</b> ${esc(input.note)}</span></div>` : ''}
@@ -1031,6 +1034,12 @@ const Pages = (() => {
           const keys = entries.map(x => locKey(x.location));
           const twin = keys.findIndex((k, i) => keys.indexOf(k) !== i);
           if (twin >= 0) return fail(`${UNIT}ที่ ${keys.indexOf(keys[twin]) + 1} และ ${twin + 1} เป็นที่เดียวกัน กรุณารวมจุดและรายการไว้ในการ์ดเดียว`, $(`[data-block="${state.blocks[twin].key}"]`, root));
+          // งานเครื่องปรับอากาศแยกเป็นใบของตัวเองเสมอ (แสดงให้เห็นในหน้าสรุปก่อนส่ง)
+          if (!editing) {
+            const split = Store.splitAc(entries);
+            if (split.length > MAX_BLOCKS) return fail(`แยกใบเครื่องปรับอากาศแล้วรวม ${split.length} ใบ เกิน ${MAX_BLOCKS} ใบต่อครั้ง กรุณาส่งบางสถานที่ก่อน`);
+            entries.splice(0, entries.length, ...split);
+          }
           const input = { formType: type, phone: $('#phone', root).value.trim(), position: $('#position', root).value, dept: $('#dept', root).value,
             note: $('#note', root).value.trim(), photos: editing?.photos || [] };
           // เตือนเมื่อมีงานเดียวกันที่ยังไม่ปิดอยู่แล้ว (แสดงในหน้าสรุป)

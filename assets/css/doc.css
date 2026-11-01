@@ -276,3 +276,4 @@
 .gd .ln { display: block; white-space: nowrap; }
 .gd-box p { overflow-wrap: anywhere; }
 .sheet.gd .rp-foot span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* แถบหัวหมวดในตารางสรุป (รายการทุกหมวดต่อเนื่องในตารางเดียว) */ .rp-list tr.rp-grp td { height: auto; padding: 1.6mm 2.4mm; background: #FFF1E6; color: #8F340D; font-weight: 700; font-size: 10.5pt; }

@@ -757,6 +757,23 @@ const Store = (() => {
 
   const STATUS_TITLE = { in_progress: 'กำลังดำเนินการซ่อม', review: 'รอพิจารณา', done: 'ซ่อมเสร็จสิ้นแล้ว', cannot_fix: 'ไม่สามารถซ่อมได้' };
 
+  // เครื่องปรับอากาศแยกเป็นใบของตัวเองเสมอ (บันทึกข้อความงานแอร์ไม่มีงานอื่นปน) แม้แจ้งมาพร้อมรายการอื่นในที่เดียวกัน
+  // ใบที่แยกได้เฉพาะจุดของรายการตัวเอง (หอพัก: ห้อง 1/2 ไปใบงานทั่วไป · ห้อง 1/3 ไปใบแอร์)
+  const AC_CAT = 'ac';
+  const isAc = i => i.catId === AC_CAT;
+  const isMixed = items => items.some(isAc) && items.some(i => !isAc(i));
+  function splitAc(entries) {
+    return entries.flatMap(e => {
+      if (!isMixed(e.items || [])) return [e];
+      const part = items => {
+        const spots = new Set(items.map(i => i.spot).filter(Boolean));
+        const loc = e.location?.spots?.length && spots.size ? { ...e.location, spots: e.location.spots.filter(s => spots.has(s)) } : e.location;
+        return { ...e, location: loc, items };
+      };
+      return [part(e.items.filter(i => !isAc(i))), part(e.items.filter(isAc))];
+    });
+  }
+
   // สร้างใบแจ้งซ่อมใหม่ (ใช้ทั้งแจ้งใหม่และแจ้ง "ยังไม่หาย")
   function newTicket(d, input, user, extra = {}) {
     const created = new Date();
@@ -796,6 +813,7 @@ const Store = (() => {
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     fullName, hasRole, isStaff, isBackOffice, can, canSee, formsOf, actionsOf, reopenDeadline: deadline, reopenDaysOf, reopenText, reopenOfCat: catId => reopenOfCat(db.settings, catId),
     duplicates: (input, exceptId) => duplicatesOf(input, exceptId),
+    splitAc, isAcItem: isAc,
     step1Key: t => STEP1_KEY[t.formType],
     signer: key => signerOf(db, key),
     signedBy: (by, key) => signedBy(db, by, key),
@@ -1073,12 +1091,12 @@ const Store = (() => {
     async createTickets(input, onStep = () => {}) {
       const me = currentUser();
       if (!hasRole(me, 'teacher')) throw new Error('เฉพาะครูและบุคลากรเท่านั้นที่แจ้งซ่อมได้');
-      const entries = input.entries || (input.locations || []).map(location => ({ location, items: input.items }));
+      const entries = splitAc(input.entries || (input.locations || []).map(location => ({ location, items: input.items })));
       if (!entries.length) throw new Error('กรุณาเลือกสถานที่ซ่อมอย่างน้อย 1 แห่ง');
       if (entries.some(e => !e.items?.length || e.items.some(i => !String(i.detail || '').trim()))) throw new Error('กรุณาระบุรายละเอียดของทุกรายการที่แจ้งซ่อม');
       onStep(0);
       if (CLOUD) {
-        if (entries.length > 15) throw new Error('แจ้งได้ครั้งละไม่เกิน 15 ใบ กรุณาแบ่งส่งเป็นหลายครั้ง');
+        if (entries.length > 15) throw new Error('แจ้งได้ครั้งละไม่เกิน 15 ใบ (นับรวมใบเครื่องปรับอากาศที่แยกออก) กรุณาแบ่งส่งเป็นหลายครั้ง');
         // อัปโหลดรูปลง Drive ก่อน แล้วจองเลขที่ใบไม่ให้ซ้ำกับคนอื่น
         for (const e of entries) for (const it of e.items) it.photos = await Cloud.upload(it.photos);
         input.photos = await Cloud.upload(input.photos);
@@ -1106,6 +1124,8 @@ const Store = (() => {
       const me = currentUser();
       if (!can(me, 'edit', db.tickets.find(t => t.id === id))) throw new Error('แก้ไขได้เฉพาะคำขอของคุณที่ยังรออนุมัติ');
       if (!input.items?.length || input.items.some(i => !String(i.detail || '').trim())) throw new Error('กรุณาระบุรายละเอียดของทุกรายการที่แจ้งซ่อม');
+      // แก้ไขแล้วกลายเป็นใบที่มีทั้งแอร์และงานอื่น → ไม่ได้ (ใบเดิมที่ปนอยู่แล้วก่อนมีกติกานี้ แก้ไขได้ตามเดิม)
+      if (isMixed(input.items) && !isMixed(db.tickets.find(t => t.id === id).items || [])) throw new Error('งานเครื่องปรับอากาศต้องแยกเป็นใบของตัวเอง · ถ้าต้องการแจ้งรายการเพิ่มคนละหมวด กรุณากด "แจ้งซ่อม" เป็นใบใหม่');
       onStep(0);
       if (CLOUD) {
         for (const it of input.items) it.photos = await Cloud.upload(it.photos);
