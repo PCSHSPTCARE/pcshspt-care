@@ -2029,20 +2029,20 @@ const Pages = (() => {
       prepareForPdf(host);
       const sheets = [...host.querySelectorAll('.sheet')];
       // มือถือ/แท็บเล็ตใช้ความละเอียดพอดีหน่วยความจำ · คอมใช้ความละเอียดสูงกว่า
-      const scale = matchMedia('(pointer: coarse)').matches ? 1.6 : 2;
+      const scale = matchMedia('(pointer: coarse)').matches ? 2.5 : 3;
       let pdf = null;
       for (let i = 0; i < sheets.length; i++) {
         btn.innerHTML = `${icon('refresh')} กำลังสร้าง PDF ${i + 1}/${sheets.length}`;
         await new Promise(r => setTimeout(r, 30));   // ให้หน้าจอวาดข้อความความคืบหน้าก่อน
         const worker = html2pdf().set({ margin: 0, html2canvas: { scale, useCORS: true, backgroundColor: '#ffffff', logging: false }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(sheets[i]);
         const canvas = await worker.toCanvas().get('canvas');
-        const img = canvas.toDataURL('image/jpeg', 0.9);
+        const img = canvas.toDataURL('image/jpeg', 0.95);
         canvas.width = canvas.height = 0;   // คืนหน่วยความจำ
         if (!pdf) {
           pdf = await html2pdf().set({ margin: 0, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(document.createElement('div')).toPdf().get('pdf');
           while (pdf.getNumberOfPages() > 1) pdf.deletePage(pdf.getNumberOfPages());
         } else pdf.addPage('a4', 'portrait');
-        pdf.addImage(img, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+        pdf.addImage(img, 'JPEG', 0, 0, 210, 297, undefined, 'NONE');
       }
       pdf.setProperties({ title: 'คู่มือการใช้งานระบบแจ้งซ่อมอาคารและสถานที่' });
       const blob = pdf.output('blob'), url = URL.createObjectURL(blob);
