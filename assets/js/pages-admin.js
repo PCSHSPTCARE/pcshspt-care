@@ -1369,7 +1369,7 @@ const Admin = (() => {
             <p class="hint">ใช้แสดงป้าย "ค้างนาน" ในรายการงานและนับในสถิติ</p>
           </div></section>
           <section class="card span-4"><div class="card-head"><h3>${icon('bell')}การแจ้งเตือน</h3></div><div class="card-body stack">
-            <label class="checkbox"><input type="checkbox" id="nEmail" ${s.notify.email ? 'checked' : ''}>อีเมล (เจ้าหน้าที่เมื่อมีงานใหม่ · ครูเมื่อสถานะเปลี่ยน)</label>
+            <label class="checkbox"><input type="checkbox" id="nEmail" ${s.notify.email ? 'checked' : ''}>อีเมลแจ้งครูผู้แจ้งเมื่อปิดงาน (เสร็จสิ้น พร้อมลิงก์ประเมิน / ไม่สามารถซ่อมได้)</label>
             <label class="checkbox"><input type="checkbox" id="nApp" ${s.notify.inApp ? 'checked' : ''}>กระดิ่งแจ้งเตือนในเว็บ</label>
             <label class="checkbox" style="opacity:.55"><input type="checkbox" disabled>LINE Official Account (เพิ่มในระยะถัดไป)</label>
           </div></section>

@@ -1196,19 +1196,24 @@ const Store = (() => {
         const user = d.users.find(u => u.email === me.email);
         const at = nowISO();
         let ok = 0, skipped = 0;
+        const changed = [];
         for (const id of [].concat(ids)) {
           const t = d.tickets.find(x => x.id === id);
           if (!t || !can(user, status, t)) { skipped++; continue; }
           applyStatus(d, t, status, payload, user, at);
           notify(d, [t.reporter.email], STATUS_TITLE[status], `${t.id} · ${t.location.locationName}`, t.id);
+          changed.push(t.id);
           ok++;
         }
-        return { ok, skipped };
+        return { ok, skipped, changed };
       });
       if (!res.ok) throw new Error('ไม่มีรายการที่คุณมีสิทธิ์เปลี่ยนเป็นสถานะนี้');
       await settle(res, 300);
-      // ปิดงานแล้ว → ปิดสิทธิ์ลิงก์รูปที่เคยเปิดไว้ให้ LINE ดึงไปแสดง
-      if (CLOUD && (status === 'done' || status === 'cannot_fix')) Cloud.unshare([].concat(ids));
+      // ปิดงานแล้ว → ปิดสิทธิ์ลิงก์รูปที่เคยเปิดไว้ให้ LINE ดึงไปแสดง · ส่งอีเมลแจ้งผู้แจ้ง (เปิด/ปิดได้ที่ตั้งค่าระบบ → อีเมล)
+      if (CLOUD && (status === 'done' || status === 'cannot_fix')) {
+        Cloud.unshare([].concat(ids));
+        if (db.settings.notify?.email !== false) Cloud.mailClosed(res.changed);
+      }
       return res;
     },
 
@@ -1675,6 +1680,11 @@ const Store = (() => {
       if (!CFG.appsScriptUrl) return;
       for (let i = 0; i < ids.length; i += 20) callScript('unshare', { ids: ids.slice(i, i + 20) }).catch(e => console.warn('ปิดสิทธิ์รูปไม่สำเร็จ', e));
     }
+    // อีเมลแจ้งผู้แจ้งเมื่อปิดงาน (สคริปต์อ่านใบจริงเอง ตรวจสิทธิ์และกันส่งซ้ำ)
+    function mailClosed(ids) {
+      if (!CFG.appsScriptUrl || !ids?.length) return;
+      for (let i = 0; i < ids.length; i += 20) callScript('closemail', { ids: ids.slice(i, i + 20) }).catch(e => console.warn('ส่งอีเมลแจ้งผู้แจ้งไม่สำเร็จ', e));
+    }
     // แสดงรูปจาก Drive: แทนที่ด้วยรูปรอโหลด แล้วดึงรูปจริงผ่าน Apps Script (ตรวจสิทธิ์ทุกครั้ง)
     const PLACEHOLDER = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="#F3EFEA"/></svg>');
     const photoCache = new Map();
@@ -1775,7 +1785,7 @@ const Store = (() => {
       });
     }
     return {
-      ready, rebuild, persist, reserve, friendly, ensureRange, deleteSamples, upload, notifyNew, unshare, imgAttr, fetchRange, purge, propagateSignature,
+      ready, rebuild, persist, reserve, friendly, ensureRange, deleteSamples, upload, notifyNew, unshare, mailClosed, imgAttr, fetchRange, purge, propagateSignature,
       usage: () => meter.get(),
       summary: () => summaryDoc || buildSummary(db.tickets), watchBoard,
       notifications, markRead, login, callScript, awaitRating,

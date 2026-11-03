@@ -231,7 +231,7 @@ const App = (() => {
       const me = Store.me();
       if (ratePrompted || !me || !Store.profileComplete(me) || $('.modal-backdrop')) return;
       const path = (location.hash.slice(1) || '/').split('?')[0];
-      if (['/setup', '/login', '/print', '/print-report'].includes(path) || path.startsWith('/doc/')) return;
+      if (['/setup', '/login', '/print', '/print-report'].includes(path) || path.startsWith('/doc/') || /[?&]rate=1/.test(location.hash)) return;   // มาจากลิงก์ประเมินในอีเมล: หน้าใบงานเปิดแบบประเมินเอง
       const key = `pcshs-rate-prompted:${me.email}`;
       try { if (sessionStorage.getItem(key)) { ratePrompted = true; return; } } catch (e) { /* ignore */ }
       const groups = Store.ratingGroups();

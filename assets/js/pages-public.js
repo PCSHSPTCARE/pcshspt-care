@@ -1211,6 +1211,15 @@ const Pages = (() => {
         };
         render();
         Views.bindZoom(root);
+        // มาจากปุ่ม "ประเมินความพึงพอใจ" ในอีเมล (#/ticket/xxx?rate=1) → เปิดแบบประเมินให้ทันที
+        if (params.rate) setTimeout(() => {
+          if (!root.isConnected) return;
+          const t = Store.ticket(params.id), g = Store.ratingGroups().find(x => x.ids.includes(params.id));
+          document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+          if (g) openRating(g.key);
+          else if (t?.rating) UI.toast('งานนี้ประเมินแล้ว ขอบคุณครับ', 'info');
+          else if (t && t.reporter.email === Store.me()?.email) UI.toast('งานนี้หมดเวลาประเมินแล้ว (ประเมินได้ภายใน 14 วันหลังซ่อมเสร็จ)', 'info');
+        }, 1200);
         root.addEventListener('click', e => {
           if (e.target.closest('[data-cancel]')) {
             UI.modal({ title: 'ยกเลิกคำขอแจ้งซ่อม', subtitle: params.id, size: 'sm',
