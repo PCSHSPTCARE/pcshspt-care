@@ -1681,9 +1681,16 @@ const Store = (() => {
       for (let i = 0; i < ids.length; i += 20) callScript('unshare', { ids: ids.slice(i, i + 20) }).catch(e => console.warn('ปิดสิทธิ์รูปไม่สำเร็จ', e));
     }
     // อีเมลแจ้งผู้แจ้งเมื่อปิดงาน (สคริปต์อ่านใบจริงเอง ตรวจสิทธิ์และกันส่งซ้ำ)
+    // แจ้งผลบนจอให้เจ้าหน้าที่เห็น (ส่งแล้วกี่ฉบับ / ส่งไม่สำเร็จเพราะอะไร)
     function mailClosed(ids) {
       if (!CFG.appsScriptUrl || !ids?.length) return;
-      for (let i = 0; i < ids.length; i += 20) callScript('closemail', { ids: ids.slice(i, i + 20) }).catch(e => console.warn('ส่งอีเมลแจ้งผู้แจ้งไม่สำเร็จ', e));
+      const toast = (m, k) => { if (typeof UI !== 'undefined') UI.toast(m, k); };
+      for (let i = 0; i < ids.length; i += 20) callScript('closemail', { ids: ids.slice(i, i + 20) })
+        .then(r => { if (r.sent) toast(`ส่งอีเมลแจ้งครูผู้แจ้งแล้ว ${r.sent} ฉบับ`); })
+        .catch(e => {
+          console.warn('ส่งอีเมลแจ้งผู้แจ้งไม่สำเร็จ', e);
+          toast(/ไม่รู้จักคำสั่ง/.test(e.message) ? 'ส่งอีเมลแจ้งครูไม่สำเร็จ: Apps Script ยังเป็นเวอร์ชันเก่า (ต้องกด "ทำให้ใช้งานได้" เวอร์ชันใหม่)' : `ส่งอีเมลแจ้งครูไม่สำเร็จ: ${e.message}`, 'error');
+        });
     }
     // แสดงรูปจาก Drive: แทนที่ด้วยรูปรอโหลด แล้วดึงรูปจริงผ่าน Apps Script (ตรวจสิทธิ์ทุกครั้ง)
     const PLACEHOLDER = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="#F3EFEA"/></svg>');
