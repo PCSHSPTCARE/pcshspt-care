@@ -99,6 +99,8 @@ const Doc = (() => {
     ...t.items.filter(i => String(i.detail || '').trim()).map(i => t.items.length > 1 ? `${i.spot ? `${i.spot} – ` : ''}${memoItem(i, false)}: ${i.detail}` : i.detail),
     t.note ? `หมายเหตุ: ${t.note}` : ''
   ].filter(Boolean).join('  ');
+  // หมวดงาน: ชื่อหมวดของทุกรายการ ไม่ซ้ำ ตามลำดับที่แจ้ง (รายการที่ไม่มีหมวด = "อื่น ๆ")
+  const catsText = t => [...new Set(t.items.map(i => String(i.catName || '').trim() || 'อื่น ๆ'))].join(', ');
   const CLOSING = 'จึงเรียนมาเพื่อทราบและพิจารณาอนุญาตและอนุมัติ ดังนี้';
 
   function body(t) {
@@ -112,6 +114,7 @@ const Doc = (() => {
       <div class="fpara fbody" style="left:22.5mm;top:${B.top}mm;width:${B.width}mm;height:${B.bottom - B.top}mm">
         <p>ด้วยข้าพเจ้า ${nw(r.name)} ตำแหน่ง ${esc(r.position || '-')} ฝ่ายงาน/กลุ่มสาระฯ ${esc(r.dept || '-')} เบอร์ติดต่อ ${nw(r.phone)}
           มีความประสงค์ขอแจ้งซ่อมแซม/บำรุงรักษา เนื่องจากตรวจพบการชำรุดหรือขัดข้อง โดยมีรายละเอียดดังนี้</p>
+        ${line('หมวดงาน', catsText(t))}
         ${line('รายการ/อุปกรณ์', itemsText(t))}
         ${line('สถานที่', UI.locationText(t))}
         ${line('ลักษณะการชำรุด/อาการที่พบ', symptomsText(t))}
