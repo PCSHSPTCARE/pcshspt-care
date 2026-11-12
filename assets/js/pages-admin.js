@@ -84,6 +84,7 @@ const Admin = (() => {
       html: `
         <div id="ovReopen"></div>
         <div class="kpi-row" id="ovKpi"></div>
+        <section class="card lq" id="ovLine" aria-live="polite">${lineQuotaHTML(lineQ)}</section>
         <div class="chart-grid">
           <section class="card span-7"><div class="card-head"><h3>${icon('inbox')}งานรออนุมัติ</h3><a class="link small" href="#/admin/jobs?status=pending">จัดการทั้งหมด ${icon('arrow')}</a></div><div class="card-body" id="queue" style="padding-top:6px"></div></section>
           <section class="card span-5"><div class="card-head"><h3>${icon('activity')}ความเคลื่อนไหวล่าสุด</h3></div><div class="card-body" id="feed"></div></section>
@@ -133,8 +134,49 @@ const Admin = (() => {
         render();
         App.onCleanup(Store.subscribe(render));
         App.onCleanup(destroyCharts);
+        // โควตา LINE: ถามใหม่เมื่อข้อมูลเก่าเกิน 10 นาที หรือกดปุ่มเช็คอีกครั้ง
+        const loadLine = force => {
+          if (!force && lineQ?.data && Date.now() - lineQ.at < 10 * 60e3) return;
+          lineQ = { ...lineQ, loading: true };
+          const paint = () => { const el = $('#ovLine', root); if (el) el.innerHTML = lineQuotaHTML(lineQ); };
+          paint();
+          Store.lineQuota().then(data => { lineQ = { data, at: Date.now() }; }, e => { lineQ = { ...lineQ, loading: false, error: e.message }; }).then(paint);
+        };
+        $('#ovLine', root).addEventListener('click', e => { if (e.target.closest('#lqRefresh')) loadLine(true); });
+        loadLine(false);
       }
     };
+  }
+
+  // ═══════════ โควตาแจ้งเตือน LINE (การ์ดในหน้าภาพรวม) ═══════════
+  let lineQ = null; // { data, at, loading, error } · จำไว้ระหว่างเปลี่ยนหน้า ไม่ต้องถาม LINE ทุกครั้ง
+  function lineQuotaHTML(st) {
+    const d = st?.data, now = new Date();
+    const month = `${UI.TH_MONTHS_SHORT[now.getMonth()]} ${now.getFullYear() + 543}`;
+    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const reset = `1 ${UI.TH_MONTHS_SHORT[next.getMonth()]} ${next.getFullYear() + 543}`;
+    const btn = `<button type="button" class="btn btn-outline btn-sm" id="lqRefresh" ${st?.loading ? 'disabled' : ''}>${icon('refresh')} ${st?.loading ? 'กำลังเช็ค…' : 'เช็คอีกครั้ง'}</button>`;
+    const failed = d && st.error ? `<small class="lq-err">เช็คอีกครั้งไม่สำเร็จ: ${esc(st.error)} (แสดงตัวเลขครั้งก่อน)</small>` : '';
+    const shell = (tone, body) => `<div class="lq-in lq-${tone}"><span class="lq-ic">${icon('bell')}</span><div class="lq-main">${body}${failed}</div><div class="lq-act">${btn}</div></div>`;
+    const head = (extra = '') => `<div class="lq-title"><b>โควตาแจ้งเตือน LINE</b><span class="faint">เดือน ${month}</span>${extra}</div>`;
+    if (!d) return shell(st?.error ? 'red' : 'grey', head() + (st?.error
+      ? `<small class="lq-err">เช็คโควตาไม่ได้: ${esc(st.error)}</small>`
+      : '<small class="faint">กำลังเช็คจำนวนข้อความที่เหลือจาก LINE…</small>'));
+    if (!d.configured) return shell('grey', head() + '<small class="faint">ยังไม่ได้เชื่อม LINE (ยังไม่ได้ตั้ง LINE_TOKEN ใน Apps Script)</small>');
+    const at = st.at ? `เช็คล่าสุด ${UI.time(new Date(st.at).toISOString())} น.` : '';
+    const who = `กลุ่มมีสมาชิก ${d.members} คน${d.membersExact ? '' : ' (ประมาณ)'} ไม่รวมบัญชี LINE OA · แจ้ง 1 ครั้งใช้ ${d.members} ข้อความ`;
+    if (!d.limited) return shell('green', head() + `<div class="lq-val">ไม่จำกัดจำนวน · เดือนนี้ส่งไป ${UI.num(d.used)} ข้อความ</div><small class="faint">${who} · ${at}</small>`);
+    const p = d.limit ? Math.min(100, d.used / d.limit * 100) : 100;
+    const tone = d.left <= 0 || d.left < d.reserve ? 'red' : p >= 70 ? 'orange' : 'green';
+    const times = Math.floor(d.left / Math.max(1, d.members));
+    const status = d.left <= 0 ? `<b class="lq-warn">โควตาหมดแล้ว · แจ้งเตือนไลน์จะส่งไม่ได้จนถึง ${reset}</b> (ระบบแจ้งซ่อมยังใช้งานได้ปกติ)`
+      : d.left < d.reserve ? `<b class="lq-warn">ใกล้หมด · ระบบเปลี่ยนเป็นส่งสรุปทุก 1 ชั่วโมงแทน</b>${d.queued ? ` (รอส่ง ${d.queued} รายการ)` : ''}`
+      : `แจ้งเตือนได้อีกประมาณ <b>${UI.num(times)} ครั้ง</b>`;
+    return shell(tone, head(d.demo ? '<span class="lq-demo">ตัวเลขตัวอย่าง (โหมดทดลอง)</span>' : '') + `
+      <div class="lq-row"><span class="lq-val hb-v-${tone}">ใช้ไป ${UI.num(d.used)} / ${UI.num(d.limit)} ข้อความ</span><span class="lq-left">เหลือ <b>${UI.num(d.left)}</b></span></div>
+      <div class="hb-track"><i class="hb-${tone}" style="width:${Math.max(p, 1.5)}%"></i></div>
+      <div class="lq-note">${status}</div>
+      <small class="faint">${who} · เริ่มนับใหม่ ${reset}${at ? ` · ${at}` : ''}</small>`);
   }
 
   // ═══════════ เปลี่ยนสถานะ (ทีละรายการหรือหลายรายการ) ═══════════

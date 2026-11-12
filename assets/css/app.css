@@ -2032,6 +2032,32 @@ p { text-wrap: pretty; }
 @media (max-width: 900px) { .health { grid-template-columns: 1fr; gap: 18px; } }
 @media (max-width: 640px) { .hb-sub { display: none; } }
 
+/* ═══ โควตาแจ้งเตือน LINE (หน้าภาพรวมแอดมิน) ═══ */
+.lq-in { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-left: 5px solid #CBD5E1; border-radius: inherit; }
+.lq-green { border-left-color: #22C55E; } .lq-orange { border-left-color: #F59E0B; } .lq-red { border-left-color: #EF4444; }
+.lq-ic { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: #E8F9EE; color: #06A84A; font-size: 21px; }
+.lq-orange .lq-ic { background: #FEF3C7; color: #B45309; } .lq-red .lq-ic { background: #FEE2E2; color: #B91C1C; } .lq-grey .lq-ic { background: var(--line-2); color: var(--muted); }
+.lq-main { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.lq-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-family: var(--font-display); }
+.lq-title { row-gap: 0; line-height: 1.5; }
+.lq-title b { font-size: 1rem; } .lq-title span { font-size: .85rem; }
+.lq-title .lq-demo { padding: 1px 8px; border-radius: 99px; background: var(--line-2); color: var(--muted); font: 500 .75rem var(--font-body, inherit); }
+.lq-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.lq-val { font-weight: 700; font-size: 14px; }
+.lq-left { font-size: 14px; color: var(--ink-2); } .lq-left b { font-size: 1.15rem; color: var(--ink); }
+.lq-main .hb-track { margin: 2px 0 2px; }
+.lq-note { font-size: 13.5px; color: var(--ink-2); }
+.lq-warn { color: #B91C1C; }
+.lq-err { color: #B91C1C; font-size: 13px; }
+.lq-main small { font-size: 12.5px; line-height: 1.5; }
+.lq-act { flex: none; }
+@media (max-width: 640px) {
+  .lq-in { flex-wrap: wrap; gap: 12px; padding: 14px 16px; }
+  .lq-ic { width: 38px; height: 38px; font-size: 18px; }
+  .lq-main { flex-basis: calc(100% - 52px); }
+  .lq-act { width: 100%; } .lq-act .btn { width: 100%; justify-content: center; }
+}
+
 /* ═══ ระยะเวลาแจ้งซ่อมซ้ำแยกหมวด (ตั้งค่าระบบ) ═══ */
 .ro-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 10px; }
 .ro-row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; cursor: text; }

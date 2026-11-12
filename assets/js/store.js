@@ -1055,6 +1055,13 @@ const Store = (() => {
       commit(d => { d.ratings = []; });
       return { released: n, queued: 0 };
     },
+    // โควตาแจ้งเตือน LINE เดือนนี้ (เฉพาะแอดมิน) · ระบบจริงถาม LINE ผ่าน Apps Script · โหมดทดลองใช้ตัวเลขตัวอย่าง
+    async lineQuota() {
+      if (!hasRole(currentUser(), 'admin')) throw new Error('เฉพาะแอดมินเท่านั้น');
+      if (!CLOUD) return { demo: true, configured: true, group: true, limited: true, limit: 300, used: 42, left: 258, members: 3, membersExact: true, reserve: 30, queued: 0 };
+      try { return await Cloud.callScript('linequota', {}); }
+      catch (e) { throw /ไม่รู้จักคำสั่ง/.test(e.message) ? new Error('Apps Script ยังเป็นเวอร์ชันเก่า (ต้องกด "ทำให้ใช้งานได้" เวอร์ชันใหม่)') : e; }
+    },
     // ตัวเลขบนกระดิ่ง: ยังไม่อ่าน และเข้ามาหลังเปิดดูกระดิ่งครั้งล่าสุด (เก็บเวลาที่เปิดดูไว้ในเครื่อง)
     unseenCount() {
       const me = currentUser();
