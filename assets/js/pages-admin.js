@@ -209,19 +209,89 @@ const Admin = (() => {
         actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: 'ยืนยัน', kind: 'btn st-btn st-review', icon: 'hourglass', onClick: api => run({ note: $('#note', api.body).value.trim() }) }] });
     }
     if (status === 'done') {
-      let ph;
+      // บังคับ: ช่างอย่างน้อย 1 คน (เลือกได้หลายคน) + รูปหลังซ่อมอย่างน้อย 1 รูป "ทุกใบ" · หมายเหตุไม่บังคับ
+      // เลือกหลายใบ → แนบรูปแยกทีละใบในหน้าต่างเดียว (เฉพาะใบที่มีสิทธิ์ปิดงาน)
+      const me = Store.me();
+      const targets = ids.map(id => Store.ticket(id)).filter(t => t && Store.can(me, 'done', t));
+      const picked = new Set();
+      const names = [...s.workers];
+      const phs = {};
+      const chip = n => `<button type="button" class="pick pick-sm ${picked.has(n) ? 'is-on' : ''}" data-wk="${esc(n)}" aria-pressed="${picked.has(n)}"><span class="box">${icon('check')}</span>${esc(n)}</button>`;
+      const tkRow = t => `
+        <div class="dn-tk field" data-tk="${esc(t.id)}">
+          <div class="dn-tk-h"><b>${esc(t.id)}</b><span>${esc(Views.itemsTitle(t))} · ${esc(UI.locationText(t))}</span></div>
+          <div class="dn-ph" data-ph="${esc(t.id)}"></div>
+          <small class="field-err">ยังไม่ได้แนบรูปหลังซ่อมของใบนี้</small>
+        </div>`;
+      let api0;
+      const lacking = () => targets.filter(t => !phs[t.id]?.get().length);
+      const check = () => {
+        if (!api0) return;
+        const b = api0.body, noPh = lacking();
+        $('#wkField', b).classList.toggle('invalid', b.dataset.tried === '1' && !picked.size);
+        $$('[data-tk]', b).forEach(el => el.classList.toggle('invalid', b.dataset.tried === '1' && noPh.some(t => t.id === el.dataset.tk)));
+        const okW = picked.size > 0, okP = !noPh.length;
+        $('#dnReq', b).innerHTML = `
+          <span class="${okW ? 'ok' : ''}">${icon(okW ? 'checkCircle' : 'alert')} ${okW ? `ช่าง ${picked.size} คน` : 'ยังไม่ได้เลือกช่าง'}</span>
+          <span class="${okP ? 'ok' : ''}">${icon(okP ? 'checkCircle' : 'alert')} ${okP ? 'แนบรูปหลังซ่อมครบแล้ว' : many ? `ยังไม่มีรูปหลังซ่อม ${noPh.length} ใบ` : 'ยังไม่ได้แนบรูปหลังซ่อม'}</span>`;
+        $('.modal-foot .st-done', b.closest('.modal'))?.classList.toggle('is-wait', !(okW && okP));
+      };
       return UI.modal({ title: 'ซ่อมเสร็จสิ้น', subtitle: sub, size: 'lg',
         body: `
+          <div class="field" id="wkField">
+            <span class="label">ผู้ปฏิบัติงาน / ช่าง <span class="req">*</span></span><small class="faint dn-hint">เลือกได้หลายคน (ซ่อมด้วยกัน)</small>
+            <div class="pick-grid" id="wkList">${names.map(chip).join('')}</div>
+            <div class="dn-add"><input class="input sm" id="wkNew" placeholder="ชื่ออื่นที่ไม่มีในรายการ เช่น ช่างที่มาช่วย" maxlength="60"><button type="button" class="btn btn-outline btn-sm" id="wkAdd">${icon('plus')} เพิ่มชื่อ</button></div>
+            <small class="field-err">กรุณาเลือกช่างอย่างน้อย 1 คน</small>
+          </div>
+          ${many ? `<div class="field"><span class="label">${icon('camera')}รูปหลังซ่อม <span class="req">*</span></span><small class="faint dn-hint">แนบแยกทีละใบ อย่างน้อยใบละ 1 รูป</small>
+              <div class="dn-list">${targets.map(tkRow).join('')}</div></div>`
+            : `<div class="field dn-one" data-tk="${esc(targets[0]?.id || ids[0])}"><span class="label">${icon('camera')}รูปหลังซ่อม <span class="req">*</span> <span class="faint">อย่างน้อย 1 รูป</span></span>
+              <div class="dn-ph" data-ph="${esc(targets[0]?.id || ids[0])}"></div><small class="field-err">กรุณาแนบรูปหลังซ่อมอย่างน้อย 1 รูป</small></div>`}
           <div class="grid-2">
-            <div class="field"><label for="worker">ผู้ปฏิบัติงาน / ช่าง <span class="faint">(ไม่บังคับ)</span></label><input class="input" id="worker" list="wl" placeholder="พิมพ์หรือเลือกชื่อ"><datalist id="wl">${s.workers.map(w => `<option value="${esc(w)}">`).join('')}</datalist></div>
+            <div class="field"><label for="note">หมายเหตุ <span class="faint">(ถ้ามี)</span></label><textarea class="textarea" id="note" rows="2" placeholder="เช่น เปลี่ยนหลอด LED 2 หลอด ทดสอบใช้งานได้ปกติ"></textarea></div>
             <div class="field"><label>วันที่เสร็จ</label><input class="input" value="${UI.dateLong(new Date().toISOString())}" readonly></div>
           </div>
-          <div class="field"><label for="note">อธิบายเพิ่มเติม <span class="faint">(ไม่บังคับ)</span></label><textarea class="textarea" id="note" placeholder="เช่น เปลี่ยนหลอด LED 2 หลอด ทดสอบใช้งานได้ปกติ"></textarea></div>
-          <div class="field"><span class="label">${icon('camera')}แนบรูปเพิ่มเติม <span class="faint">(ไม่บังคับ)</span></span><div id="ph"></div></div>
-          ${sigNote()}`,
-        onOpen: api => { ph = UI.photoInput($('#ph', api.body), { max: 6, hint: 'แนบรูปหลังซ่อม' }); },
-        actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: many ? `ยืนยันเสร็จสิ้น ${ids.length} รายการ` : 'ยืนยันเสร็จสิ้น', kind: 'btn st-btn st-done', icon: 'checkCircle',
-          onClick: api => run({ worker: $('#worker', api.body).value.trim(), note: $('#note', api.body).value.trim(), photos: ph.get() }) }] });
+          ${sigNote()}
+          <div class="dn-req" id="dnReq" aria-live="polite"></div>`,
+        onOpen: api => {
+          api0 = api;
+          $$('[data-ph]', api.body).forEach(h => { phs[h.dataset.ph] = UI.photoInput(h, { max: many ? 4 : 6, hint: 'แนบรูปหลังซ่อม (กดเพื่อถ่าย / เลือกรูป)', onChange: check }); });
+          api.body.addEventListener('click', e => {
+            const c = e.target.closest('[data-wk]');
+            if (!c) return;
+            const n = c.dataset.wk;
+            picked.has(n) ? picked.delete(n) : picked.add(n);
+            c.classList.toggle('is-on', picked.has(n)); c.setAttribute('aria-pressed', picked.has(n));
+            check();
+          });
+          const addName = () => {
+            const inp = $('#wkNew', api.body), n = inp.value.trim().replace(/\s+/g, ' ');
+            if (!n) return inp.focus();
+            if (!names.includes(n)) { names.push(n); $('#wkList', api.body).insertAdjacentHTML('beforeend', chip(n)); }
+            picked.add(n);
+            const c = $$('[data-wk]', api.body).find(x => x.dataset.wk === n);
+            c.classList.add('is-on'); c.setAttribute('aria-pressed', 'true');
+            inp.value = ''; check();
+          };
+          $('#wkAdd', api.body).addEventListener('click', addName);
+          $('#wkNew', api.body).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addName(); } });
+          check();
+        },
+        actions: [{ label: 'ยกเลิก', kind: 'btn-ghost-dark' }, { label: many ? `ยืนยันเสร็จสิ้น ${targets.length} รายการ` : 'ยืนยันเสร็จสิ้น', kind: 'btn st-btn st-done', icon: 'checkCircle',
+          onClick: api => {
+            api.body.dataset.tried = '1'; check();
+            const noPh = lacking(), miss = [];
+            if (!picked.size) miss.push('เลือกช่างอย่างน้อย 1 คน');
+            if (noPh.length) miss.push(many ? `แนบรูปหลังซ่อมให้ครบทุกใบ (ยังขาด ${noPh.length} ใบ)` : 'แนบรูปหลังซ่อมอย่างน้อย 1 รูป');
+            if (miss.length) {
+              $('.field.invalid', api.body)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              throw new Error(`ยังกดเสร็จสิ้นไม่ได้: กรุณา${miss.join(' และ')}`);
+            }
+            const note = $('#note', api.body).value.trim(), workers = [...picked];
+            return run(many ? { workers, note, photosById: Object.fromEntries(targets.map(t => [t.id, phs[t.id].get()])) }
+              : { workers, note, photos: phs[targets[0]?.id || ids[0]].get() });
+          } }] });
     }
     if (status === 'cannot_fix') {
       let ph;
@@ -273,7 +343,9 @@ const Admin = (() => {
   function jobs(params) {
     const me = Store.me();
     const myForms = Store.formsOf(me);
-    const state = { form: myForms.includes(params.form) ? params.form : '', status: params.status || '', q: '', cat: '', loc: '', from: '', to: '', sort: 'new', page: 1, stale: false, reopen: params.reopen === '1' };
+    // เปิดเมนูแล้วเริ่มที่แถบ "รออนุมัติ" (งานที่ต้องจัดการก่อน) · มาจากแถบแดง "ซ่อมแล้วไม่หาย" → ดูทุกสถานะ
+    const DEFAULT_ST = params.reopen === '1' ? '' : 'pending';
+    const state = { form: myForms.includes(params.form) ? params.form : '', status: params.status ?? DEFAULT_ST, q: '', cat: '', loc: '', from: '', to: '', sort: 'new', page: 1, stale: false, reopen: params.reopen === '1' };
     const selected = new Set();
     const PER = 20;
     return {
@@ -343,7 +415,8 @@ const Admin = (() => {
           const counts = { all: base.length, ...Object.fromEntries(myForms.map(k => [k, base.filter(t => t.formType === k).length])) };
           $('#ftabs', root).innerHTML = Pages.formTabs(state.form, counts, myForms);
           const inForm = base.filter(t => !state.form || t.formType === state.form);
-          $('#stTabs', root).innerHTML = [['', 'ทั้งหมด', inForm.length], ...UI.STATUS_KEYS.map(k => [k, UI.STATUS[k].label, inForm.filter(t => t.status === k).length])]
+          // ลำดับแถบ: รออนุมัติ → … → ยกเลิกโดยผู้แจ้ง → ทั้งหมด (ขวาสุด)
+          $('#stTabs', root).innerHTML = [...UI.STATUS_KEYS.map(k => [k, UI.STATUS[k].label, inForm.filter(t => t.status === k).length]), ['', 'ทั้งหมด', inForm.length]]
             .map(([k, l, n]) => `<button type="button" data-st="${k}" class="${state.status === k ? 'is-active' : ''}">${k ? `<i class="dot" style="color:${UI.STATUS[k].color}"></i>` : ''}<span class="st-long">${l}</span><span class="st-short">${k ? UI.STATUS[k].short : l}</span> <span class="faint">${n}</span></button>`).join('');
           const nf = ['cat', 'loc', 'from', 'to'].filter(k => state[k]).length + (state.stale ? 1 : 0) + (state.reopen ? 1 : 0);
           $('#fCount', root).hidden = !nf; $('#fCount', root).textContent = nf;
@@ -415,7 +488,7 @@ const Admin = (() => {
             $('#sort', root).value = 'new'; $('#stale', root).checked = false;
             render(); return;
           }
-          const f = e.target.closest('[data-form]'); if (f) { state.form = f.dataset.form; state.status = ''; state.page = 1; selected.clear(); render(); return; }
+          const f = e.target.closest('[data-form]'); if (f) { state.form = f.dataset.form; state.status = DEFAULT_ST; state.page = 1; selected.clear(); render(); return; }
           const st = e.target.closest('[data-st]'); if (st) { state.status = st.dataset.st; state.page = 1; render(); return; }
           const pg = e.target.closest('[data-pg]'); if (pg) { state.page += +pg.dataset.pg; render(); return; }
           const bt = e.target.closest('[data-batch]');
@@ -532,7 +605,8 @@ const Admin = (() => {
       locs: countBy(list, t => `${t.location.locationName}${t.location.room ? ' · ' + t.location.room : ''}`).slice(0, 10),
       depts: countBy(list, t => t.reporter.dept).slice(0, 8),
       cannot: countBy(list.filter(t => t.cannot), t => t.cannot.reason),
-      workers: countBy(done, t => t.completion.worker || 'ไม่ระบุ'),
+      // ซ่อมด้วยกันหลายคน → นับงานให้ทุกคน (ใบเก่ามีแค่ worker ชื่อเดียว)
+      workers: countBy(done, t => t.completion.workers?.length ? t.completion.workers : t.completion.worker || 'ไม่ระบุ'),
       // ซ่อมซ้ำ: ใบที่ซ่อมเสร็จแล้วถูกแจ้งว่า "ไม่หาย" (ใบเดิมยังเป็นเสร็จสิ้น จึงนับรวมอยู่ใน done)
       reopen: (() => {
         const again = list.filter(t => t.reopenOf);

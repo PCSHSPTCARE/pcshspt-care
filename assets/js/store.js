@@ -461,6 +461,8 @@ const Store = (() => {
     if (!t.approvals.step2) t.approvals.step2 = { decision: 'approve', note: 'อนุมัติ ดำเนินการ', at, by: signerOf(d, STEP2_KEY) };
   }
 
+  const workersOf = p => [...new Set([].concat(p.workers || p.worker || []).map(w => String(w).trim().replace(/\s+/g, ' ')).filter(Boolean))].slice(0, 20);
+
   // เปลี่ยนสถานะ (ใช้ร่วมกันทั้งข้อมูลตัวอย่างและการกดจริง)
   function applyStatus(d, t, status, payload, byUser, at) {
     const by = fullName(byUser);
@@ -476,11 +478,13 @@ const Store = (() => {
       log('รอพิจารณา', payload.note);
     } else if (status === 'done') {
       fillApprovals(d, t, at);
-      t.completion = { note: payload.note || '', worker: payload.worker || '', photos: payload.photos || [], at, by };
+      // ช่างหลายคน: เก็บเป็นรายชื่อ (workers) + ข้อความรวม (worker) ให้ส่วนเดิมที่อ่าน worker ยังใช้ได้ (เอกสาร อีเมล สำรองข้อมูล)
+      const workers = workersOf(payload);
+      t.completion = { note: payload.note || '', worker: workers.join(', '), workers, photos: payload.photos || [], at, by };
       t.cannot = null;
       t.inspection = { result: 'ok', at, by: { ...snapUser(byUser), title: 'ผู้ตรวจงาน' } };
       t.status = 'done';
-      log('เสร็จสิ้น', [payload.worker && `ผู้ปฏิบัติงาน ${payload.worker}`, payload.note].filter(Boolean).join(' · '));
+      log('เสร็จสิ้น', [workers.length && `ผู้ปฏิบัติงาน ${workers.join(', ')}`, payload.note].filter(Boolean).join(' · '));
     } else if (status === 'cannot_fix') {
       t.cannot = { reason: payload.reason || '', note: payload.note || '', photos: payload.photos || [], at, by };
       t.completion = null;
@@ -1198,7 +1202,18 @@ const Store = (() => {
       const me = currentUser();
       if (!ACTIONS.includes(status)) throw new Error('สถานะไม่ถูกต้อง');
       if (status === 'cannot_fix' && !payload.reason) throw new Error('กรุณาระบุเหตุผลที่ซ่อมไม่ได้');
-      if (CLOUD && payload.photos?.length) payload = { ...payload, photos: await Cloud.upload(payload.photos) };
+      // ปิดงานเสร็จสิ้น: ต้องมีช่างอย่างน้อย 1 คน และรูปหลังซ่อมอย่างน้อย 1 รูปทุกใบ (เลือกหลายใบ → รูปแยกรายใบใน photosById)
+      const photosFor = id => payload.photosById ? payload.photosById[id] || [] : payload.photos || [];
+      if (status === 'done') {
+        if (!workersOf(payload).length) throw new Error('กรุณาเลือกผู้ปฏิบัติงาน/ช่างอย่างน้อย 1 คน');
+        const mine = [].concat(ids).map(id => db.tickets.find(t => t.id === id)).filter(t => t && can(me, 'done', t));
+        if (mine.some(t => !photosFor(t.id).length)) throw new Error('กรุณาแนบรูปหลังซ่อมอย่างน้อย 1 รูป' + ([].concat(ids).length > 1 ? 'ให้ครบทุกใบ' : ''));
+      }
+      if (CLOUD && payload.photosById) {
+        const up = {};
+        for (const [id, list] of Object.entries(payload.photosById)) up[id] = await Cloud.upload(list);
+        payload = { ...payload, photosById: up };
+      } else if (CLOUD && payload.photos?.length) payload = { ...payload, photos: await Cloud.upload(payload.photos) };
       const res = commit(d => {
         const user = d.users.find(u => u.email === me.email);
         const at = nowISO();
@@ -1207,7 +1222,7 @@ const Store = (() => {
         for (const id of [].concat(ids)) {
           const t = d.tickets.find(x => x.id === id);
           if (!t || !can(user, status, t)) { skipped++; continue; }
-          applyStatus(d, t, status, payload, user, at);
+          applyStatus(d, t, status, payload.photosById ? { ...payload, photos: photosFor(t.id) } : payload, user, at);
           notify(d, [t.reporter.email], STATUS_TITLE[status], `${t.id} · ${t.location.locationName}`, t.id);
           changed.push(t.id);
           ok++;

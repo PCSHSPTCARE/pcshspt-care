@@ -248,10 +248,13 @@ const UI = (() => {
   }
 
   // ช่องแนบรูปหลายรูป: คืนค่า { get() }
-  function photoInput(host, { max = 6, initial = [], hint = 'ลากรูปมาวาง หรือกดเพื่อเลือก / ถ่ายรูป' } = {}) {
+  function photoInput(host, { max = 6, initial = [], hint = 'ลากรูปมาวาง หรือกดเพื่อเลือก / ถ่ายรูป', onChange } = {}) {
     let photos = [...initial];
     host.classList.add('photo-input');
+    let first = true;
     const render = () => {
+      if (!first) onChange?.(photos);
+      first = false;
       host.innerHTML = `
         <label class="dropzone ${photos.length >= max ? 'is-full' : ''}">
           <input type="file" accept="image/*" multiple hidden>
