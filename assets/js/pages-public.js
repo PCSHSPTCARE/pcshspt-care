@@ -466,6 +466,9 @@ const Pages = (() => {
       if (noQty) return `ยังไม่ได้ระบุจำนวน${noQty.name}`;
       const noAc = list.find(v => needAc(b, v) && !v.acUnit);
       if (noAc) return `ยังไม่ได้เลือกแอร์ตัวไหน (${noAc.name})`;
+      // ทุกรายการต้องมีรูปอย่างน้อย 1 รูป
+      const noPh = list.filter(v => !(v.photos || []).length);
+      if (noPh.length) return noPh.length > 1 ? `ยังไม่ได้แนบรูป ${noPh.length} รายการ` : `ยังไม่ได้แนบรูป${noPh[0].name}`;
       return '';
     };
     const issueOf = b => {
@@ -665,9 +668,9 @@ const Pages = (() => {
               ${needAc(b, v) ? `<div class="field ac-unit ${v.acUnit ? '' : 'is-missing'}"><label>${icon('aircon')} แอร์ตัวไหน <span class="req">*</span></label>
                 <div class="pick-grid">${UI.AC_UNITS.map(u => chip('data-acu', u, u, v.acUnit === u)).join('')}</div></div>` : ''}
               <div class="field"><input class="input" data-detail value="${esc(v.detail || '')}" maxlength="200" placeholder="อาการของ${esc(v.name)} เช่น ${c?.id === 'ac' ? 'เปิดแล้วไม่เย็น มีน้ำหยด' : 'ชำรุด / หลวม / ใช้งานไม่ได้'}" aria-label="อาการของ ${esc(v.name)}"></div>
-              <div class="dr-photos"><div class="thumbs-row">${thumbs(v)}</div>
-                ${(v.photos || []).length < MAX_PHOTOS ? `<label class="btn btn-outline btn-sm">${icon('camera')} แนบรูป${(v.photos || []).length ? 'เพิ่ม' : ''}<input type="file" accept="image/*" multiple hidden data-photo></label>` : ''}
-                <span class="hint">ไม่บังคับ · สูงสุด ${MAX_PHOTOS} รูป</span></div>
+              <div class="dr-photos ${(v.photos || []).length ? '' : 'is-missing'}"><div class="thumbs-row">${thumbs(v)}</div>
+                ${(v.photos || []).length < MAX_PHOTOS ? `<label class="btn btn-outline btn-sm">${icon('camera')} แนบรูป${(v.photos || []).length ? 'เพิ่ม' : ' <span class="req">*</span>'}<input type="file" accept="image/*" multiple hidden data-photo></label>` : ''}
+                <span class="hint">${(v.photos || []).length ? `แนบแล้ว ${v.photos.length} รูป · สูงสุด ${MAX_PHOTOS} รูป` : `<b>ต้องแนบอย่างน้อย 1 รูป</b> · ถ่ายรูปอุปกรณ์หรือจุดที่ชำรุด`}</span></div>
             </li>`;
           }).join('')}</ol>`;
         }
@@ -790,7 +793,7 @@ const Pages = (() => {
             const n = draft.blocks.length, items = draft.blocks.reduce((a, b) => a + b.items.length, 0);
             UI.confirm(`พบร่างแจ้งซ่อมที่ยังไม่ได้ส่ง บันทึกเมื่อ ${UI.dateTime(draft.at)} (${n} ${UNIT} · ${items} รายการ) ต้องการกู้คืนไหม? รูปที่เคยแนบต้องแนบใหม่`,
               { title: 'กู้คืนร่างที่บันทึกไว้', okLabel: 'กู้คืนร่าง', cancelLabel: 'เริ่มใหม่' })
-              .then(ok => { if (ok) { restoreDraft(draft); UI.toast('กู้คืนร่างแล้ว · อย่าลืมแนบรูปใหม่ถ้ามี'); } else clearDraft(); });
+              .then(ok => { if (ok) { restoreDraft(draft); UI.toast('กู้คืนร่างแล้ว · กรุณาแนบรูปใหม่ทุกรายการ (ร่างไม่เก็บรูป)'); } else clearDraft(); });
           }
           root.addEventListener('input', saveDraft);
           root.addEventListener('change', saveDraft);
@@ -1017,12 +1020,15 @@ const Pages = (() => {
           const bad = state.blocks.findIndex(b => issueOf(b));
           if (bad >= 0) {
             const b = state.blocks[bad];
-            if (!b.open) { b.open = true; renderBlock(b); }
+            // เปิดการ์ด และจุดที่ย่อไว้แต่ยังไม่ครบ ให้เห็นกรอบแดง
+            const shut = b.closed.filter(s => spotIssue(b, s));
+            if (!b.open || shut.length) { b.open = true; b.closed = b.closed.filter(s => !shut.includes(s)); renderBlock(b); }
             const el = $(`[data-block="${b.key}"]`, root);
             $$('[data-detail]', el).forEach(inp => { if (!inp.value.trim()) inp.closest('.field').classList.add('invalid'); });
             $$('[data-qin]', el).forEach(inp => { if (!(parseInt(inp.value) >= 1)) inp.closest('.qty').classList.add('invalid'); });
             $$('.ac-unit.is-missing', el).forEach(f => f.classList.add('invalid'));
-            return fail(`${titleOf(b, bad)}: ${issueOf(b)}`, $('.field.invalid', el) || el);
+            $$('.dr-photos.is-missing', el).forEach(f => f.classList.add('invalid'));
+            return fail(`${titleOf(b, bad)}: ${issueOf(b)}`, $('.field.invalid, .qty.invalid, .dr-photos.invalid', el) || el);
           }
           // แอร์ตัวไหน: เก็บเฉพาะรายการแอร์ของห้องที่มีแอร์ 2 ตัว · จุด (spot) เก็บเฉพาะการ์ดหอพักที่แตะเลือกจุด
           const entries = state.blocks.map(b => {
@@ -1889,7 +1895,7 @@ const Pages = (() => {
       ['เลือก "แจ้งซ่อมทั่วไป"', 'กดปุ่ม "กรอกแบบฟอร์ม" ใต้หัวข้อนี้'],
       ['เลือกสถานที่', 'พิมพ์เลขห้องหรือชื่อสถานที่ แล้วแตะเลือก'],
       ['เลือกรายการที่ชำรุด', 'เลือกหมวดงาน แล้วแตะรายการ'],
-      ['บอกอาการ', 'พิมพ์สั้น ๆ ว่าเสียอย่างไร แนบรูปได้ (ไม่บังคับ)'],
+      ['บอกอาการ และแนบรูป', 'พิมพ์สั้น ๆ ว่าเสียอย่างไร แนบรูปทุกรายการ (บังคับ)'],
       ['กด "ส่งแจ้งซ่อม"', 'ตรวจเบอร์โทรให้ถูกก่อนกด'],
       ['ตรวจอีกครั้ง แล้วกด "ยืนยันส่งแจ้งซ่อม"', 'ถ้าผิด กด "กลับไปแก้ไข" ได้'],
       ['เสร็จแล้ว!', 'ระบบแจ้งเจ้าหน้าที่ทันที ติดตามได้ที่ "งานที่ฉันแจ้ง"']] },
@@ -1899,7 +1905,7 @@ const Pages = (() => {
       ['เลือกหอพัก', 'แตะชื่อหอพักที่ต้องการ'],
       ['เลือกล็อค หรือชั้น', 'แตะล็อคหรือชั้นที่ชำรุด'],
       ['แตะจุดที่ชำรุด', 'ห้องนอน ห้องอาบน้ำ หรือห้องสุขา แตะได้หลายจุด'],
-      ['เลือกรายการ และบอกอาการ', 'ทำทีละจุดที่เลือกไว้'],
+      ['เลือกรายการ บอกอาการ และแนบรูป', 'ทำทีละจุด แนบรูปทุกรายการ (บังคับ)'],
       ['แจ้งล็อคอื่นเพิ่มได้', 'ถ้ามีหลายล็อค กดปุ่มนี้ ไม่ต้องส่งใหม่ทีละใบ'],
       ['กด "ส่งแจ้งซ่อม" แล้วยืนยัน', 'ตรวจรายการอีกครั้งก่อนกดยืนยัน']] },
     { id: 'track', icon: 'track', title: 'ติดตามงาน และพิมพ์ใบแจ้งซ่อม', desc: 'ดูว่าซ่อมถึงขั้นไหน และพิมพ์เอกสาร', steps: [

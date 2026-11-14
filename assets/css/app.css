@@ -1361,6 +1361,11 @@ img[data-drive-state="loading"] { animation: pulseImg 1.2s ease-in-out infinite;
 .loc-chip button { width: 24px; height: 24px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .7); cursor: pointer; display: grid; place-items: center; color: var(--navy-700); font-size: 12px; }
 .loc-chip button:hover { background: #fff; color: #B91C1C; }
 .dr-photos { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+/* ต้องแนบรูปอย่างน้อย 1 รูป: ยังไม่มี → ข้อความส้ม · กดส่งแล้วยังไม่มี → กรอบแดง */
+.dr-photos.is-missing .hint b { color: var(--orange-700); font-weight: 600; }
+.dr-photos.invalid { padding: 10px 12px; border: 1.5px dashed #EF4444; border-radius: 12px; background: #FEF2F2; }
+.dr-photos.invalid .hint b { color: #B91C1C; }
+.dr-photos.invalid .btn { border-color: #EF4444; color: #B91C1C; }
 .thumbs-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .thumbs-row:empty { display: none; }
 .thumb.sm { width: 64px; height: 64px; aspect-ratio: auto; border-radius: 12px; }
